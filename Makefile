@@ -1,26 +1,46 @@
 # go-hbase top-level Makefile.
 #
-# Phase coverage:
-#   T02 — go-build, go-test, go-lint, go-tidy.
-#   Later tasks add: java-build, java-test, proto, deps, test-integration, ...
-#
 # Conventions:
-#   * Targets that compile/test the Go side are prefixed `go-*`.
-#   * Targets that compile/test the Java side are prefixed `java-*`.
-#   * `make all` runs the full local check (currently Go only).
+#   * Language-specific targets are prefixed `go-*` or `java-*`.
+#   * Aggregate targets (`build`, `test`, `lint`, `deps`) run both sides.
+#   * `make all` is the full local check: lint + build + test, Go and Java.
 
 SHELL := bash
 
-GO          ?= go
-GOLANGCILINT?= golangci-lint
-MVN         ?= mvn
-MVN_FLAGS   ?= -B -ntp
+GO            ?= go
+GOLANGCILINT  ?= golangci-lint
+MVN           ?= mvn
+MVN_FLAGS     ?= -B -ntp
 
-GO_PKGS     := ./...
+GO_PKGS        := ./...
 GO_BUILD_FLAGS := -trimpath
 
+# ---------------------------------------------------------------------------
+# Aggregates
+# ---------------------------------------------------------------------------
+
 .PHONY: all
-all: go-lint go-build go-test java-lint java-build java-test ## Run the full local check (Go + Java).
+all: lint build test ## Run the full local check (Go + Java: lint + build + test).
+
+.PHONY: build
+build: go-build java-build ## Build Go binaries and Java jar.
+
+.PHONY: test
+test: go-test java-test ## Run all unit tests (Go race + JUnit + JaCoCo).
+
+.PHONY: lint
+lint: go-lint java-lint ## Run all linters/formatters in check mode.
+
+.PHONY: deps
+deps: go-deps java-deps ## Download all Go and Java dependencies (CI cache warm-up).
+
+.PHONY: proto
+proto: ## Regenerate protobuf for both languages (real wiring lands in T11).
+	./tools/proto-gen.sh
+
+# ---------------------------------------------------------------------------
+# Go
+# ---------------------------------------------------------------------------
 
 .PHONY: go-build
 go-build: ## Compile every Go package.
@@ -38,12 +58,20 @@ go-lint: ## Run golangci-lint on every Go package.
 go-tidy: ## Tidy the Go module file.
 	$(GO) mod tidy
 
+.PHONY: go-deps
+go-deps: ## Download Go module deps to the local cache.
+	$(GO) mod download
+
+# ---------------------------------------------------------------------------
+# Java
+# ---------------------------------------------------------------------------
+
 .PHONY: java-build
 java-build: ## Compile Java sources.
 	$(MVN) $(MVN_FLAGS) compile
 
 .PHONY: java-test
-java-test: ## Run Java tests + JaCoCo.
+java-test: ## Run Java tests + JaCoCo + spotless (mvn verify).
 	$(MVN) $(MVN_FLAGS) verify
 
 .PHONY: java-lint
@@ -51,8 +79,16 @@ java-lint: ## Check Java formatting (spotless).
 	$(MVN) $(MVN_FLAGS) spotless:check
 
 .PHONY: java-format
-java-format: ## Apply Java auto-formatting.
+java-format: ## Apply Java auto-formatting (spotless:apply).
 	$(MVN) $(MVN_FLAGS) spotless:apply
+
+.PHONY: java-deps
+java-deps: ## Resolve Java deps to the local Maven cache (offline-prep for CI).
+	$(MVN) $(MVN_FLAGS) dependency:go-offline
+
+# ---------------------------------------------------------------------------
+# Misc
+# ---------------------------------------------------------------------------
 
 .PHONY: check-structure
 check-structure: ## Verify repo skeleton matches SPEC.md §4 (T01 verifier).
