@@ -1,0 +1,18 @@
+// Wire-level frame envelope for go-hbase IPC.
+//
+// Carries Request/Response/Heartbeat/Error/Shutdown/Log between the Java
+// RegionServer-side adapter and the Go runtime over a shared-memory ring.
+//
+// Stability: alpha. Real definitions land in T11.
+
+syntax = "proto3";
+
+package virogg.hbasecop.v1;
+
+option go_package = "github.com/virogg/go-hbase/internal/wire/wirepb";
+option java_package = "com.virogg.hbasecop.bridge.wire.pb";
+option java_multiple_files = true;
+
+// Frame is the placeholder root message; T11 replaces this with the real
+// envelope (oneof Request/Response/Heartbeat/Error/Shutdown/Log).
+message Frame {}
