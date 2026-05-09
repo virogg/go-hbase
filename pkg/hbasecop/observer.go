@@ -1,3 +1,6 @@
+// Copyright 2026 The go-hbase Authors
+// SPDX-License-Identifier: Apache-2.0
+
 // Package hbasecop is the public Go SDK for writing HBase coprocessors.
 //
 // Users implement one of the Observer interfaces (RegionObserver, MasterObserver,

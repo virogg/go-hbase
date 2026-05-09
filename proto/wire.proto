@@ -1,3 +1,6 @@
+// Copyright 2026 The go-hbase Authors
+// SPDX-License-Identifier: Apache-2.0
+
 // Wire-level frame envelope for go-hbase IPC.
 //
 // Carries Request/Response/Heartbeat/Error/Shutdown/Log between the Java

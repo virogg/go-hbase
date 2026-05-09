@@ -1,3 +1,6 @@
+# Copyright 2026 The go-hbase Authors
+# SPDX-License-Identifier: Apache-2.0
+
 name: CI
 
 on:
@@ -17,6 +20,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Verify repo skeleton (SPEC.md §4)
         run: ./tools/check-structure.sh
+
+  license:
+    name: License headers
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apache 2.0 SPDX header check
+        run: ./tools/license-header.sh --check
 
   go:
     name: Go (lint + build + test)
