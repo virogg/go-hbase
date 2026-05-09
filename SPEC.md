@@ -117,7 +117,7 @@ go-hbase/
 ├── internal/
 │   ├── wire/                      # generated protobuf + framing
 │   ├── multiplex/                 # request multiplexer
-│   ├── runtime/                   # event loop, supervisor handshake
+│   ├── cpruntime/                 # event loop, supervisor handshake (avoids stdlib `runtime` collision)
 │   └── shmem/                     # thin wrapper over java-go-shmem pkg/ring
 ├── cmd/
 │   └── hbasecop-build/            # packs user Go bin into Java jar
@@ -194,7 +194,7 @@ make release VERSION=0.1.0
 ## 7. Testing Strategy
 
 ### Уровни
-1. **Unit (Go):** `internal/wire`, `internal/multiplex`, `internal/runtime` — table-driven, race-detector on.
+1. **Unit (Go):** `internal/wire`, `internal/multiplex`, `internal/cpruntime` — table-driven, race-detector on.
 2. **Unit (Java):** `bridge`, `supervisor`, `multiplex` — JUnit 5 + Mockito. Fake shmem channel.
 3. **Contract:** общий golden corpus protobuf-сообщений; Java сериализует → Go десериализует (round-trip) и наоборот. Запускается в обоих CI-jobs.
 4. **Integration:** docker-compose с HBase 2.5 standalone; реальный coproc-jar; sample observers; ассерты на side-effects (HBase scan/Get результаты).

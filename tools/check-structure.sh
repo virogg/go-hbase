@@ -22,7 +22,7 @@ REQUIRED_FILES=(
   "pkg/hbasecop/policy.go"
   "internal/wire/doc.go"
   "internal/multiplex/doc.go"
-  "internal/runtime/doc.go"
+  "internal/cpruntime/doc.go"
   "internal/shmem/doc.go"
   "cmd/hbasecop-build/main.go"
   "tools/proto-gen.sh"
