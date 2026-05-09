@@ -100,8 +100,8 @@ External dep: `github.com/virogg/java-go-shmem` (Go pkg + Java jar). Lock вер
 
 **T04 — Make orchestration** *(P0)*
 - Deps: T02, T03
-- AC: верхний `Makefile` с `deps`, `proto`, `go-build`, `java-build`, `test-go`, `test-java`, `lint`, `clean`. `make all` = build обоих.
-- Verify: `make all` собирает Go-бинарь и Java-jar.
+- AC: верхний `Makefile` с language-specific targets (`go-build`, `go-test`, `go-lint`, `go-tidy`, `go-deps`, `java-build`, `java-test`, `java-lint`, `java-format`, `java-deps`) и aggregates (`build`, `test`, `lint`, `deps`, `proto`, `clean`). `make all` = lint+build+test обоих.
+- Verify: `make all` зелёный; `make help` показывает все таргеты.
 
 **T05 — CI scaffold** *(P0)*
 - Deps: T04
