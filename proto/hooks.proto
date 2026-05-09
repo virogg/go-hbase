@@ -1,0 +1,20 @@
+// Per-hook request/response messages for HBase Observer coprocessors.
+//
+// One message pair per Observer method (PrePut/PostPut/PreGet/...). Concrete
+// shapes land in T21+ once HBase .proto types are vendored.
+//
+// Stability: alpha. Empty placeholders for T01.
+
+syntax = "proto3";
+
+package virogg.hbasecop.v1;
+
+option go_package = "github.com/virogg/go-hbase/internal/wire/hookpb";
+option java_package = "com.virogg.hbasecop.bridge.wire.pb";
+option java_multiple_files = true;
+
+// HookContext is the placeholder shared context; T22 fills it in.
+message HookContext {}
+
+// HookResponse is the placeholder response envelope.
+message HookResponse {}

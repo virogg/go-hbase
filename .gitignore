@@ -1,0 +1,35 @@
+# Go
+/bin/
+*.test
+*.out
+coverage.txt
+coverage.html
+go.work
+go.work.sum
+
+# Java / Maven
+target/
+*.class
+.mvn/wrapper/maven-wrapper.jar
+dependency-reduced-pom.xml
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local dev
+tmp/
+*.local
+
+# Agent / assistant tooling (local only)
+.claude/
+.serena/
+memory/
