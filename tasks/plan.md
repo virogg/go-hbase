@@ -34,7 +34,7 @@
         ┌───────────────┐             ┌───────────────┐
         │ Go runtime    │             │ Java supervisor│
         │ event loop    │             │ + Observer     │
-        │internal/runtime│            │   adapters     │
+        │internal/cpruntime│            │   adapters     │
         └───────┬───────┘             └───────┬───────┘
                 │                             │
                 ▼                             ▼
@@ -150,7 +150,7 @@ External dep: `github.com/virogg/java-go-shmem` (Go pkg + Java jar). Lock вер
 
 **T17 — Go runtime: minimal event loop** *(P1)*
 - Deps: T15
-- AC: `internal/runtime/Loop`: spawn горутина-reader, на REQUEST → spawn handler-горутина, на REQUEST hook_id=`PING` → отвечает RESPONSE с эхом payload. Heartbeat sender каждые `cfg.HeartbeatPeriod` (default 500ms).
+- AC: `internal/cpruntime/Loop`: spawn горутина-reader, на REQUEST → spawn handler-горутина, на REQUEST hook_id=`PING` → отвечает RESPONSE с эхом payload. Heartbeat sender каждые `cfg.HeartbeatPeriod` (default 500ms).
 - Verify: integration test (но in-process, ровно 1 Go runtime + ровно 1 Go consumer-mock как «Java»): 10k ping/pong, p99 latency < 1ms на dev-машине, без race.
 
 **T18 — Java supervisor: spawn Go process** *(P1)*

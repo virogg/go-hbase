@@ -1,0 +1,35 @@
+# golangci-lint v2 configuration.
+# Linter set per SPEC.md §6 / tasks/plan.md T02.
+
+version: "2"
+
+run:
+  timeout: 5m
+  go: "1.22"
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - revive
+    - staticcheck
+    - unused
+
+  exclusions:
+    paths:
+      - tools/
+    rules:
+      # Generated protobuf has its own conventions.
+      - path: ".*\\.pb\\.go$"
+        linters: [revive, staticcheck, errcheck]
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

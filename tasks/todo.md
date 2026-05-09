@@ -18,7 +18,7 @@
 - [ ] T14 java-go-shmem dependency wiring (Go+Java)
 - [ ] T15 Go shmem wrapper (`internal/shmem`)
 - [ ] T16 Java shmem wrapper (`bridge.shmem`)
-- [ ] T17 Go runtime event loop + heartbeat sender (`internal/runtime`)
+- [ ] T17 Go runtime event loop + heartbeat sender (`internal/cpruntime`)
 - [ ] T18 Java supervisor: spawn Go from jar resource
 - [ ] T19 E2E ping/pong 10k roundtrip
 - [ ] **CP-β (CRITICAL):** demo-ping artifact, latency report
