@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright 2026 The go-hbase Authors
+# SPDX-License-Identifier: Apache-2.0
+
 # Verifies that the repository skeleton matches SPEC.md §4.
 # Used by T01 acceptance and CI.
 set -u

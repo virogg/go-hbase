@@ -1,3 +1,6 @@
+// Copyright 2026 The go-hbase Authors
+// SPDX-License-Identifier: Apache-2.0
+
 // Per-hook request/response messages for HBase Observer coprocessors.
 //
 // One message pair per Observer method (PrePut/PostPut/PreGet/...). Concrete

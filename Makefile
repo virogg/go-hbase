@@ -98,6 +98,14 @@ check-structure: ## Verify repo skeleton matches SPEC.md §4 (T01 verifier).
 ci-lint: ## Lint GitHub Actions workflows with actionlint.
 	actionlint .github/workflows/*.yml
 
+.PHONY: license-check
+license-check: ## Verify Apache 2.0 SPDX header on every source file.
+	./tools/license-header.sh --check
+
+.PHONY: license-fix
+license-fix: ## Insert missing Apache 2.0 SPDX headers in place.
+	./tools/license-header.sh --fix
+
 .PHONY: clean
 clean: ## Remove build artefacts.
 	rm -rf bin/

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright 2026 The go-hbase Authors
+# SPDX-License-Identifier: Apache-2.0
+
 # Regenerates Go and Java code from proto/*.proto.
 # Real wiring lands in T11; this is a placeholder so the script path exists.
 set -euo pipefail
