@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  structure:
+    name: Repo structure
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify repo skeleton (SPEC.md §4)
+        run: ./tools/check-structure.sh
+
+  go:
+    name: Go (lint + build + test)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v2.10.1
+          args: --timeout=5m
+      - name: go build
+        run: make go-build
+      - name: go test (race)
+        run: make go-test
+
+  java:
+    name: Java (lint + test + jacoco)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+          cache: maven
+      - name: spotless:check
+        run: make java-lint
+      - name: mvn verify
+        run: make java-test
+      - name: Upload JaCoCo report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: target/site/jacoco/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  contract:
+    name: Contract (cross-language) - stub
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Placeholder
+        run: |
+          echo "Contract suite lands in T11."
+          echo "Will run Go<->Java protobuf round-trip on the golden corpus."

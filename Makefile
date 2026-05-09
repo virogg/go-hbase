@@ -94,6 +94,10 @@ java-deps: ## Resolve Java deps to the local Maven cache (offline-prep for CI).
 check-structure: ## Verify repo skeleton matches SPEC.md §4 (T01 verifier).
 	./tools/check-structure.sh
 
+.PHONY: ci-lint
+ci-lint: ## Lint GitHub Actions workflows with actionlint.
+	actionlint .github/workflows/*.yml
+
 .PHONY: clean
 clean: ## Remove build artefacts.
 	rm -rf bin/

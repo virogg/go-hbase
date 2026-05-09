@@ -28,6 +28,7 @@ REQUIRED_FILES=(
   "tools/proto-gen.sh"
   "tools/check-structure.sh"
   "pom.xml"
+  ".github/workflows/ci.yml"
 )
 
 # Required directories (must exist even if empty -- enforced via .gitkeep).
