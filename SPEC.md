@@ -130,6 +130,7 @@ go-hbase/
 │       ├── supervisor/            # Go process lifecycle
 │       └── multiplex/             # Java side of mux
 ├── test/
+│   ├── java/                      # Java unit tests (JUnit 5)
 │   ├── integration/               # docker-compose: HBase 2.5 mini-cluster + sample observer
 │   └── e2e/
 └── tools/

@@ -27,6 +27,7 @@ REQUIRED_FILES=(
   "cmd/hbasecop-build/main.go"
   "tools/proto-gen.sh"
   "tools/check-structure.sh"
+  "pom.xml"
 )
 
 # Required directories (must exist even if empty -- enforced via .gitkeep).
@@ -37,6 +38,7 @@ REQUIRED_DIRS=(
   "java/com/virogg/hbasecop/multiplex"
   "examples/audit-observer"
   "examples/ttl-validator"
+  "test/java/com/virogg/hbasecop"
   "test/integration"
   "test/e2e"
 )
