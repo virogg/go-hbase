@@ -46,6 +46,13 @@
 
     <plugin.compiler.version>3.13.0</plugin.compiler.version>
     <plugin.surefire.version>3.2.5</plugin.surefire.version>
+
+    <!--
+      JDK module flags required by java-go-shmem (SharedMemory pokes
+      sun.nio.ch.FileChannelImpl + java.nio direct buffers via reflection).
+      Composed with JaCoCo's prepare-agent argLine via @{argLine}.
+    -->
+    <jdk.module.args>--add-exports java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.base/java.nio=ALL-UNNAMED --add-opens java.base/java.io=ALL-UNNAMED</jdk.module.args>
     <plugin.spotless.version>2.43.0</plugin.spotless.version>
     <plugin.jacoco.version>0.8.12</plugin.jacoco.version>
     <plugin.protobuf.version>0.6.1</plugin.protobuf.version>
@@ -153,6 +160,14 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <version>${plugin.surefire.version}</version>
+        <configuration>
+          <!--
+            @{argLine} preserves the JaCoCo prepare-agent javaagent flag
+            so coverage instrumentation survives the JPMS opens below.
+          -->
+          <argLine>@{argLine} ${jdk.module.args}</argLine>
+          <useModulePath>false</useModulePath>
+        </configuration>
       </plugin>
 
       <plugin>
