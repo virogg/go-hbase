@@ -35,11 +35,15 @@
     <hbase.version>2.5.10</hbase.version>
     <junit.version>5.10.2</junit.version>
     <mockito.version>5.11.0</mockito.version>
+    <!-- Keep protobuf-java in lockstep with protoc, see proto-gen.sh / CI. -->
+    <protobuf.version>3.25.5</protobuf.version>
 
     <plugin.compiler.version>3.13.0</plugin.compiler.version>
     <plugin.surefire.version>3.2.5</plugin.surefire.version>
     <plugin.spotless.version>2.43.0</plugin.spotless.version>
     <plugin.jacoco.version>0.8.12</plugin.jacoco.version>
+    <plugin.protobuf.version>0.6.1</plugin.protobuf.version>
+    <plugin.os.version>1.7.1</plugin.os.version>
     <google-java-format.version>1.22.0</google-java-format.version>
   </properties>
 
@@ -51,6 +55,11 @@
 
   <dependencies>
     <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java</artifactId>
+      <version>${protobuf.version}</version>
+    </dependency>
+    <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter-api</artifactId>
       <version>${junit.version}</version>
@@ -59,6 +68,12 @@
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter-engine</artifactId>
+      <version>${junit.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-params</artifactId>
       <version>${junit.version}</version>
       <scope>test</scope>
     </dependency>
@@ -81,11 +96,46 @@
     <sourceDirectory>java</sourceDirectory>
     <testSourceDirectory>test/java</testSourceDirectory>
 
+    <!--
+      os-maven-plugin exposes ${os.detected.classifier} so protobuf-maven-plugin
+      can pick the right native protoc artifact for the build host.
+    -->
+    <extensions>
+      <extension>
+        <groupId>kr.motd.maven</groupId>
+        <artifactId>os-maven-plugin</artifactId>
+        <version>${plugin.os.version}</version>
+      </extension>
+    </extensions>
+
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
         <version>${plugin.compiler.version}</version>
+      </plugin>
+
+      <!--
+        Generates Java classes from ../proto/*.proto into
+        target/generated-sources/protobuf/java/ (added automatically to the
+        compile path by the plugin). Output is gitignored; regenerate via
+        `mvn generate-sources` or as part of `mvn compile`.
+      -->
+      <plugin>
+        <groupId>org.xolstice.maven.plugins</groupId>
+        <artifactId>protobuf-maven-plugin</artifactId>
+        <version>${plugin.protobuf.version}</version>
+        <configuration>
+          <protocArtifact>com.google.protobuf:protoc:${protobuf.version}:exe:${os.detected.classifier}</protocArtifact>
+          <protoSourceRoot>${project.basedir}/proto</protoSourceRoot>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>compile</goal>
+            </goals>
+          </execution>
+        </executions>
       </plugin>
 
       <plugin>
