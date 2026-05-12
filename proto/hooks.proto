@@ -3,10 +3,12 @@
 
 // Per-hook request/response messages for HBase Observer coprocessors.
 //
-// One message pair per Observer method (PrePut/PostPut/PreGet/...). Concrete
-// shapes land in T21+ once HBase .proto types are vendored.
+// One message pair per Observer method (PrePut/PostPut/PreGet/...). The
+// concrete fields land in T21+ once HBase .proto types are vendored under
+// proto/hbase/. For Phase 1 these are intentionally empty placeholders so
+// that round-trip codegen on both sides is exercised end-to-end.
 //
-// Stability: alpha. Empty placeholders for T01.
+// Stability: alpha.
 
 syntax = "proto3";
 
@@ -15,9 +17,12 @@ package virogg.hbasecop.v1;
 option go_package = "github.com/virogg/go-hbase/internal/wire/hookpb";
 option java_package = "com.virogg.hbasecop.bridge.wire.pb";
 option java_multiple_files = true;
+option java_outer_classname = "HooksProto";
 
-// HookContext is the placeholder shared context; T22 fills it in.
+// HookContext is the shared per-call context (env, table descriptor refs,
+// caller identity, ...). T22 fills it in once we vendor HBase types.
 message HookContext {}
 
-// HookResponse is the placeholder response envelope.
+// HookResponse is the shared per-call response envelope (mutations to
+// re-emit, abort flag, ...). T22 fills it in.
 message HookResponse {}

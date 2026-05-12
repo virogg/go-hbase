@@ -3,16 +3,16 @@
 > Источник: `tasks/plan.md`. Чекаем по мере готовности. Подробности (AC/verify) — в плане.
 
 ## Phase 0 — Foundation
-- [ ] T01 Repo skeleton (dirs, LICENSE Apache-2.0, .gitignore)
-- [ ] T02 Go build (go.mod, golangci-lint, Makefile go-*)
-- [ ] T03 Java build (pom.xml, JUnit5, Spotless, JaCoCo)
-- [ ] T04 Top-level Makefile (deps/proto/build/test/lint/clean)
-- [ ] T05 GitHub Actions CI (lint+go-test+java-test+contract-stub)
-- [ ] T06 License header tool + check
-- [ ] **CP-α:** `make all` + CI зелёные
+- [x] T01 Repo skeleton (dirs, LICENSE Apache-2.0, .gitignore)
+- [x] T02 Go build (go.mod, golangci-lint, Makefile go-*)
+- [x] T03 Java build (pom.xml, JUnit5, Spotless, JaCoCo)
+- [x] T04 Top-level Makefile (deps/proto/build/test/lint/clean)
+- [x] T05 GitHub Actions CI (lint+go-test+java-test+contract-stub)
+- [x] T06 License header tool + check
+- [x] **CP-α:** `make all` + CI зелёные
 
 ## Phase 1 — Java↔Go IPC validated (no HBase)
-- [ ] T11 wire.proto v1 + hooks.proto skeleton (PB round-trip golden)
+- [x] T11 wire.proto v1 + hooks.proto skeleton (PB round-trip golden)
 - [ ] T12 Go wire framing + chunking (`internal/wire`)
 - [ ] T13 Java wire framing + chunking
 - [ ] T14 java-go-shmem dependency wiring (Go+Java)
