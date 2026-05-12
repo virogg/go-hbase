@@ -34,6 +34,8 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive  # third_party/java-go-shmem required for the replace directive.
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -53,11 +55,15 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive  # java-go-shmem jar is built locally from third_party/.
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '11'
           cache: maven
+      - name: Install java-go-shmem to ~/.m2
+        run: make deps-shmem
       - name: spotless:check
         run: make java-lint
       - name: mvn verify
@@ -76,6 +82,8 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod

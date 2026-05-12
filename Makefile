@@ -32,7 +32,22 @@ test: go-test java-test ## Run all unit tests (Go race + JUnit + JaCoCo).
 lint: go-lint java-lint ## Run all linters/formatters in check mode.
 
 .PHONY: deps
-deps: go-deps java-deps ## Download all Go and Java dependencies (CI cache warm-up).
+deps: deps-shmem go-deps java-deps ## Download all Go and Java dependencies (CI cache warm-up).
+
+# ---------------------------------------------------------------------------
+# Third-party (java-go-shmem)
+# ---------------------------------------------------------------------------
+
+SHMEM_SUBMODULE := third_party/java-go-shmem
+SHMEM_POM       := $(SHMEM_SUBMODULE)/java/pom.xml
+
+.PHONY: deps-shmem
+deps-shmem: $(SHMEM_POM) ## Install the local java-go-shmem jar into ~/.m2 (no-op for Go: replace directive).
+	$(MVN) $(MVN_FLAGS) install -DskipTests -f $(SHMEM_POM)
+
+$(SHMEM_POM):
+	@echo "$(SHMEM_SUBMODULE) is empty — run: git submodule update --init --recursive" >&2
+	@exit 1
 
 .PHONY: proto
 proto: ## Regenerate protobuf for both languages (real wiring lands in T11).
