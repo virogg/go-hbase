@@ -112,6 +112,17 @@ java-deps: ## Resolve Java deps to the local Maven cache (offline-prep for CI).
 	$(MVN) $(MVN_FLAGS) dependency:go-offline
 
 # ---------------------------------------------------------------------------
+# End-to-end (T19): Java↔Go cross-language ping/pong with latency report.
+# ---------------------------------------------------------------------------
+
+.PHONY: test-e2e-ping
+test-e2e-ping: go-build-runtime ## T19: spawn real Go runtime, run 10k PING/PONG, log latency.
+	$(MVN) $(MVN_FLAGS) test -Dtest=PingPongE2ETest -DfailIfNoTests=false
+
+.PHONY: demo-ping
+demo-ping: test-e2e-ping ## Public demo alias for the T19 ping/pong run.
+
+# ---------------------------------------------------------------------------
 # Misc
 # ---------------------------------------------------------------------------
 

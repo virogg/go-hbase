@@ -20,7 +20,7 @@
 - [x] T16 Java shmem wrapper (`bridge.shmem`)
 - [x] T17 Go runtime event loop + heartbeat sender (`internal/cpruntime`)
 - [x] T18 Java supervisor: spawn Go from jar resource
-- [ ] T19 E2E ping/pong 10k roundtrip
+- [x] T19 E2E ping/pong 10k roundtrip
 - [ ] **CP-β (CRITICAL):** demo-ping artifact, latency report
 
 ## Phase 2 — One hook E2E on real HBase 2.5
