@@ -13,7 +13,7 @@
 
 ## Phase 1 — Java↔Go IPC validated (no HBase)
 - [x] T11 wire.proto v1 + hooks.proto skeleton (PB round-trip golden)
-- [ ] T12 Go wire framing + chunking (`internal/wire`)
+- [x] T12 Go wire framing + chunking (`internal/wire`)
 - [ ] T13 Java wire framing + chunking
 - [ ] T14 java-go-shmem dependency wiring (Go+Java)
 - [ ] T15 Go shmem wrapper (`internal/shmem`)
