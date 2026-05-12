@@ -13,6 +13,9 @@ target/
 .mvn/wrapper/maven-wrapper.jar
 dependency-reduced-pom.xml
 
+# Go runtime ELF staged for jar packaging (built by `make go-build-runtime`).
+src/main/resources/bin/
+
 # IDE
 .idea/
 .vscode/

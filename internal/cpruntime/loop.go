@@ -75,11 +75,16 @@ func New(cfg Config) (*Loop, error) {
 }
 
 // Run starts the reader, writer and heartbeat goroutines and blocks
-// until ctx is canceled. It returns ctx.Err().
-func (l *Loop) Run(ctx context.Context) error {
+// until either the parent context is canceled or an inbound SHUTDOWN
+// frame arrives. Returns parent.Err() — nil if the loop stopped via
+// SHUTDOWN.
+func (l *Loop) Run(parent context.Context) error {
+	ctx, cancel := context.WithCancel(parent)
+	defer cancel()
+
 	var wg sync.WaitGroup
 	wg.Add(2)
-	go func() { defer wg.Done(); l.runReader(ctx) }()
+	go func() { defer wg.Done(); l.runReader(ctx, cancel) }()
 	go func() { defer wg.Done(); l.runWriter(ctx) }()
 
 	if l.cfg.HeartbeatPeriod > 0 {
@@ -88,10 +93,10 @@ func (l *Loop) Run(ctx context.Context) error {
 	}
 
 	wg.Wait()
-	return ctx.Err()
+	return parent.Err()
 }
 
-func (l *Loop) runReader(ctx context.Context) {
+func (l *Loop) runReader(ctx context.Context, cancel context.CancelFunc) {
 	for {
 		if ctx.Err() != nil {
 			return
@@ -112,12 +117,17 @@ func (l *Loop) runReader(ctx context.Context) {
 			continue
 		}
 
-		if msg.Type == wire.TypeRequest {
+		switch msg.Type {
+		case wire.TypeRequest:
 			go l.handle(ctx, msg)
+		case wire.TypeShutdown:
+			l.cfg.Logger.Info("cpruntime: inbound SHUTDOWN received")
+			cancel()
+			return
 		}
-		// Non-Request inbound types are ignored at this layer; the
-		// supervisor (T18) is the one driving Heartbeats from the
-		// Java side and Shutdown semantics land in T22+.
+		// Other inbound types (Heartbeat, Log, Response, Error) are
+		// ignored at this layer; the supervisor (T18+) drives them
+		// from the Java side.
 	}
 }
 

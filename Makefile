@@ -15,6 +15,11 @@ MVN_FLAGS     ?= -B -ntp
 GO_PKGS        := ./...
 GO_BUILD_FLAGS := -trimpath
 
+# ELF embedded into the bridge jar resources (T18). The Java supervisor
+# extracts it from src/main/resources/bin/<os>-<arch>/ at startup.
+# Linux x86-64 is the only target per SPEC.md.
+GO_RUNTIME_OUT := src/main/resources/bin/linux-amd64/hbasecop-runtime
+
 # ---------------------------------------------------------------------------
 # Aggregates
 # ---------------------------------------------------------------------------
@@ -58,8 +63,13 @@ proto: ## Regenerate protobuf for both languages (real wiring lands in T11).
 # ---------------------------------------------------------------------------
 
 .PHONY: go-build
-go-build: ## Compile every Go package.
+go-build: go-build-runtime ## Compile every Go package and place the runtime ELF in resources.
 	$(GO) build $(GO_BUILD_FLAGS) $(GO_PKGS)
+
+.PHONY: go-build-runtime
+go-build-runtime: ## Build cmd/hbasecop-runtime into the bridge jar resources (Linux x86-64).
+	@mkdir -p $(dir $(GO_RUNTIME_OUT))
+	GOOS=linux GOARCH=amd64 $(GO) build $(GO_BUILD_FLAGS) -o $(GO_RUNTIME_OUT) ./cmd/hbasecop-runtime
 
 .PHONY: go-test
 go-test: ## Run Go tests with the race detector.
@@ -82,11 +92,11 @@ go-deps: ## Download Go module deps to the local cache.
 # ---------------------------------------------------------------------------
 
 .PHONY: java-build
-java-build: ## Compile Java sources.
+java-build: go-build-runtime ## Compile Java sources (after staging the Go runtime ELF).
 	$(MVN) $(MVN_FLAGS) compile
 
 .PHONY: java-test
-java-test: ## Run Java tests + JaCoCo + spotless (mvn verify).
+java-test: go-build-runtime ## Run Java tests + JaCoCo + spotless (mvn verify).
 	$(MVN) $(MVN_FLAGS) verify
 
 .PHONY: java-lint
