@@ -212,6 +212,33 @@ func TestLoopHeartbeats(t *testing.T) {
 	}
 }
 
+func TestLoopShutdownOnInboundFrame(t *testing.T) {
+	ch := openLoopChannels(t)
+
+	loop, err := cpruntime.New(cpruntime.Config{
+		InCh:            ch.loopIn,
+		OutCh:           ch.loopOut,
+		HeartbeatPeriod: -1,
+	})
+	if err != nil {
+		t.Fatalf("cpruntime.New: %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- loop.Run(context.Background()) }()
+
+	frame := encodeWireFrame(t, &wire.Message{Type: wire.TypeShutdown})
+	if err := ch.mockOut.Send(frame); err != nil {
+		t.Fatalf("send shutdown: %v", err)
+	}
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("Run did not exit within 1s after inbound SHUTDOWN frame")
+	}
+}
+
 func TestLoopShutdownOnContextCancel(t *testing.T) {
 	ch := openLoopChannels(t)
 
