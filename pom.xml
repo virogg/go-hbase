@@ -37,6 +37,12 @@
     <mockito.version>5.11.0</mockito.version>
     <!-- Keep protobuf-java in lockstep with protoc, see proto-gen.sh / CI. -->
     <protobuf.version>3.25.5</protobuf.version>
+    <!--
+      java-go-shmem is not on Maven Central; carried as a git submodule
+      under third_party/ and installed locally via `make deps-shmem`
+      (CI runs the same target). See docs/dep-shmem.md for the pin.
+    -->
+    <shmem.version>1.0.0-SNAPSHOT</shmem.version>
 
     <plugin.compiler.version>3.13.0</plugin.compiler.version>
     <plugin.surefire.version>3.2.5</plugin.surefire.version>
@@ -58,6 +64,11 @@
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
       <version>${protobuf.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.jgshmem</groupId>
+      <artifactId>java-go-shmem</artifactId>
+      <version>${shmem.version}</version>
     </dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>

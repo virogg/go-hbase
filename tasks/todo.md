@@ -15,7 +15,7 @@
 - [x] T11 wire.proto v1 + hooks.proto skeleton (PB round-trip golden)
 - [x] T12 Go wire framing + chunking (`internal/wire`)
 - [x] T13 Java wire framing + chunking
-- [ ] T14 java-go-shmem dependency wiring (Go+Java)
+- [x] T14 java-go-shmem dependency wiring (Go+Java)
 - [ ] T15 Go shmem wrapper (`internal/shmem`)
 - [ ] T16 Java shmem wrapper (`bridge.shmem`)
 - [ ] T17 Go runtime event loop + heartbeat sender (`internal/cpruntime`)
