@@ -35,7 +35,7 @@
 
 ## Phase 3 — Failure semantics & supervisor production-grade
 - [x] T31 Per-hook policy parsing (strict / best-effort)
-- [ ] T32 Strict-mode wiring → IOException; best-effort → log+continue
+- [x] T32 Strict-mode wiring → IOException; best-effort → log+continue
 - [ ] T33 Heartbeat watchdog (kill -9 on miss)
 - [ ] T34 Auto-restart with exponential backoff
 - [ ] T35 Inflight handling on crash + restart-deadline

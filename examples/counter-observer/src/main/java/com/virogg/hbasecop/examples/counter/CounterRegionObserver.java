@@ -48,6 +48,7 @@ public final class CounterRegionObserver implements RegionCoprocessor {
             .ringMaxObjectSize(1 << 20) // 1 MiB — covers max Mutation size in tests
             .hookTimeout(Duration.ofSeconds(5))
             .gracefulShutdownTimeout(Duration.ofSeconds(2))
+            .configuration(env.getConfiguration())
             .build();
 
     runtime = new CoprocessorRuntime(cfg);
