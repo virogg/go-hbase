@@ -20,6 +20,12 @@ GO_BUILD_FLAGS := -trimpath
 # Linux x86-64 is the only target per SPEC.md.
 GO_RUNTIME_OUT := src/main/resources/bin/linux-amd64/hbasecop-runtime
 
+# T25: per-example coproc-jar staging — each example ships its own Go ELF
+# at the same classpath path the bridge supervisor extracts from
+# (bin/linux-amd64/hbasecop-runtime).
+COUNTER_OBSERVER_DIR := examples/counter-observer
+COUNTER_OBSERVER_OUT := $(COUNTER_OBSERVER_DIR)/src/main/resources/bin/linux-amd64/hbasecop-runtime
+
 # ---------------------------------------------------------------------------
 # Aggregates
 # ---------------------------------------------------------------------------
@@ -121,6 +127,30 @@ test-e2e-ping: go-build-runtime ## T19: spawn real Go runtime, run 10k PING/PONG
 
 .PHONY: demo-ping
 demo-ping: test-e2e-ping ## Public demo alias for the T19 ping/pong run.
+
+# ---------------------------------------------------------------------------
+# Examples (T25): counter-observer reference coproc-jar.
+# ---------------------------------------------------------------------------
+
+.PHONY: go-build-counter
+go-build-counter: ## T25: build counter-observer Go ELF into example resources (Linux x86-64).
+	@mkdir -p $(dir $(COUNTER_OBSERVER_OUT))
+	GOOS=linux GOARCH=amd64 $(GO) build $(GO_BUILD_FLAGS) -o $(COUNTER_OBSERVER_OUT) ./$(COUNTER_OBSERVER_DIR)
+
+.PHONY: counter-observer-jar
+counter-observer-jar: go-build-counter ## T25: build deployable coproc-jar (installs bridge into ~/.m2 first).
+	$(MVN) $(MVN_FLAGS) install -DskipTests
+	$(MVN) $(MVN_FLAGS) -f $(COUNTER_OBSERVER_DIR)/pom.xml package
+	@unzip -l $(COUNTER_OBSERVER_DIR)/target/counter-observer.jar | \
+	  grep -q 'bin/linux-amd64/hbasecop-runtime' || \
+	  { echo "ERROR: Go ELF missing from counter-observer.jar" >&2; exit 1; }
+	@unzip -l $(COUNTER_OBSERVER_DIR)/target/counter-observer.jar | \
+	  grep -q 'com/virogg/hbasecop/examples/counter/CounterRegionObserver.class' || \
+	  { echo "ERROR: CounterRegionObserver class missing from coproc-jar" >&2; exit 1; }
+	@unzip -l $(COUNTER_OBSERVER_DIR)/target/counter-observer.jar | \
+	  grep -q 'com/virogg/hbasecop/bridge/observer/RegionObserverAdapter.class' || \
+	  { echo "ERROR: bridge classes not shaded into coproc-jar" >&2; exit 1; }
+	@echo "OK: counter-observer.jar -- bridge shaded, Go ELF embedded"
 
 # ---------------------------------------------------------------------------
 # Misc
