@@ -3,8 +3,12 @@
 
 package com.virogg.hbasecop.bridge.observer;
 
+import com.google.protobuf.ByteString;
+import com.google.protobuf.InvalidProtocolBufferException;
 import com.virogg.hbasecop.bridge.wire.FrameType;
 import com.virogg.hbasecop.bridge.wire.Message;
+import com.virogg.hbasecop.bridge.wire.pb.Request;
+import com.virogg.hbasecop.bridge.wire.pb.Response;
 import com.virogg.hbasecop.multiplex.ChannelClosedException;
 import com.virogg.hbasecop.multiplex.Multiplexer;
 import java.io.IOException;
@@ -38,8 +42,12 @@ public final class MuxHookDispatcher implements HookDispatcher {
     Objects.requireNonNull(hookCtxBytes, "hookCtxBytes");
     Objects.requireNonNull(timeout, "timeout");
 
+    // Wrap the per-hook context bytes in the wirepb.Request envelope the Go
+    // dispatcher unmarshals from Message.payload (see pkg/hbasecop/dispatch.go).
+    byte[] requestPayload =
+        Request.newBuilder().setHookCtx(ByteString.copyFrom(hookCtxBytes)).build().toByteArray();
     // regionId is reserved for T61 multi-region routing; passing 0 keeps the wire shape stable.
-    Message req = new Message(FrameType.REQUEST, 0L, 0, hookId, hookCtxBytes);
+    Message req = new Message(FrameType.REQUEST, 0L, 0, hookId, requestPayload);
     CompletableFuture<Message> fut = mux.call(req);
 
     final Message resp;
@@ -55,6 +63,34 @@ public final class MuxHookDispatcher implements HookDispatcher {
       }
       throw new IOException("hbasecop: hook " + hookId + " dispatch failed", cause);
     }
-    return resp.payload();
+
+    // The Go side may answer with either a RESPONSE (wirepb.Response carrying
+    // the HookResponse bytes) or an ERROR (wirepb.Error). Map the latter to
+    // an IOException so the adapter surfaces it as a strict-mode failure.
+    if (resp.type() == FrameType.ERROR) {
+      try {
+        com.virogg.hbasecop.bridge.wire.pb.Error err =
+            com.virogg.hbasecop.bridge.wire.pb.Error.parseFrom(resp.payload());
+        throw new IOException(
+            "hbasecop: hook "
+                + hookId
+                + " returned error (code="
+                + err.getCode()
+                + "): "
+                + err.getMessage());
+      } catch (InvalidProtocolBufferException e) {
+        throw new IOException("hbasecop: malformed wirepb.Error payload for hook " + hookId, e);
+      }
+    }
+
+    // The Go side wraps the HookResponse bytes in wirepb.Response.hook_resp;
+    // unwrap before handing back to the adapter, which parses HookResponse.
+    final Response wireResp;
+    try {
+      wireResp = Response.parseFrom(resp.payload());
+    } catch (InvalidProtocolBufferException e) {
+      throw new IOException("hbasecop: malformed wirepb.Response payload for hook " + hookId, e);
+    }
+    return wireResp.getHookResp().toByteArray();
   }
 }

@@ -40,4 +40,36 @@
     <name>hbase.regionserver.info.port</name>
     <value>16030</value>
   </property>
+  <!--
+    Decouple bind address from advertised hostname so the container exposes
+    these RPC endpoints on its veth0 (so docker port-forwards work from the
+    host) but ZK still hands back `localhost` to the host-side HBase client.
+    Without the explicit *.ipc.address overrides, HBase resolves the hostname
+    setting and binds only to 127.0.0.1 inside the container — invisible to
+    docker port forwarding.
+  -->
+  <property>
+    <name>hbase.master.ipc.address</name>
+    <value>0.0.0.0</value>
+  </property>
+  <property>
+    <name>hbase.regionserver.ipc.address</name>
+    <value>0.0.0.0</value>
+  </property>
+  <property>
+    <name>hbase.zookeeper.property.clientPortAddress</name>
+    <value>0.0.0.0</value>
+  </property>
+  <property>
+    <name>hbase.master.hostname</name>
+    <value>localhost</value>
+  </property>
+  <property>
+    <name>hbase.regionserver.hostname</name>
+    <value>localhost</value>
+  </property>
+  <property>
+    <name>hbase.unsafe.regionserver.hostname</name>
+    <value>localhost</value>
+  </property>
 </configuration>

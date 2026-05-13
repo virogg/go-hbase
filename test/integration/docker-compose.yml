@@ -16,6 +16,11 @@ services:
     image: go-hbase/hbase-dev:2.5.11
     container_name: go-hbase-dev
     hostname: hbase-dev
+    # We use explicit port forwards (not network_mode=host) so this works under
+    # Docker Desktop, where host-mode shares the Hyper-V VM's network namespace
+    # instead of the WSL2 host's. The RegionServer advertises itself as
+    # `localhost` (see hbase-site.xml `hbase.*.hostname`), so the host-side
+    # client can connect back via these mapped ports.
     ports:
       - "16010:16010"   # master web UI
       - "16030:16030"   # regionserver web UI

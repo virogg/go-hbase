@@ -183,6 +183,25 @@ hbase-status: ## T26: curl the master-status page (smoke check post-up).
 		http://localhost:16010/master-status
 
 # ---------------------------------------------------------------------------
+# Integration (T27): live PrePut → Go-observer counter on real HBase.
+# ---------------------------------------------------------------------------
+
+COPROC_JAR_STAGED := test/integration/coproc-jars/counter-observer.jar
+
+.PHONY: test-integration
+test-integration: counter-observer-jar ## T27: full IT — bring up HBase, run PrePutCounterIT, tear down.
+	@mkdir -p test/integration/coproc-jars
+	cp $(COUNTER_OBSERVER_DIR)/target/counter-observer.jar $(COPROC_JAR_STAGED)
+	$(HBASE_COMPOSE_CMD) up -d --build
+	./test/integration/scripts/wait-master-status.sh
+	@set +e; \
+	  $(MVN) $(MVN_FLAGS) test -Dtest=PrePutCounterIT -DfailIfNoTests=false; \
+	  status=$$?; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
+
+# ---------------------------------------------------------------------------
 # Misc
 # ---------------------------------------------------------------------------
 
