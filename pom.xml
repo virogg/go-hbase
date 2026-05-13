@@ -62,8 +62,13 @@
 
   <!--
     HBase does not publish a bom artifact, so we pin the version via the
-    `hbase.version` property and reference it directly when concrete deps
-    (hbase-client, hbase-server, hbase-protocol-shaded) land in T21/T23.
+    `hbase.version` property and reference each artifact directly.
+    hbase-server is the only one carrying RegionObserver/ObserverContext;
+    the others (hbase-client, hbase-common) come in transitively but we
+    declare them explicitly so the compile path stays explicit.
+
+    Scope is `provided`: the RegionServer already exposes the HBase jars
+    on its classpath, so the produced coproc-jar must not shade them in.
   -->
 
   <dependencies>
@@ -71,6 +76,24 @@
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
       <version>${protobuf.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-common</artifactId>
+      <version>${hbase.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-client</artifactId>
+      <version>${hbase.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-server</artifactId>
+      <version>${hbase.version}</version>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>com.jgshmem</groupId>
