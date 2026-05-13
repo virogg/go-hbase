@@ -188,6 +188,10 @@ hbase-status: ## T26: curl the master-status page (smoke check post-up).
 
 COPROC_JAR_STAGED := test/integration/coproc-jars/counter-observer.jar
 
+.PHONY: demo-counter
+demo-counter: ## CP-γ: public demo — Put on HBase triggers Go observer counter; leaves cluster up.
+	./tools/demo-counter.sh
+
 .PHONY: test-integration
 test-integration: counter-observer-jar ## T27: full IT — bring up HBase, run PrePutCounterIT, tear down.
 	@mkdir -p test/integration/coproc-jars
