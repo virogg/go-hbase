@@ -268,8 +268,13 @@ public final class CoprocessorRuntime implements AutoCloseable {
         }
         switch (m.type()) {
           case RESPONSE:
+          case ERROR:
+            // Both carry the same req_id; the Go side picks ERROR when a hook
+            // call fails (e.g. unknown hook, malformed payload, marshal fail).
+            // MuxHookDispatcher inspects FrameType and surfaces an IOException.
             if (!mux.deliver(m)) {
-              LOG.log(Level.DEBUG, "CoprocessorRuntime: unmatched RESPONSE req_id={0}", m.reqId());
+              LOG.log(
+                  Level.DEBUG, "CoprocessorRuntime: unmatched {0} req_id={1}", m.type(), m.reqId());
             }
             break;
           case HEARTBEAT:
