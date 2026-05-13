@@ -27,7 +27,7 @@
 - [x] T21 Vendored HBase .proto + PrePut/PostPut messages
 - [x] T22 Go SDK skeleton: `RegionObserver{PrePut,PostPut}` + `Run(...)`
 - [x] T23 Java RegionObserverAdapter (Put hooks only)
-- [ ] T24 Mux v0 (single region, req_id matching)
+- [x] T24 Mux v0 (single region, req_id matching)
 - [ ] T25 Coproc-jar packaging via Maven shade (counter-observer example)
 - [ ] T26 HBase 2.5 docker-compose dev cluster + `make hbase-up`
 - [ ] T27 Integration test: Put → Go observer counter
