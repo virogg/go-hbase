@@ -153,6 +153,36 @@ counter-observer-jar: go-build-counter ## T25: build deployable coproc-jar (inst
 	@echo "OK: counter-observer.jar -- bridge shaded, Go ELF embedded"
 
 # ---------------------------------------------------------------------------
+# Integration (T26): HBase 2.5 standalone dev cluster.
+# ---------------------------------------------------------------------------
+
+HBASE_COMPOSE     := test/integration/docker-compose.yml
+HBASE_COMPOSE_CMD := docker compose -f $(HBASE_COMPOSE)
+
+.PHONY: hbase-up
+hbase-up: ## T26: start HBase 2.5 standalone dev cluster, wait for master web UI.
+	@mkdir -p test/integration/coproc-jars
+	$(HBASE_COMPOSE_CMD) up -d --build
+	./test/integration/scripts/wait-master-status.sh
+
+.PHONY: hbase-down
+hbase-down: ## T26: stop and remove the HBase dev cluster (preserves built image).
+	$(HBASE_COMPOSE_CMD) down
+
+.PHONY: hbase-clean
+hbase-clean: ## T26: stop, remove volumes, and drop the locally-built image.
+	$(HBASE_COMPOSE_CMD) down -v --rmi local
+
+.PHONY: hbase-logs
+hbase-logs: ## T26: tail HBase dev cluster logs.
+	$(HBASE_COMPOSE_CMD) logs -f hbase
+
+.PHONY: hbase-status
+hbase-status: ## T26: curl the master-status page (smoke check post-up).
+	curl -fsS -o /dev/null -w 'master-status: %{http_code}\n' \
+		http://localhost:16010/master-status
+
+# ---------------------------------------------------------------------------
 # Misc
 # ---------------------------------------------------------------------------
 

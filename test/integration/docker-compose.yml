@@ -1,0 +1,35 @@
+name: go-hbase-dev
+
+# T26: HBase 2.5 standalone dev cluster.
+# - One container runs Master + RegionServer + embedded ZooKeeper in a single
+#   JVM (HBase standalone mode). Sufficient for coproc integration tests.
+# - Image is built locally from ./hbase/Dockerfile, pinned to HBase ${HBASE_VERSION}.
+# - The host bind-mount ./coproc-jars/ is where the integration test (T27)
+#   drops the example coproc-jar before invoking `disable/alterTable/enable`.
+
+services:
+  hbase:
+    build:
+      context: ./hbase
+      args:
+        HBASE_VERSION: "2.5.11"
+    image: go-hbase/hbase-dev:2.5.11
+    container_name: go-hbase-dev
+    hostname: hbase-dev
+    ports:
+      - "16010:16010"   # master web UI
+      - "16030:16030"   # regionserver web UI
+      - "2181:2181"     # zookeeper client
+      - "16000:16000"   # master RPC
+      - "16020:16020"   # regionserver RPC
+    volumes:
+      - ./coproc-jars:/coproc-jars
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "curl -fsS -o /dev/null http://localhost:16010/master-status || exit 1"
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
+    restart: unless-stopped

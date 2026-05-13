@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<!--
+  T26: HBase standalone dev cluster site config.
+  - rootdir on the container's local fs (not HDFS) since standalone mode.
+  - cluster.distributed=false → Master + RS + ZK in a single JVM.
+  - bindAddress 0.0.0.0 so the web UI is reachable from the host via
+    the docker-compose port mapping.
+-->
+<configuration>
+  <property>
+    <name>hbase.rootdir</name>
+    <value>file:///hbase-data</value>
+  </property>
+  <property>
+    <name>hbase.zookeeper.property.dataDir</name>
+    <value>/hbase-zk</value>
+  </property>
+  <property>
+    <name>hbase.cluster.distributed</name>
+    <value>false</value>
+  </property>
+  <property>
+    <name>hbase.unsafe.stream.capability.enforce</name>
+    <value>false</value>
+  </property>
+  <property>
+    <name>hbase.master.info.bindAddress</name>
+    <value>0.0.0.0</value>
+  </property>
+  <property>
+    <name>hbase.regionserver.info.bindAddress</name>
+    <value>0.0.0.0</value>
+  </property>
+  <property>
+    <name>hbase.master.info.port</name>
+    <value>16010</value>
+  </property>
+  <property>
+    <name>hbase.regionserver.info.port</name>
+    <value>16030</value>
+  </property>
+</configuration>
