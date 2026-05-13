@@ -34,7 +34,7 @@
 - [x] **CP-γ (DEMO READY):** `make demo-counter` works end-to-end on live HBase
 
 ## Phase 3 — Failure semantics & supervisor production-grade
-- [ ] T31 Per-hook policy parsing (strict / best-effort)
+- [x] T31 Per-hook policy parsing (strict / best-effort)
 - [ ] T32 Strict-mode wiring → IOException; best-effort → log+continue
 - [ ] T33 Heartbeat watchdog (kill -9 on miss)
 - [ ] T34 Auto-restart with exponential backoff
