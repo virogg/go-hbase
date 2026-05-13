@@ -92,6 +92,34 @@ final class CoprocessorRuntimeTest {
     }
   }
 
+  @Test
+  void watchdogStaysQuietWhileGoSendsHeartbeats(@TempDir Path tmp) throws Exception {
+    Path inFile = tmp.resolve("in.mmap");
+    Path outFile = tmp.resolve("out.mmap");
+
+    CoprocessorRuntime.Config cfg =
+        CoprocessorRuntime.Config.builder()
+            .javaToGoFile(inFile)
+            .goToJavaFile(outFile)
+            .ringCapacity(8)
+            .ringMaxObjectSize(64 * 1024)
+            // Heartbeat every 100ms — well below the 3-miss=300ms threshold over a 600ms window.
+            .heartbeatPeriodMs(100)
+            .hookTimeout(Duration.ofSeconds(2))
+            .gracefulShutdownTimeout(Duration.ofSeconds(2))
+            .build();
+
+    try (CoprocessorRuntime rt = new CoprocessorRuntime(cfg)) {
+      rt.start();
+      // Give the Go side enough wall time to ship ≥ 4 heartbeats — the watchdog must observe them
+      // via the reader and stay quiet.
+      Thread.sleep(600);
+      assertFalse(rt.isUnhealthy(), "watchdog must not fire while heartbeats flow");
+      assertTrue(rt.isAlive(), "Go process must still be alive");
+      rt.stop();
+    }
+  }
+
   private static boolean hasReaderThreadAlive(CoprocessorRuntime rt) {
     Thread reader = rt.readerThreadForTesting();
     return reader != null && reader.isAlive();

@@ -153,6 +153,30 @@ public final class GoProcess implements AutoCloseable {
     }
   }
 
+  /**
+   * Force-kill the underlying process with {@code SIGKILL} (via {@link Process#destroyForcibly()})
+   * and wait for it to exit. Used by the heartbeat watchdog (T33) when the Go side is hung. Safe to
+   * call on a never-started or already-dead process — both are no-ops. Idempotent.
+   *
+   * <p>Unlike {@link #stop()}, this does <em>not</em> send a {@code SHUTDOWN} frame and does
+   * <em>not</em> wait for graceful exit. Stdout/stderr pumps and the extracted ELF are not cleaned
+   * up here — call {@link #stop()} afterwards (it tolerates an already-dead process) to finish the
+   * teardown.
+   */
+  public synchronized void destroyForcibly() {
+    if (process == null || !process.isAlive()) {
+      return;
+    }
+    long pid = process.pid();
+    process.destroyForcibly();
+    try {
+      process.waitFor();
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+    }
+    LOG.log(Level.WARNING, "GoProcess pid={0}: SIGKILL delivered, process reaped", pid);
+  }
+
   @Override
   public void close() throws IOException, InterruptedException {
     stop();

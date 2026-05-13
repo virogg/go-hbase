@@ -12,6 +12,7 @@ import com.virogg.hbasecop.bridge.shmem.Role;
 import com.virogg.hbasecop.bridge.shmem.ShmemException;
 import com.virogg.hbasecop.bridge.supervisor.GoProcess;
 import com.virogg.hbasecop.bridge.supervisor.GoProcessConfig;
+import com.virogg.hbasecop.bridge.supervisor.HeartbeatWatchdog;
 import com.virogg.hbasecop.bridge.wire.Decoder;
 import com.virogg.hbasecop.bridge.wire.Encoder;
 import com.virogg.hbasecop.bridge.wire.Message;
@@ -25,7 +26,11 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 
@@ -46,6 +51,18 @@ public final class CoprocessorRuntime implements AutoCloseable {
 
   private static final Logger LOG = System.getLogger(CoprocessorRuntime.class.getName());
 
+  /** Configuration key: heartbeat period (Hadoop-style duration, e.g. {@code 500ms}). */
+  public static final String KEY_HEARTBEAT_PERIOD = "hbasecop.heartbeat.period";
+
+  /** Configuration key: consecutive missed heartbeats before the watchdog fires. */
+  public static final String KEY_HEARTBEAT_MISS_THRESHOLD = "hbasecop.heartbeat.miss-threshold";
+
+  /** Default heartbeat period when neither Configuration nor builder pin one. */
+  public static final Duration DEFAULT_HEARTBEAT_PERIOD = Duration.ofMillis(500);
+
+  /** Default miss threshold for the watchdog. */
+  public static final int DEFAULT_HEARTBEAT_MISS_THRESHOLD = 3;
+
   private final Config cfg;
 
   private Channel javaToGo;
@@ -55,6 +72,10 @@ public final class CoprocessorRuntime implements AutoCloseable {
   private ChannelReader reader;
   private Thread readerThread;
   private RegionObserver observer;
+  private HeartbeatWatchdog watchdog;
+  private ScheduledExecutorService watchdogScheduler;
+  private ScheduledFuture<?> watchdogTask;
+  private final AtomicBoolean unhealthy = new AtomicBoolean(false);
   private boolean started;
 
   public CoprocessorRuntime(Config cfg) {
@@ -82,6 +103,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
               shmemConfig(
                   cfg.goToJavaFile(), Role.CONSUMER, cfg.ringCapacity(), cfg.ringMaxObjectSize()));
 
+      long effectiveHeartbeatMs = resolveHeartbeatPeriodMs(cfg);
       GoProcessConfig procCfg =
           GoProcessConfig.builder()
               .binaryResourcePath(cfg.binaryResourcePath())
@@ -89,16 +111,31 @@ public final class CoprocessorRuntime implements AutoCloseable {
               .goToJavaFile(cfg.goToJavaFile())
               .capacity(cfg.ringCapacity())
               .maxObjectSize(cfg.ringMaxObjectSize())
-              .heartbeatPeriodMs(cfg.heartbeatPeriodMs())
+              .heartbeatPeriodMs(effectiveHeartbeatMs)
               .gracefulShutdownTimeout(cfg.gracefulShutdownTimeout())
               .build();
       goProcess = new GoProcess(procCfg, javaToGo);
       goProcess.start();
 
+      watchdog = maybeBuildWatchdog(cfg, effectiveHeartbeatMs);
+      if (watchdog != null) {
+        watchdogScheduler =
+            Executors.newSingleThreadScheduledExecutor(
+                r -> {
+                  Thread t = new Thread(r, "hbasecop-watchdog");
+                  t.setDaemon(true);
+                  return t;
+                });
+        long tickMs = watchdog.period().toMillis();
+        watchdogTask =
+            watchdogScheduler.scheduleAtFixedRate(
+                this::tickWatchdog, tickMs, tickMs, TimeUnit.MILLISECONDS);
+      }
+
       Encoder enc = new Encoder();
       mux = new Multiplexer(msg -> sendOnChannel(javaToGo, enc, msg));
 
-      reader = new ChannelReader(goToJava, new Decoder(), mux);
+      reader = new ChannelReader(goToJava, new Decoder(), mux, watchdog);
       readerThread = new Thread(reader, "hbasecop-reader");
       readerThread.setDaemon(true);
       readerThread.start();
@@ -124,6 +161,14 @@ public final class CoprocessorRuntime implements AutoCloseable {
   /** True iff the supervised Go process is alive. */
   public synchronized boolean isAlive() {
     return goProcess != null && goProcess.isAlive();
+  }
+
+  /**
+   * True iff the watchdog has fired and the runtime is awaiting restart (T34). Callers (typically
+   * the supervisor loop) read this to decide whether further hook calls should short-circuit.
+   */
+  public boolean isUnhealthy() {
+    return unhealthy.get();
   }
 
   /** The RegionObserver to expose to HBase; null until {@link #start()} succeeds. */
@@ -154,6 +199,21 @@ public final class CoprocessorRuntime implements AutoCloseable {
   }
 
   private void closeQuietly() {
+    if (watchdogTask != null) {
+      watchdogTask.cancel(false);
+      watchdogTask = null;
+    }
+    if (watchdogScheduler != null) {
+      watchdogScheduler.shutdownNow();
+      try {
+        if (!watchdogScheduler.awaitTermination(1, TimeUnit.SECONDS)) {
+          LOG.log(Level.WARNING, "CoprocessorRuntime: watchdog scheduler did not shut down in 1s");
+        }
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+      }
+      watchdogScheduler = null;
+    }
     if (reader != null) {
       reader.shutdown();
     }
@@ -187,6 +247,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
     goToJava = null;
     javaToGo = null;
     observer = null;
+    watchdog = null;
   }
 
   private static void closeChannelQuietly(Channel ch) {
@@ -198,6 +259,66 @@ public final class CoprocessorRuntime implements AutoCloseable {
     } catch (RuntimeException e) {
       LOG.log(Level.WARNING, "CoprocessorRuntime: channel close failed", e);
     }
+  }
+
+  private void tickWatchdog() {
+    HeartbeatWatchdog wd = watchdog;
+    if (wd == null) {
+      return;
+    }
+    try {
+      wd.tick();
+    } catch (RuntimeException e) {
+      LOG.log(Level.WARNING, "CoprocessorRuntime: watchdog tick threw", e);
+    }
+  }
+
+  /**
+   * Watchdog miss action: force-kill the Go process (SIGKILL via {@link Process#destroyForcibly()})
+   * and mark the runtime unhealthy. Auto-restart with backoff lands in T34; here we only ensure the
+   * hung process is reaped so the supervisor can react.
+   */
+  private void onHung(long elapsedMs) {
+    if (!unhealthy.compareAndSet(false, true)) {
+      return;
+    }
+    GoProcess gp = goProcess;
+    long pid = gp == null ? -1L : gp.pid();
+    LOG.log(
+        Level.WARNING,
+        "CoprocessorRuntime: heartbeat watchdog fired (pid={0}, elapsed={1}ms) — SIGKILL",
+        pid,
+        elapsedMs);
+    if (gp != null) {
+      gp.destroyForcibly();
+    }
+  }
+
+  private static long resolveHeartbeatPeriodMs(Config cfg) {
+    Configuration conf = cfg.configuration();
+    if (conf != null && conf.get(KEY_HEARTBEAT_PERIOD) != null) {
+      long ms = conf.getTimeDuration(KEY_HEARTBEAT_PERIOD, 0L, TimeUnit.MILLISECONDS);
+      return ms;
+    }
+    return cfg.heartbeatPeriodMs();
+  }
+
+  private HeartbeatWatchdog maybeBuildWatchdog(Config cfg, long effectiveHeartbeatMs) {
+    if (effectiveHeartbeatMs <= 0) {
+      // Heartbeats explicitly disabled — no watchdog.
+      return null;
+    }
+    Duration period = Duration.ofMillis(effectiveHeartbeatMs);
+    Configuration conf = cfg.configuration();
+    int threshold =
+        conf == null
+            ? DEFAULT_HEARTBEAT_MISS_THRESHOLD
+            : conf.getInt(KEY_HEARTBEAT_MISS_THRESHOLD, DEFAULT_HEARTBEAT_MISS_THRESHOLD);
+    if (threshold < 1) {
+      throw new IllegalArgumentException(
+          KEY_HEARTBEAT_MISS_THRESHOLD + " must be ≥ 1, got " + threshold);
+    }
+    return new HeartbeatWatchdog(period, threshold, System::currentTimeMillis, this::onHung);
   }
 
   private static PolicyConfig buildPolicyConfig(Config cfg) {
@@ -246,12 +367,14 @@ public final class CoprocessorRuntime implements AutoCloseable {
     private final Channel ch;
     private final Decoder decoder;
     private final Multiplexer mux;
+    private final HeartbeatWatchdog watchdog;
     private volatile boolean stop;
 
-    ChannelReader(Channel ch, Decoder decoder, Multiplexer mux) {
+    ChannelReader(Channel ch, Decoder decoder, Multiplexer mux, HeartbeatWatchdog watchdog) {
       this.ch = ch;
       this.decoder = decoder;
       this.mux = mux;
+      this.watchdog = watchdog;
     }
 
     void shutdown() {
@@ -295,7 +418,9 @@ public final class CoprocessorRuntime implements AutoCloseable {
             }
             break;
           case HEARTBEAT:
-            // T33 will add a watchdog; for now we just acknowledge by ignoring.
+            if (watchdog != null) {
+              watchdog.recordHeartbeat();
+            }
             break;
           default:
             LOG.log(Level.WARNING, "CoprocessorRuntime: unexpected frame type {0}", m.type());
