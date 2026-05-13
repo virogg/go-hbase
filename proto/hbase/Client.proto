@@ -1,0 +1,100 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// Vendored from apache/hbase rel/2.5.10 — see proto/hbase/UPSTREAM.md.
+// Slim subset: MutationProto only (with its nested Column/ColumnValue/
+// QualifierValue/Durability/MutationType/DeleteType). Get, Result, Scan
+// and the request/response envelopes will be added by T43+ when the
+// read-path hooks land.
+
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+// This file contains protocol buffers that are used for Client service.
+syntax = "proto2";
+package virogg.hbasecop.hbase.v1;
+
+option java_package = "com.virogg.hbasecop.hbase.v1";
+option java_outer_classname = "ClientProtos";
+option java_generate_equals_and_hash = true;
+option go_package = "github.com/virogg/go-hbase/internal/wire/hbasepb";
+option optimize_for = SPEED;
+
+import "hbase/HBase.proto";
+
+/**
+ * A specific Mutate operation. The Mutation is wrapped in MutationProto.
+ *
+ * The 'cell' field is deliberately left out of this slim vendor — HBase
+ * passes Cells out-of-band when associated_cell_count > 0; the in-band
+ * column_value path covers everything Phase 2 (T22+) needs.
+ */
+message MutationProto {
+  optional bytes row = 1;
+  optional MutationType mutate_type = 2;
+  repeated ColumnValue column_value = 3;
+  optional uint64 timestamp = 4;
+  repeated NameBytesPair attribute = 5;
+  optional Durability durability = 6 [default = USE_DEFAULT];
+
+  // For some mutations, a result may be returned, in which case,
+  // time range can be specified for potential performance gain
+  optional TimeRange time_range = 7;
+  // The below count is set when the associated cells are NOT
+  // part of this protobuf message; they are passed alongside
+  // and then this Message is a placeholder with metadata.  The
+  // count is needed to know how many to peel off the block of Cells as
+  // ours.  NOTE: This is different from the pb managed cell_count of the
+  // 'cell' field above which is non-null when the cells are pb'd.
+  optional int32 associated_cell_count = 8;
+
+  optional uint64 nonce = 9;
+
+  enum Durability {
+    USE_DEFAULT  = 0;
+    SKIP_WAL     = 1;
+    ASYNC_WAL    = 2;
+    SYNC_WAL     = 3;
+    FSYNC_WAL    = 4;
+  }
+
+  enum MutationType {
+    APPEND = 0;
+    INCREMENT = 1;
+    PUT = 2;
+    DELETE = 3;
+  }
+
+  enum DeleteType {
+    DELETE_ONE_VERSION = 0;
+    DELETE_MULTIPLE_VERSIONS = 1;
+    DELETE_FAMILY = 2;
+    DELETE_FAMILY_VERSION = 3;
+  }
+
+  message ColumnValue {
+    required bytes family = 1;
+    repeated QualifierValue qualifier_value = 2;
+
+    message QualifierValue {
+      optional bytes qualifier = 1;
+      optional bytes value = 2;
+      optional uint64 timestamp = 3;
+      optional DeleteType delete_type = 4;
+      optional bytes tags = 5;
+    }
+  }
+}

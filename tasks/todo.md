@@ -24,7 +24,7 @@
 - [x] **CP-β (CRITICAL):** demo-ping artifact, latency report
 
 ## Phase 2 — One hook E2E on real HBase 2.5
-- [ ] T21 Vendored HBase .proto + PrePut/PostPut messages
+- [x] T21 Vendored HBase .proto + PrePut/PostPut messages
 - [ ] T22 Go SDK skeleton: `RegionObserver{PrePut,PostPut}` + `Run(...)`
 - [ ] T23 Java RegionObserverAdapter (Put hooks only)
 - [ ] T24 Mux v0 (single region, req_id matching)

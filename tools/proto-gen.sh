@@ -41,12 +41,16 @@ cd "$ROOT"
 
 # `module=` mode: protoc-gen-go emits files into a path derived from the
 # go_package option, with the module prefix stripped. Our protos declare
-# go_package = github.com/virogg/go-hbase/internal/wire/{wirepb,hookpb},
-# so output lands at internal/wire/{wirepb,hookpb}/*.pb.go.
+# go_package = github.com/virogg/go-hbase/internal/wire/{wirepb,hookpb,hbasepb},
+# so output lands at internal/wire/{wirepb,hookpb,hbasepb}/*.pb.go.
 protoc \
   --proto_path=proto \
   --go_out=. \
   --go_opt=module=github.com/virogg/go-hbase \
-  proto/wire.proto proto/hooks.proto
+  proto/wire.proto \
+  proto/hooks.proto \
+  proto/hbase/Cell.proto \
+  proto/hbase/HBase.proto \
+  proto/hbase/Client.proto
 
-echo "proto-gen: Go code generated under internal/wire/{wirepb,hookpb}/"
+echo "proto-gen: Go code generated under internal/wire/{wirepb,hookpb,hbasepb}/"
