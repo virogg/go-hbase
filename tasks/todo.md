@@ -25,7 +25,7 @@
 
 ## Phase 2 — One hook E2E on real HBase 2.5
 - [x] T21 Vendored HBase .proto + PrePut/PostPut messages
-- [ ] T22 Go SDK skeleton: `RegionObserver{PrePut,PostPut}` + `Run(...)`
+- [x] T22 Go SDK skeleton: `RegionObserver{PrePut,PostPut}` + `Run(...)`
 - [ ] T23 Java RegionObserverAdapter (Put hooks only)
 - [ ] T24 Mux v0 (single region, req_id matching)
 - [ ] T25 Coproc-jar packaging via Maven shade (counter-observer example)
