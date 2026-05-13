@@ -3,10 +3,11 @@
 
 // Per-hook request/response messages for HBase Observer coprocessors.
 //
-// One message pair per Observer method (PrePut/PostPut/PreGet/...). The
-// concrete fields land in T21+ once HBase .proto types are vendored under
-// proto/hbase/. For Phase 1 these are intentionally empty placeholders so
-// that round-trip codegen on both sides is exercised end-to-end.
+// Each Observer method maps to one HookId (T41 hook table) and one
+// concrete Request/Response message pair. The set below is the Phase 2
+// MVP — PrePut + PostPut over real HBase types (vendored under
+// proto/hbase/). T41+ extends this file to the full RegionObserver
+// surface and adds Master/RegionServer/WAL/BulkLoad envelopes.
 //
 // Stability: alpha.
 
@@ -19,6 +20,7 @@
 package hookpb
 
 import (
+	hbasepb "github.com/virogg/go-hbase/internal/wire/hbasepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -33,10 +35,16 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// HookContext is the shared per-call context (env, table descriptor refs,
-// caller identity, ...). T22 fills it in once we vendor HBase types.
+// HookContext is the shared per-call envelope sent with every hook
+// invocation. Identifies the table + region the call is bound to and
+// carries the observer-supplied request id used to correlate logs and
+// traces across the bridge. Caller identity, observer environment refs
+// and configured policy land here in later tasks (T22+).
 type HookContext struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	TableName     *hbasepb.TableName     `protobuf:"bytes,1,opt,name=table_name,json=tableName,proto3" json:"table_name,omitempty"`
+	RegionName    []byte                 `protobuf:"bytes,2,opt,name=region_name,json=regionName,proto3" json:"region_name,omitempty"` // encoded region name (RegionInfo.encoded_name)
+	RequestId     uint64                 `protobuf:"varint,3,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -71,17 +79,101 @@ func (*HookContext) Descriptor() ([]byte, []int) {
 	return file_hooks_proto_rawDescGZIP(), []int{0}
 }
 
-// HookResponse is the shared per-call response envelope (mutations to
-// re-emit, abort flag, ...). T22 fills it in.
-type HookResponse struct {
+func (x *HookContext) GetTableName() *hbasepb.TableName {
+	if x != nil {
+		return x.TableName
+	}
+	return nil
+}
+
+func (x *HookContext) GetRegionName() []byte {
+	if x != nil {
+		return x.RegionName
+	}
+	return nil
+}
+
+func (x *HookContext) GetRequestId() uint64 {
+	if x != nil {
+		return x.RequestId
+	}
+	return 0
+}
+
+// HookError carries an observer-level failure back to the Java side.
+// Strict-mode policy (T32) surfaces this as IOException; best-effort
+// turns it into a WARN log and a no-op return.
+type HookError struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	Code          uint32                 `protobuf:"varint,1,opt,name=code,proto3" json:"code,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HookError) Reset() {
+	*x = HookError{}
+	mi := &file_hooks_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HookError) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HookError) ProtoMessage() {}
+
+func (x *HookError) ProtoReflect() protoreflect.Message {
+	mi := &file_hooks_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HookError.ProtoReflect.Descriptor instead.
+func (*HookError) Descriptor() ([]byte, []int) {
+	return file_hooks_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *HookError) GetCode() uint32 {
+	if x != nil {
+		return x.Code
+	}
+	return 0
+}
+
+func (x *HookError) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+// HookResponse is the shared per-call response envelope. Empty body =
+// success, observer chose not to bypass and no error. Populating either
+// field triggers the corresponding RegionObserver semantics on the
+// Java side.
+type HookResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// If true, the Java adapter calls ObserverContext.bypass() before
+	// returning so HBase skips its own implementation of the hook.
+	Bypass bool `protobuf:"varint,1,opt,name=bypass,proto3" json:"bypass,omitempty"`
+	// Set when the observer wants the operation rejected; mapped to the
+	// configured failure policy (T31/T32).
+	Error         *HookError `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *HookResponse) Reset() {
 	*x = HookResponse{}
-	mi := &file_hooks_proto_msgTypes[1]
+	mi := &file_hooks_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -93,7 +185,7 @@ func (x *HookResponse) String() string {
 func (*HookResponse) ProtoMessage() {}
 
 func (x *HookResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[1]
+	mi := &file_hooks_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -106,16 +198,156 @@ func (x *HookResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HookResponse.ProtoReflect.Descriptor instead.
 func (*HookResponse) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{1}
+	return file_hooks_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *HookResponse) GetBypass() bool {
+	if x != nil {
+		return x.Bypass
+	}
+	return false
+}
+
+func (x *HookResponse) GetError() *HookError {
+	if x != nil {
+		return x.Error
+	}
+	return nil
+}
+
+// PrePutRequest is the inbound payload for the prePut RegionObserver
+// hook. Carries the Put mutation as protobuf so the Go side never has
+// to know about HBase's native Cell layout.
+type PrePutRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	Mutation      *hbasepb.MutationProto `protobuf:"bytes,2,opt,name=mutation,proto3" json:"mutation,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PrePutRequest) Reset() {
+	*x = PrePutRequest{}
+	mi := &file_hooks_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PrePutRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PrePutRequest) ProtoMessage() {}
+
+func (x *PrePutRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hooks_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PrePutRequest.ProtoReflect.Descriptor instead.
+func (*PrePutRequest) Descriptor() ([]byte, []int) {
+	return file_hooks_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *PrePutRequest) GetCtx() *HookContext {
+	if x != nil {
+		return x.Ctx
+	}
+	return nil
+}
+
+func (x *PrePutRequest) GetMutation() *hbasepb.MutationProto {
+	if x != nil {
+		return x.Mutation
+	}
+	return nil
+}
+
+// PostPutRequest is the inbound payload for postPut. Identical shape
+// to PrePutRequest at the wire level; the hook_id discriminates.
+type PostPutRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	Mutation      *hbasepb.MutationProto `protobuf:"bytes,2,opt,name=mutation,proto3" json:"mutation,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PostPutRequest) Reset() {
+	*x = PostPutRequest{}
+	mi := &file_hooks_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PostPutRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PostPutRequest) ProtoMessage() {}
+
+func (x *PostPutRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hooks_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PostPutRequest.ProtoReflect.Descriptor instead.
+func (*PostPutRequest) Descriptor() ([]byte, []int) {
+	return file_hooks_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *PostPutRequest) GetCtx() *HookContext {
+	if x != nil {
+		return x.Ctx
+	}
+	return nil
+}
+
+func (x *PostPutRequest) GetMutation() *hbasepb.MutationProto {
+	if x != nil {
+		return x.Mutation
+	}
+	return nil
 }
 
 var File_hooks_proto protoreflect.FileDescriptor
 
 const file_hooks_proto_rawDesc = "" +
 	"\n" +
-	"\vhooks.proto\x12\x12virogg.hbasecop.v1\"\r\n" +
-	"\vHookContext\"\x0e\n" +
-	"\fHookResponseBc\n" +
+	"\vhooks.proto\x12\x12virogg.hbasecop.v1\x1a\x11hbase/HBase.proto\x1a\x12hbase/Client.proto\"\x91\x01\n" +
+	"\vHookContext\x12B\n" +
+	"\n" +
+	"table_name\x18\x01 \x01(\v2#.virogg.hbasecop.hbase.v1.TableNameR\ttableName\x12\x1f\n" +
+	"\vregion_name\x18\x02 \x01(\fR\n" +
+	"regionName\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x03 \x01(\x04R\trequestId\"9\n" +
+	"\tHookError\x12\x12\n" +
+	"\x04code\x18\x01 \x01(\rR\x04code\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"[\n" +
+	"\fHookResponse\x12\x16\n" +
+	"\x06bypass\x18\x01 \x01(\bR\x06bypass\x123\n" +
+	"\x05error\x18\x02 \x01(\v2\x1d.virogg.hbasecop.v1.HookErrorR\x05error\"\x87\x01\n" +
+	"\rPrePutRequest\x121\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12C\n" +
+	"\bmutation\x18\x02 \x01(\v2'.virogg.hbasecop.hbase.v1.MutationProtoR\bmutation\"\x88\x01\n" +
+	"\x0ePostPutRequest\x121\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12C\n" +
+	"\bmutation\x18\x02 \x01(\v2'.virogg.hbasecop.hbase.v1.MutationProtoR\bmutationBc\n" +
 	"\"com.virogg.hbasecop.bridge.wire.pbB\n" +
 	"HooksProtoP\x01Z/github.com/virogg/go-hbase/internal/wire/hookpbb\x06proto3"
 
@@ -131,17 +363,28 @@ func file_hooks_proto_rawDescGZIP() []byte {
 	return file_hooks_proto_rawDescData
 }
 
-var file_hooks_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_hooks_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_hooks_proto_goTypes = []any{
-	(*HookContext)(nil),  // 0: virogg.hbasecop.v1.HookContext
-	(*HookResponse)(nil), // 1: virogg.hbasecop.v1.HookResponse
+	(*HookContext)(nil),           // 0: virogg.hbasecop.v1.HookContext
+	(*HookError)(nil),             // 1: virogg.hbasecop.v1.HookError
+	(*HookResponse)(nil),          // 2: virogg.hbasecop.v1.HookResponse
+	(*PrePutRequest)(nil),         // 3: virogg.hbasecop.v1.PrePutRequest
+	(*PostPutRequest)(nil),        // 4: virogg.hbasecop.v1.PostPutRequest
+	(*hbasepb.TableName)(nil),     // 5: virogg.hbasecop.hbase.v1.TableName
+	(*hbasepb.MutationProto)(nil), // 6: virogg.hbasecop.hbase.v1.MutationProto
 }
 var file_hooks_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	5, // 0: virogg.hbasecop.v1.HookContext.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
+	1, // 1: virogg.hbasecop.v1.HookResponse.error:type_name -> virogg.hbasecop.v1.HookError
+	0, // 2: virogg.hbasecop.v1.PrePutRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	6, // 3: virogg.hbasecop.v1.PrePutRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	0, // 4: virogg.hbasecop.v1.PostPutRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	6, // 5: virogg.hbasecop.v1.PostPutRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_hooks_proto_init() }
@@ -155,7 +398,7 @@ func file_hooks_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_hooks_proto_rawDesc), len(file_hooks_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -3,10 +3,11 @@
 
 // Per-hook request/response messages for HBase Observer coprocessors.
 //
-// One message pair per Observer method (PrePut/PostPut/PreGet/...). The
-// concrete fields land in T21+ once HBase .proto types are vendored under
-// proto/hbase/. For Phase 1 these are intentionally empty placeholders so
-// that round-trip codegen on both sides is exercised end-to-end.
+// Each Observer method maps to one HookId (T41 hook table) and one
+// concrete Request/Response message pair. The set below is the Phase 2
+// MVP — PrePut + PostPut over real HBase types (vendored under
+// proto/hbase/). T41+ extends this file to the full RegionObserver
+// surface and adds Master/RegionServer/WAL/BulkLoad envelopes.
 //
 // Stability: alpha.
 
@@ -14,15 +15,57 @@ syntax = "proto3";
 
 package virogg.hbasecop.v1;
 
+import "hbase/HBase.proto";
+import "hbase/Client.proto";
+
 option go_package = "github.com/virogg/go-hbase/internal/wire/hookpb";
 option java_package = "com.virogg.hbasecop.bridge.wire.pb";
 option java_multiple_files = true;
 option java_outer_classname = "HooksProto";
 
-// HookContext is the shared per-call context (env, table descriptor refs,
-// caller identity, ...). T22 fills it in once we vendor HBase types.
-message HookContext {}
+// HookContext is the shared per-call envelope sent with every hook
+// invocation. Identifies the table + region the call is bound to and
+// carries the observer-supplied request id used to correlate logs and
+// traces across the bridge. Caller identity, observer environment refs
+// and configured policy land here in later tasks (T22+).
+message HookContext {
+  virogg.hbasecop.hbase.v1.TableName table_name = 1;
+  bytes region_name = 2; // encoded region name (RegionInfo.encoded_name)
+  uint64 request_id = 3;
+}
 
-// HookResponse is the shared per-call response envelope (mutations to
-// re-emit, abort flag, ...). T22 fills it in.
-message HookResponse {}
+// HookError carries an observer-level failure back to the Java side.
+// Strict-mode policy (T32) surfaces this as IOException; best-effort
+// turns it into a WARN log and a no-op return.
+message HookError {
+  uint32 code = 1;
+  string message = 2;
+}
+
+// HookResponse is the shared per-call response envelope. Empty body =
+// success, observer chose not to bypass and no error. Populating either
+// field triggers the corresponding RegionObserver semantics on the
+// Java side.
+message HookResponse {
+  // If true, the Java adapter calls ObserverContext.bypass() before
+  // returning so HBase skips its own implementation of the hook.
+  bool bypass = 1;
+  // Set when the observer wants the operation rejected; mapped to the
+  // configured failure policy (T31/T32).
+  HookError error = 2;
+}
+
+// PrePutRequest is the inbound payload for the prePut RegionObserver
+// hook. Carries the Put mutation as protobuf so the Go side never has
+// to know about HBase's native Cell layout.
+message PrePutRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.MutationProto mutation = 2;
+}
+
+// PostPutRequest is the inbound payload for postPut. Identical shape
+// to PrePutRequest at the wire level; the hook_id discriminates.
+message PostPutRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.MutationProto mutation = 2;
+}
