@@ -31,7 +31,7 @@
 - [x] T25 Coproc-jar packaging via Maven shade (counter-observer example)
 - [x] T26 HBase 2.5 docker-compose dev cluster + `make hbase-up`
 - [x] T27 Integration test: Put → Go observer counter
-- [ ] **CP-γ (DEMO READY):** `make demo-counter` works end-to-end on live HBase
+- [x] **CP-γ (DEMO READY):** `make demo-counter` works end-to-end on live HBase
 
 ## Phase 3 — Failure semantics & supervisor production-grade
 - [ ] T31 Per-hook policy parsing (strict / best-effort)
