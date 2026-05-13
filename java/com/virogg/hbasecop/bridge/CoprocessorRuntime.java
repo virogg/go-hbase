@@ -3,6 +3,7 @@
 
 package com.virogg.hbasecop.bridge;
 
+import com.virogg.hbasecop.bridge.config.PolicyConfig;
 import com.virogg.hbasecop.bridge.observer.HookDispatcher;
 import com.virogg.hbasecop.bridge.observer.MuxHookDispatcher;
 import com.virogg.hbasecop.bridge.observer.RegionObserverAdapter;
@@ -24,6 +25,8 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 
 /**
@@ -101,7 +104,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
       readerThread.start();
 
       HookDispatcher dispatcher = new MuxHookDispatcher(mux);
-      observer = new RegionObserverAdapter(dispatcher, cfg.hookTimeout());
+      observer = new RegionObserverAdapter(dispatcher, buildPolicyConfig(cfg));
 
       started = true;
       ok = true;
@@ -195,6 +198,20 @@ public final class CoprocessorRuntime implements AutoCloseable {
     } catch (RuntimeException e) {
       LOG.log(Level.WARNING, "CoprocessorRuntime: channel close failed", e);
     }
+  }
+
+  private static PolicyConfig buildPolicyConfig(Config cfg) {
+    Configuration src = cfg.configuration();
+    // Clone so we never mutate the caller's HBase Configuration.
+    Configuration conf = src == null ? new Configuration(false) : new Configuration(src);
+    // The configured hookTimeout is a global default — only inject it when the caller's
+    // Configuration does not already pin per-hook or global hbasecop.timeout.* keys, so
+    // explicit Configuration overrides always win.
+    if (conf.get(PolicyConfig.KEY_TIMEOUT_DEFAULT) == null) {
+      conf.setTimeDuration(
+          PolicyConfig.KEY_TIMEOUT_DEFAULT, cfg.hookTimeout().toNanos(), TimeUnit.NANOSECONDS);
+    }
+    return new PolicyConfig(conf);
   }
 
   private static com.virogg.hbasecop.bridge.shmem.Config shmemConfig(
@@ -298,6 +315,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
     private final long heartbeatPeriodMs;
     private final Duration hookTimeout;
     private final Duration gracefulShutdownTimeout;
+    private final Configuration configuration;
 
     private Config(Builder b) {
       this.binaryResourcePath = b.binaryResourcePath;
@@ -315,6 +333,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
       this.hookTimeout = Objects.requireNonNull(b.hookTimeout, "hookTimeout");
       this.gracefulShutdownTimeout =
           Objects.requireNonNull(b.gracefulShutdownTimeout, "gracefulShutdownTimeout");
+      this.configuration = b.configuration;
     }
 
     public String binaryResourcePath() {
@@ -349,6 +368,16 @@ public final class CoprocessorRuntime implements AutoCloseable {
       return gracefulShutdownTimeout;
     }
 
+    /**
+     * The HBase {@link Configuration} forwarded to {@link PolicyConfig}; may be {@code null} when
+     * the runtime is driven from a context that does not own a Configuration (e.g. raw bridge
+     * tests). When null, an empty configuration is used and the builder's {@link #hookTimeout()} is
+     * treated as the global default.
+     */
+    public Configuration configuration() {
+      return configuration;
+    }
+
     public static Builder builder() {
       return new Builder();
     }
@@ -363,6 +392,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
       private long heartbeatPeriodMs = 0L;
       private Duration hookTimeout = Duration.ofSeconds(5);
       private Duration gracefulShutdownTimeout = Duration.ofSeconds(2);
+      private Configuration configuration;
 
       public Builder binaryResourcePath(String s) {
         this.binaryResourcePath = s;
@@ -401,6 +431,16 @@ public final class CoprocessorRuntime implements AutoCloseable {
 
       public Builder gracefulShutdownTimeout(Duration d) {
         this.gracefulShutdownTimeout = d;
+        return this;
+      }
+
+      /**
+       * Supplies the HBase {@link Configuration} that drives per-hook policy + timeout resolution.
+       * Optional: when omitted, the runtime falls back to defaults and treats {@link
+       * #hookTimeout(Duration)} as the global default timeout.
+       */
+      public Builder configuration(Configuration c) {
+        this.configuration = c;
         return this;
       }
 
