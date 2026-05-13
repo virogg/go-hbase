@@ -1,0 +1,5 @@
+# T26: host bind-mount for coproc-jars handed to the HBase container.
+# The actual jars are produced by `make counter-observer-jar` and copied in
+# by the integration test (T27) — keep the dir present, ignore its contents.
+coproc-jars/*
+!coproc-jars/.keep
