@@ -31,6 +31,15 @@ const (
 	outboundQueueSize = 256
 )
 
+// Handler processes one inbound Request frame and returns the frame
+// to send back to the Java side. Returning nil drops the request
+// silently — appropriate for fire-and-forget hooks that have no reply.
+//
+// Handler is invoked on a fresh goroutine per request, so blocking
+// inside a Handler does not stall the reader; the Loop's outbound
+// queue applies backpressure when handlers outrun the writer.
+type Handler func(ctx context.Context, req *wire.Message) *wire.Message
+
 // Config configures a Loop.
 type Config struct {
 	// InCh is the consumer endpoint of the Java→Go ring.
@@ -46,6 +55,13 @@ type Config struct {
 	// Logger receives structured event records. Nil falls back to
 	// slog.Default().
 	Logger *slog.Logger
+
+	// Handler dispatches inbound Request frames. When nil the Loop
+	// falls back to a default that echoes HookPing (test probe) and
+	// warns for every other hook id — sufficient for T17/T19 but not
+	// for real coprocessors. The SDK (pkg/hbasecop) supplies a
+	// dispatcher that routes to user-implemented Observer methods.
+	Handler Handler
 }
 
 // Loop owns one in-process Go-runtime event loop: one reader goroutine
@@ -71,7 +87,34 @@ func New(cfg Config) (*Loop, error) {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
+	if cfg.Handler == nil {
+		cfg.Handler = defaultHandler(cfg.Logger)
+	}
 	return &Loop{cfg: cfg, out: make(chan *wire.Message, outboundQueueSize)}, nil
+}
+
+// defaultHandler is installed when Config.Handler is nil. It exists so
+// the pre-SDK tests (T17/T19 ping/pong) keep working without forcing
+// callers to register their own handler. Real coprocessors install a
+// Handler via pkg/hbasecop.Run.
+func defaultHandler(logger *slog.Logger) Handler {
+	return func(_ context.Context, req *wire.Message) *wire.Message {
+		if req.HookID == HookPing {
+			return &wire.Message{
+				Type:     wire.TypeResponse,
+				ReqID:    req.ReqID,
+				RegionID: req.RegionID,
+				HookID:   req.HookID,
+				Payload:  append([]byte(nil), req.Payload...),
+			}
+		}
+		logger.Warn(
+			"cpruntime: no handler for hook",
+			"hook_id", req.HookID,
+			"req_id", req.ReqID,
+		)
+		return nil
+	}
 }
 
 // Run starts the reader, writer and heartbeat goroutines and blocks
@@ -132,25 +175,13 @@ func (l *Loop) runReader(ctx context.Context, cancel context.CancelFunc) {
 }
 
 func (l *Loop) handle(ctx context.Context, req *wire.Message) {
-	switch req.HookID {
-	case HookPing:
-		resp := &wire.Message{
-			Type:     wire.TypeResponse,
-			ReqID:    req.ReqID,
-			RegionID: req.RegionID,
-			HookID:   req.HookID,
-			Payload:  append([]byte(nil), req.Payload...),
-		}
-		select {
-		case l.out <- resp:
-		case <-ctx.Done():
-		}
-	default:
-		l.cfg.Logger.Warn(
-			"cpruntime: no handler for hook",
-			"hook_id", req.HookID,
-			"req_id", req.ReqID,
-		)
+	resp := l.cfg.Handler(ctx, req)
+	if resp == nil {
+		return
+	}
+	select {
+	case l.out <- resp:
+	case <-ctx.Done():
 	}
 }
 
