@@ -27,6 +27,9 @@ import java.lang.System.Logger.Level;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Executors;
@@ -451,6 +454,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
             .maxObjectSize(cfg.ringMaxObjectSize())
             .heartbeatPeriodMs(effectiveHeartbeatMs)
             .gracefulShutdownTimeout(cfg.gracefulShutdownTimeout())
+            .extraEnv(cfg.extraEnv())
             .build();
     return new GoProcess(procCfg, javaToGo);
   }
@@ -652,6 +656,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
     private final Configuration configuration;
     private final RestartConfig restartConfig;
     private final Duration restartDeadline;
+    private final Map<String, String> extraEnv;
 
     private Config(Builder b) {
       this.binaryResourcePath = b.binaryResourcePath;
@@ -672,6 +677,10 @@ public final class CoprocessorRuntime implements AutoCloseable {
       this.configuration = b.configuration;
       this.restartConfig = b.restartConfig;
       this.restartDeadline = b.restartDeadline;
+      this.extraEnv =
+          b.extraEnv.isEmpty()
+              ? Collections.emptyMap()
+              : Collections.unmodifiableMap(new LinkedHashMap<>(b.extraEnv));
     }
 
     public String binaryResourcePath() {
@@ -733,6 +742,15 @@ public final class CoprocessorRuntime implements AutoCloseable {
       return restartDeadline;
     }
 
+    /**
+     * Extra environment variables passed to the spawned Go process on top of the JVM's environment.
+     * Useful for forwarding coprocessor-specific tokens (e.g. {@code HBASECOP_FAULT_MODE} from the
+     * T36 fault-observer) into the child.
+     */
+    public Map<String, String> extraEnv() {
+      return extraEnv;
+    }
+
     public static Builder builder() {
       return new Builder();
     }
@@ -750,6 +768,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
       private Configuration configuration;
       private RestartConfig restartConfig;
       private Duration restartDeadline;
+      private Map<String, String> extraEnv = new LinkedHashMap<>();
 
       public Builder binaryResourcePath(String s) {
         this.binaryResourcePath = s;
@@ -819,6 +838,15 @@ public final class CoprocessorRuntime implements AutoCloseable {
        */
       public Builder restartDeadline(Duration d) {
         this.restartDeadline = d;
+        return this;
+      }
+
+      /**
+       * Replace the extra-env map. {@code null} clears it. The map is defensively copied at {@link
+       * #build()}, so post-build mutations of the caller's map do not leak through.
+       */
+      public Builder extraEnv(Map<String, String> env) {
+        this.extraEnv = env == null ? new LinkedHashMap<>() : new LinkedHashMap<>(env);
         return this;
       }
 

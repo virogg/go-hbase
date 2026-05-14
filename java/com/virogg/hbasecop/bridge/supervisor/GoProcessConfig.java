@@ -5,6 +5,9 @@ package com.virogg.hbasecop.bridge.supervisor;
 
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * Immutable spawn-time configuration for a {@link GoProcess}. Use {@link #builder()} to construct;
@@ -19,6 +22,7 @@ public final class GoProcessConfig {
   private final int maxObjectSize;
   private final long heartbeatPeriodMs;
   private final Duration gracefulShutdownTimeout;
+  private final Map<String, String> extraEnv;
 
   private GoProcessConfig(Builder b) {
     this.binaryResourcePath = b.binaryResourcePath;
@@ -28,6 +32,10 @@ public final class GoProcessConfig {
     this.maxObjectSize = b.maxObjectSize;
     this.heartbeatPeriodMs = b.heartbeatPeriodMs;
     this.gracefulShutdownTimeout = b.gracefulShutdownTimeout;
+    this.extraEnv =
+        b.extraEnv.isEmpty()
+            ? Collections.emptyMap()
+            : Collections.unmodifiableMap(new LinkedHashMap<>(b.extraEnv));
   }
 
   public String binaryResourcePath() {
@@ -58,6 +66,18 @@ public final class GoProcessConfig {
     return gracefulShutdownTimeout;
   }
 
+  /**
+   * Extra environment variables injected into the spawned process on top of the parent's
+   * environment. Used by example coprocessors (e.g. fault-observer in T36) to forward
+   * coprocessor-specific tokens — like {@code HBASECOP_FAULT_MODE} — without having to bake them
+   * into the RegionServer container.
+   *
+   * @return an unmodifiable view; never {@code null}
+   */
+  public Map<String, String> extraEnv() {
+    return extraEnv;
+  }
+
   public static Builder builder() {
     return new Builder();
   }
@@ -71,6 +91,7 @@ public final class GoProcessConfig {
     private int maxObjectSize;
     private long heartbeatPeriodMs;
     private Duration gracefulShutdownTimeout = Duration.ofSeconds(1);
+    private Map<String, String> extraEnv = new LinkedHashMap<>();
 
     public Builder binaryResourcePath(String s) {
       this.binaryResourcePath = s;
@@ -108,6 +129,15 @@ public final class GoProcessConfig {
 
     public Builder gracefulShutdownTimeout(Duration d) {
       this.gracefulShutdownTimeout = d;
+      return this;
+    }
+
+    /**
+     * Replace the extra-env map. {@code null} clears it. The map is defensively copied at {@link
+     * #build()}, so post-build mutations of the caller's map do not leak through.
+     */
+    public Builder extraEnv(Map<String, String> env) {
+      this.extraEnv = env == null ? new LinkedHashMap<>() : new LinkedHashMap<>(env);
       return this;
     }
 

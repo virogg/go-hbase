@@ -79,6 +79,7 @@ public final class GoProcess implements AutoCloseable {
     pb.environment().put("HBASECOP_RING_CAPACITY", Integer.toString(cfg.capacity()));
     pb.environment().put("HBASECOP_RING_MAX_OBJECT_SIZE", Integer.toString(cfg.maxObjectSize()));
     pb.environment().put("HBASECOP_HEARTBEAT_MS", Long.toString(cfg.heartbeatPeriodMs()));
+    pb.environment().putAll(cfg.extraEnv());
     pb.redirectErrorStream(false);
 
     process = pb.start();
