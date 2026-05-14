@@ -21,6 +21,8 @@ import (
 )
 
 type counterObserver struct {
+	hbasecop.UnimplementedRegionObserver
+
 	puts atomic.Uint64
 }
 

@@ -23,6 +23,8 @@ import (
 // happens-before edge across the shmem ring used by the loop test, so
 // observer state must be guarded explicitly.
 type capturingObserver struct {
+	UnimplementedRegionObserver
+
 	mu           sync.Mutex
 	prePutCalls  int
 	postPutCalls int

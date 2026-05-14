@@ -105,7 +105,13 @@ type Actions interface {
 // Observer is a [hbasecop.RegionObserver] that injects the configured fault
 // on every PrePut. PostPut is always a no-op so post-state HBase scans are
 // not perturbed by the test apparatus.
+//
+// Embeds [hbasecop.UnimplementedRegionObserver] to inherit no-op defaults
+// for the rest of the RegionObserver surface (T41); only PrePut/PostPut are
+// overridden.
 type Observer struct {
+	hbasecop.UnimplementedRegionObserver
+
 	mode        Mode
 	actions     Actions
 	invocations atomic.Uint64
