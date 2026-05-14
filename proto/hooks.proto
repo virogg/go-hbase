@@ -20,8 +20,9 @@ syntax = "proto3";
 
 package virogg.hbasecop.v1;
 
-import "hbase/HBase.proto";
+import "hbase/Cell.proto";
 import "hbase/Client.proto";
+import "hbase/HBase.proto";
 
 option go_package = "github.com/virogg/go-hbase/internal/wire/hookpb";
 option java_package = "com.virogg.hbasecop.bridge.wire.pb";
@@ -209,10 +210,32 @@ message PreCompactScannerOpenRequest { HookContext ctx = 1; }
 message PreCompactRequest { HookContext ctx = 1; }
 message PostCompactRequest { HookContext ctx = 1; }
 
-message PreGetOpRequest { HookContext ctx = 1; }
-message PostGetOpRequest { HookContext ctx = 1; }
-message PreExistsRequest { HookContext ctx = 1; }
-message PostExistsRequest { HookContext ctx = 1; }
+// Read path (T42 Wave 1). The Get/Scan envelopes are vendored under
+// proto/hbase/Client.proto; per-hook payload fields are appended below
+// without renumbering the shared ctx=1 slot.
+message PreGetOpRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.Get get = 2;
+}
+message PostGetOpRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.Get get = 2;
+  // Cells the read produced (snapshot of the result list HBase passes to
+  // the post-hook). Observers may inspect but should not mutate.
+  repeated virogg.hbasecop.hbase.v1.Cell result = 3;
+}
+message PreExistsRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.Get get = 2;
+  // Pre-existing existence flag (HBase's own input). Observer may
+  // override by returning bypass + a different value in HookResponse.
+  bool exists = 3;
+}
+message PostExistsRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.Get get = 2;
+  bool exists = 3;
+}
 
 message PreDeleteRequest { HookContext ctx = 1; }
 message PostDeleteRequest { HookContext ctx = 1; }
@@ -244,14 +267,45 @@ message PreIncrementRequest { HookContext ctx = 1; }
 message PostIncrementRequest { HookContext ctx = 1; }
 message PreIncrementAfterRowLockRequest { HookContext ctx = 1; }
 
-message PreScannerOpenRequest { HookContext ctx = 1; }
-message PostScannerOpenRequest { HookContext ctx = 1; }
-message PreScannerNextRequest { HookContext ctx = 1; }
-message PostScannerNextRequest { HookContext ctx = 1; }
-message PostScannerFilterRowRequest { HookContext ctx = 1; }
+// Scanner hooks (T42 Wave 1). The scanner state itself (InternalScanner,
+// RegionScanner) is runtime-only and not shippable; we send the Scan
+// shape, per-call limit/has_more, and the row-batch the post-hook
+// observes. Scanner identity across calls is carried via
+// HookContext.request_id on the bridge side.
+message PreScannerOpenRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.Scan scan = 2;
+}
+message PostScannerOpenRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.Scan scan = 2;
+}
+message PreScannerNextRequest {
+  HookContext ctx = 1;
+  int32 limit = 2;
+  bool has_more = 3;
+}
+message PostScannerNextRequest {
+  HookContext ctx = 1;
+  int32 limit = 2;
+  bool has_more = 3;
+  // Rows accumulated for this batch (one Result per row); observers
+  // see the snapshot HBase is about to return to the client.
+  repeated virogg.hbasecop.hbase.v1.Result result = 4;
+}
+message PostScannerFilterRowRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.Cell current_row = 2;
+  bool has_more = 3;
+}
 message PreScannerCloseRequest { HookContext ctx = 1; }
 message PostScannerCloseRequest { HookContext ctx = 1; }
-message PreStoreScannerOpenRequest { HookContext ctx = 1; }
+message PreStoreScannerOpenRequest {
+  HookContext ctx = 1;
+  // Column-family byte-array identifies the Store the scanner opens for;
+  // the Store object itself is a runtime handle and stays off-wire.
+  bytes column_family = 2;
+}
 
 message PreReplayWALsRequest { HookContext ctx = 1; }
 message PostReplayWALsRequest { HookContext ctx = 1; }
