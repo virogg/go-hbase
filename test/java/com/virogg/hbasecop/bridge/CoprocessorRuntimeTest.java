@@ -10,6 +10,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.virogg.hbasecop.bridge.config.HookPolicy;
+import com.virogg.hbasecop.bridge.config.Policy;
+import com.virogg.hbasecop.bridge.config.PolicyConfig;
+import com.virogg.hbasecop.bridge.observer.RegionObserverAdapter;
 import com.virogg.hbasecop.bridge.supervisor.RestartConfig;
 import com.virogg.hbasecop.bridge.supervisor.RestartController;
 import com.virogg.hbasecop.bridge.wire.FrameType;
@@ -20,12 +24,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -310,6 +317,61 @@ final class CoprocessorRuntimeTest {
         UnsupportedOperationException.class,
         () -> cfg.extraEnv().put("HBASECOP_OBSERVER_TAG", "x"),
         "extraEnv() must return an unmodifiable view");
+  }
+
+  /**
+   * Regression test for an HBase live-cluster bug found during T36 IT run: HBase wraps the
+   * region-coproc env in a {@code CompoundConfiguration} that merges {@code
+   * TableDescriptor.setValue} keys dynamically inside {@code get()} but does <em>not</em> copy them
+   * into the base properties map. The previous {@code new Configuration(src)} clone in {@code
+   * buildPolicyConfig} dropped those merged values silently — per-table {@code
+   * hbasecop.policy.prePut} overrides were lost and policy always defaulted to STRICT for prePut.
+   *
+   * <p>The fake here simulates exactly that behaviour: an inner map only the overridden iterator
+   * and get() consult; the standard {@code Properties}-based clone path would miss it.
+   */
+  @Test
+  void policyResolvesAcrossCompoundConfigurationLikeWrapper(@TempDir Path tmp) throws Exception {
+    Map<String, String> dynamic = new LinkedHashMap<>();
+    dynamic.put("hbasecop.policy.prePut", "best-effort");
+    Configuration compoundLike =
+        new Configuration(false) {
+          @Override
+          public String get(String name) {
+            String v = dynamic.get(name);
+            return v != null ? v : super.get(name);
+          }
+
+          @Override
+          public Iterator<Map.Entry<String, String>> iterator() {
+            return dynamic.entrySet().iterator();
+          }
+        };
+
+    CoprocessorRuntime.Config cfg =
+        CoprocessorRuntime.Config.builder()
+            .javaToGoFile(tmp.resolve("in.mmap"))
+            .goToJavaFile(tmp.resolve("out.mmap"))
+            .configuration(compoundLike)
+            .build();
+
+    // The runtime never actually starts in this test — we only need to exercise the policy
+    // resolution path that {@link CoprocessorRuntime#buildPolicyConfig(Config)} drives.
+    PolicyConfig pc = invokeBuildPolicyConfig(cfg); // reflection wrapper below
+    HookPolicy resolved = pc.forHook(RegionObserverAdapter.HOOK_PRE_PUT);
+    assertEquals(
+        Policy.BEST_EFFORT,
+        resolved.policy(),
+        "dynamically-merged per-table policy override must survive buildPolicyConfig");
+  }
+
+  private static PolicyConfig invokeBuildPolicyConfig(CoprocessorRuntime.Config cfg)
+      throws Exception {
+    java.lang.reflect.Method m =
+        CoprocessorRuntime.class.getDeclaredMethod(
+            "buildPolicyConfig", CoprocessorRuntime.Config.class);
+    m.setAccessible(true);
+    return (PolicyConfig) m.invoke(null, cfg);
   }
 
   private static boolean hasReaderThreadAlive(CoprocessorRuntime rt) {

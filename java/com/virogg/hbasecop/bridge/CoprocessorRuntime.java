@@ -536,8 +536,16 @@ public final class CoprocessorRuntime implements AutoCloseable {
 
   private static PolicyConfig buildPolicyConfig(Config cfg) {
     Configuration src = cfg.configuration();
-    // Clone so we never mutate the caller's HBase Configuration.
-    Configuration conf = src == null ? new Configuration(false) : new Configuration(src);
+    // Clone via iterator rather than `new Configuration(src)`: HBase wraps the per-region coproc
+    // env in a CompoundConfiguration that merges TableDescriptor.setValue keys dynamically inside
+    // get(), and the Configuration copy-constructor only clones the base `properties` map — it
+    // would silently drop those merged values (per-table policy / timeout overrides).
+    Configuration conf = new Configuration(false);
+    if (src != null) {
+      for (java.util.Map.Entry<String, String> e : src) {
+        conf.set(e.getKey(), e.getValue());
+      }
+    }
     // The configured hookTimeout is a global default — only inject it when the caller's
     // Configuration does not already pin per-hook or global hbasecop.timeout.* keys, so
     // explicit Configuration overrides always win.
