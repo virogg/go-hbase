@@ -190,10 +190,18 @@ message PostPutRequest {
 // number-1 ctx field stays stable for forward compatibility.
 // ---------------------------------------------------------------------
 
+// Lifecycle (T42 Wave 4). Open/Close round-trip the abort_requested
+// flag; the rest of the env is reachable via HookContext (table/region).
 message PreOpenRequest { HookContext ctx = 1; }
 message PostOpenRequest { HookContext ctx = 1; }
-message PreCloseRequest { HookContext ctx = 1; }
-message PostCloseRequest { HookContext ctx = 1; }
+message PreCloseRequest {
+  HookContext ctx = 1;
+  bool abort_requested = 2;
+}
+message PostCloseRequest {
+  HookContext ctx = 1;
+  bool abort_requested = 2;
+}
 
 message PreFlushRequest { HookContext ctx = 1; }
 message PreFlushScannerOpenRequest { HookContext ctx = 1; }
@@ -204,11 +212,51 @@ message PreMemStoreCompactionCompactScannerOpenRequest { HookContext ctx = 1; }
 message PreMemStoreCompactionCompactRequest { HookContext ctx = 1; }
 message PostMemStoreCompactionRequest { HookContext ctx = 1; }
 
-message PreCompactSelectionRequest { HookContext ctx = 1; }
-message PostCompactSelectionRequest { HookContext ctx = 1; }
-message PreCompactScannerOpenRequest { HookContext ctx = 1; }
-message PreCompactRequest { HookContext ctx = 1; }
-message PostCompactRequest { HookContext ctx = 1; }
+// Compaction (T42 Wave 4). Runtime trackers (CompactionLifeCycleTracker)
+// are opaque; we ship the column-family bytes and the candidate store-file
+// paths so observers can decide policy. The HBase ScanType enum is sent
+// as an int32 ordinal to avoid proto2/3 enum mixing.
+message StoreFilePathProto {
+  string path = 1;
+  uint64 size_bytes = 2;
+}
+
+message CompactionRequestSummary {
+  bool is_major = 1;
+  bool is_all_files = 2;
+  uint64 size = 3;
+  uint64 selection_time = 4;
+}
+
+message PreCompactSelectionRequest {
+  HookContext ctx = 1;
+  bytes column_family = 2;
+  repeated StoreFilePathProto candidate = 3;
+}
+message PostCompactSelectionRequest {
+  HookContext ctx = 1;
+  bytes column_family = 2;
+  repeated StoreFilePathProto selected = 3;
+  CompactionRequestSummary request = 4;
+}
+message PreCompactScannerOpenRequest {
+  HookContext ctx = 1;
+  bytes column_family = 2;
+  int32 scan_type = 3;
+  CompactionRequestSummary request = 4;
+}
+message PreCompactRequest {
+  HookContext ctx = 1;
+  bytes column_family = 2;
+  int32 scan_type = 3;
+  CompactionRequestSummary request = 4;
+}
+message PostCompactRequest {
+  HookContext ctx = 1;
+  bytes column_family = 2;
+  StoreFilePathProto result_file = 3;
+  CompactionRequestSummary request = 4;
+}
 
 // Read path (T42 Wave 1). The Get/Scan envelopes are vendored under
 // proto/hbase/Client.proto; per-hook payload fields are appended below
@@ -472,18 +520,104 @@ message PreStoreScannerOpenRequest {
   bytes column_family = 2;
 }
 
-message PreReplayWALsRequest { HookContext ctx = 1; }
-message PostReplayWALsRequest { HookContext ctx = 1; }
-message PreWALRestoreRequest { HookContext ctx = 1; }
-message PostWALRestoreRequest { HookContext ctx = 1; }
+// WAL replay/restore (T42 Wave 4). RegionInfo is already vendored under
+// proto/hbase/HBase.proto. WALKey/WALEdit are slim envelopes — we ship
+// the shippable scalars (seq num, write time, table, encoded region)
+// plus the WALEdit cell array; runtime-only fields (e.g. cluster ids)
+// are dropped today.
 
-message PreBulkLoadHFileRequest { HookContext ctx = 1; }
-message PostBulkLoadHFileRequest { HookContext ctx = 1; }
-message PreCommitStoreFileRequest { HookContext ctx = 1; }
-message PostCommitStoreFileRequest { HookContext ctx = 1; }
+message WalKeyProto {
+  bytes encoded_region_name = 1;
+  bytes table_name = 2;
+  uint64 log_seq_num = 3;
+  uint64 write_time = 4;
+  uint64 origin_seq_num = 5;
+}
 
-message PreStoreFileReaderOpenRequest { HookContext ctx = 1; }
-message PostStoreFileReaderOpenRequest { HookContext ctx = 1; }
+message WalEditProto {
+  repeated virogg.hbasecop.hbase.v1.Cell cell = 1;
+  // Replay metadata stays a serialized Cell list — HBase already encodes
+  // it that way internally.
+  bool has_replay_meta = 2;
+}
+
+message PreReplayWALsRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.RegionInfo region_info = 2;
+  string edits_path = 3;
+}
+message PostReplayWALsRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.RegionInfo region_info = 2;
+  string edits_path = 3;
+}
+message PreWALRestoreRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.RegionInfo region_info = 2;
+  WalKeyProto log_key = 3;
+  WalEditProto log_edit = 4;
+}
+message PostWALRestoreRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.RegionInfo region_info = 2;
+  WalKeyProto log_key = 3;
+  WalEditProto log_edit = 4;
+}
+
+// Bulk load + store-file commit (T42 Wave 4). HBase passes
+// List<Pair<byte[], String>> for family-paths; the staging API uses
+// Path objects which we ship as strings.
+
+message FamilyPath {
+  bytes family = 1;
+  string path = 2;
+}
+
+message BulkLoadFamilyPaths {
+  bytes family = 1;
+  repeated string path = 2;
+}
+
+message PreBulkLoadHFileRequest {
+  HookContext ctx = 1;
+  repeated FamilyPath family_path = 2;
+}
+message PostBulkLoadHFileRequest {
+  HookContext ctx = 1;
+  repeated FamilyPath staging_family_path = 2;
+  repeated BulkLoadFamilyPaths final_path = 3;
+}
+
+message PathPair {
+  string source = 1;
+  string destination = 2;
+}
+
+message PreCommitStoreFileRequest {
+  HookContext ctx = 1;
+  bytes family = 2;
+  repeated PathPair pair = 3;
+}
+message PostCommitStoreFileRequest {
+  HookContext ctx = 1;
+  bytes family = 2;
+  string source_path = 3;
+  string destination_path = 4;
+}
+
+// Store-file reader (T42 Wave 4). FileSystem / FSDataInputStreamWrapper
+// / CacheConfig / Reference / StoreFileReader are runtime handles; we
+// ship the file path + size which are the shippable bits.
+message PreStoreFileReaderOpenRequest {
+  HookContext ctx = 1;
+  string path = 2;
+  uint64 size_bytes = 3;
+}
+message PostStoreFileReaderOpenRequest {
+  HookContext ctx = 1;
+  string path = 2;
+  uint64 size_bytes = 3;
+}
 
 // Before-WAL hooks (T42 Wave 2). HBase invokes these on the cell stream
 // HBase will write to the WAL, giving the observer a chance to rewrite
@@ -518,5 +652,16 @@ message PostAppendBeforeWALRequest {
   repeated CellPair cell_pair = 3;
 }
 
-message PostInstantiateDeleteTrackerRequest { HookContext ctx = 1; }
-message PreWALAppendRequest { HookContext ctx = 1; }
+// Delete tracker (T42 Wave 4). DeleteTracker is runtime state; we ship
+// its class name so observers can identify the tracker variety in use.
+message PostInstantiateDeleteTrackerRequest {
+  HookContext ctx = 1;
+  string tracker_class = 2;
+}
+
+// preWALAppend (T42 Wave 4). Ships the WALKey + WALEdit slim envelopes.
+message PreWALAppendRequest {
+  HookContext ctx = 1;
+  WalKeyProto log_key = 2;
+  WalEditProto log_edit = 3;
+}

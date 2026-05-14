@@ -185,12 +185,28 @@ public final class RegionObserverAdapter implements RegionObserver {
   @Override
   public void preClose(ObserverContext<RegionCoprocessorEnvironment> c, boolean abortRequested)
       throws IOException {
-    dispatchStub(c, HookId.PRE_CLOSE, PreCloseRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    byte[] reqBytes =
+        PreCloseRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setAbortRequested(abortRequested)
+            .build()
+            .toByteArray();
+    HookResponse resp = dispatch(HookId.PRE_CLOSE.value(), reqBytes);
+    applyHookResponse(c, resp);
   }
 
   @Override
   public void postClose(ObserverContext<RegionCoprocessorEnvironment> c, boolean abortRequested) {
-    dispatchBestEffort(c, HookId.POST_CLOSE, PostCloseRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    try {
+      PostCloseRequest req =
+          PostCloseRequest.newBuilder().setCtx(hookCtx).setAbortRequested(abortRequested).build();
+      HookResponse resp = dispatch(HookId.POST_CLOSE.value(), req.toByteArray());
+      applyHookResponse(c, resp);
+    } catch (IOException e) {
+      LOG.log(Level.WARNING, "hbasecop: postClose threw IOException, swallowed (best-effort)", e);
+    }
   }
 
   // --- Flush -------------------------------------------------------------
@@ -254,7 +270,7 @@ public final class RegionObserverAdapter implements RegionObserver {
     dispatchStub(c, HookId.POST_MEM_STORE_COMPACTION, PostMemStoreCompactionRequest.newBuilder());
   }
 
-  // --- Compaction --------------------------------------------------------
+  // --- Compaction (T42 Wave 4: bodies populated) -----------------------
 
   @Override
   public void preCompactSelection(
@@ -263,7 +279,12 @@ public final class RegionObserverAdapter implements RegionObserver {
       List<? extends StoreFile> candidates,
       CompactionLifeCycleTracker tracker)
       throws IOException {
-    dispatchStub(c, HookId.PRE_COMPACT_SELECTION, PreCompactSelectionRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    PreCompactSelectionRequest.Builder b =
+        PreCompactSelectionRequest.newBuilder().setCtx(hookCtx).setColumnFamily(familyOf(store));
+    addStoreFiles(b::addCandidate, candidates);
+    HookResponse resp = dispatch(HookId.PRE_COMPACT_SELECTION.value(), b.build().toByteArray());
+    applyHookResponse(c, resp);
   }
 
   @Override
@@ -273,7 +294,20 @@ public final class RegionObserverAdapter implements RegionObserver {
       List<? extends StoreFile> selected,
       CompactionLifeCycleTracker tracker,
       CompactionRequest request) {
-    dispatchBestEffort(c, HookId.POST_COMPACT_SELECTION, PostCompactSelectionRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    try {
+      PostCompactSelectionRequest.Builder b =
+          PostCompactSelectionRequest.newBuilder().setCtx(hookCtx).setColumnFamily(familyOf(store));
+      addStoreFiles(b::addSelected, selected);
+      b.setRequest(compactionSummary(request));
+      HookResponse resp = dispatch(HookId.POST_COMPACT_SELECTION.value(), b.build().toByteArray());
+      applyHookResponse(c, resp);
+    } catch (IOException e) {
+      LOG.log(
+          Level.WARNING,
+          "hbasecop: postCompactSelection threw IOException, swallowed (best-effort)",
+          e);
+    }
   }
 
   @Override
@@ -285,7 +319,17 @@ public final class RegionObserverAdapter implements RegionObserver {
       CompactionLifeCycleTracker tracker,
       CompactionRequest request)
       throws IOException {
-    dispatchStub(c, HookId.PRE_COMPACT_SCANNER_OPEN, PreCompactScannerOpenRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    byte[] reqBytes =
+        PreCompactScannerOpenRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setColumnFamily(familyOf(store))
+            .setScanType(scanType == null ? -1 : scanType.ordinal())
+            .setRequest(compactionSummary(request))
+            .build()
+            .toByteArray();
+    HookResponse resp = dispatch(HookId.PRE_COMPACT_SCANNER_OPEN.value(), reqBytes);
+    applyHookResponse(c, resp);
   }
 
   @Override
@@ -297,7 +341,17 @@ public final class RegionObserverAdapter implements RegionObserver {
       CompactionLifeCycleTracker tracker,
       CompactionRequest request)
       throws IOException {
-    dispatchStub(c, HookId.PRE_COMPACT, PreCompactRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    byte[] reqBytes =
+        PreCompactRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setColumnFamily(familyOf(store))
+            .setScanType(scanType == null ? -1 : scanType.ordinal())
+            .setRequest(compactionSummary(request))
+            .build()
+            .toByteArray();
+    HookResponse resp = dispatch(HookId.PRE_COMPACT.value(), reqBytes);
+    applyHookResponse(c, resp);
     return scanner;
   }
 
@@ -309,7 +363,63 @@ public final class RegionObserverAdapter implements RegionObserver {
       CompactionLifeCycleTracker tracker,
       CompactionRequest request)
       throws IOException {
-    dispatchStub(c, HookId.POST_COMPACT, PostCompactRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    PostCompactRequest.Builder b =
+        PostCompactRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setColumnFamily(familyOf(store))
+            .setRequest(compactionSummary(request));
+    if (resultFile != null) {
+      b.setResultFile(storeFilePath(resultFile));
+    }
+    HookResponse resp = dispatch(HookId.POST_COMPACT.value(), b.build().toByteArray());
+    applyHookResponse(c, resp);
+  }
+
+  private static ByteString familyOf(Store store) {
+    if (store == null || store.getColumnFamilyDescriptor() == null) {
+      return ByteString.EMPTY;
+    }
+    return ByteString.copyFrom(store.getColumnFamilyDescriptor().getName());
+  }
+
+  private static com.virogg.hbasecop.bridge.wire.pb.StoreFilePathProto storeFilePath(StoreFile f) {
+    com.virogg.hbasecop.bridge.wire.pb.StoreFilePathProto.Builder b =
+        com.virogg.hbasecop.bridge.wire.pb.StoreFilePathProto.newBuilder();
+    if (f.getPath() != null) {
+      b.setPath(f.getPath().toString());
+    }
+    // StoreFile (2.5 interface) doesn't expose file-byte size; size_bytes
+    // stays 0 today. T46 can switch to HFileInfo lookup when needed.
+    return b.build();
+  }
+
+  private static void addStoreFiles(
+      java.util.function.Consumer<com.virogg.hbasecop.bridge.wire.pb.StoreFilePathProto> add,
+      List<? extends StoreFile> files) {
+    if (files == null) {
+      return;
+    }
+    for (StoreFile f : files) {
+      if (f == null) {
+        continue;
+      }
+      add.accept(storeFilePath(f));
+    }
+  }
+
+  private static com.virogg.hbasecop.bridge.wire.pb.CompactionRequestSummary compactionSummary(
+      CompactionRequest request) {
+    com.virogg.hbasecop.bridge.wire.pb.CompactionRequestSummary.Builder b =
+        com.virogg.hbasecop.bridge.wire.pb.CompactionRequestSummary.newBuilder();
+    if (request == null) {
+      return b.build();
+    }
+    return b.setIsMajor(request.isMajor())
+        .setIsAllFiles(request.isAllFiles())
+        .setSize(request.getSize())
+        .setSelectionTime(request.getSelectionTime())
+        .build();
   }
 
   // --- Read path (T42 Wave 1: bodies populated) -------------------------
@@ -1047,7 +1157,7 @@ public final class RegionObserverAdapter implements RegionObserver {
     applyHookResponse(c, resp);
   }
 
-  // --- WAL replay/restore -----------------------------------------------
+  // --- WAL replay/restore (T42 Wave 4: bodies populated) ---------------
 
   @Override
   public void preReplayWALs(
@@ -1055,7 +1165,16 @@ public final class RegionObserverAdapter implements RegionObserver {
       RegionInfo info,
       org.apache.hadoop.fs.Path edits)
       throws IOException {
-    dispatchStub(c, HookId.PRE_REPLAY_WA_LS, PreReplayWALsRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    PreReplayWALsRequest.Builder b = PreReplayWALsRequest.newBuilder().setCtx(hookCtx);
+    if (info != null) {
+      b.setRegionInfo(regionInfoProto(info));
+    }
+    if (edits != null) {
+      b.setEditsPath(edits.toString());
+    }
+    HookResponse resp = dispatch(HookId.PRE_REPLAY_WA_LS.value(), b.build().toByteArray());
+    applyHookResponse(c, resp);
   }
 
   @Override
@@ -1064,7 +1183,16 @@ public final class RegionObserverAdapter implements RegionObserver {
       RegionInfo info,
       org.apache.hadoop.fs.Path edits)
       throws IOException {
-    dispatchStub(c, HookId.POST_REPLAY_WA_LS, PostReplayWALsRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    PostReplayWALsRequest.Builder b = PostReplayWALsRequest.newBuilder().setCtx(hookCtx);
+    if (info != null) {
+      b.setRegionInfo(regionInfoProto(info));
+    }
+    if (edits != null) {
+      b.setEditsPath(edits.toString());
+    }
+    HookResponse resp = dispatch(HookId.POST_REPLAY_WA_LS.value(), b.build().toByteArray());
+    applyHookResponse(c, resp);
   }
 
   @Override
@@ -1074,7 +1202,19 @@ public final class RegionObserverAdapter implements RegionObserver {
       WALKey logKey,
       WALEdit logEdit)
       throws IOException {
-    dispatchStub(c, HookId.PRE_WAL_RESTORE, PreWALRestoreRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    PreWALRestoreRequest.Builder b = PreWALRestoreRequest.newBuilder().setCtx(hookCtx);
+    if (info != null) {
+      b.setRegionInfo(regionInfoProto(info));
+    }
+    if (logKey != null) {
+      b.setLogKey(walKey(logKey));
+    }
+    if (logEdit != null) {
+      b.setLogEdit(walEdit(logEdit));
+    }
+    HookResponse resp = dispatch(HookId.PRE_WAL_RESTORE.value(), b.build().toByteArray());
+    applyHookResponse(c, resp);
   }
 
   @Override
@@ -1084,16 +1224,40 @@ public final class RegionObserverAdapter implements RegionObserver {
       WALKey logKey,
       WALEdit logEdit)
       throws IOException {
-    dispatchStub(c, HookId.POST_WAL_RESTORE, PostWALRestoreRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    PostWALRestoreRequest.Builder b = PostWALRestoreRequest.newBuilder().setCtx(hookCtx);
+    if (info != null) {
+      b.setRegionInfo(regionInfoProto(info));
+    }
+    if (logKey != null) {
+      b.setLogKey(walKey(logKey));
+    }
+    if (logEdit != null) {
+      b.setLogEdit(walEdit(logEdit));
+    }
+    HookResponse resp = dispatch(HookId.POST_WAL_RESTORE.value(), b.build().toByteArray());
+    applyHookResponse(c, resp);
   }
 
-  // --- Bulk load + store-file commit ------------------------------------
+  // --- Bulk load + store-file commit (T42 Wave 4: bodies populated) -----
 
   @Override
   public void preBulkLoadHFile(
       ObserverContext<RegionCoprocessorEnvironment> c, List<Pair<byte[], String>> familyPaths)
       throws IOException {
-    dispatchStub(c, HookId.PRE_BULK_LOAD_H_FILE, PreBulkLoadHFileRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    PreBulkLoadHFileRequest.Builder b = PreBulkLoadHFileRequest.newBuilder().setCtx(hookCtx);
+    if (familyPaths != null) {
+      for (Pair<byte[], String> p : familyPaths) {
+        b.addFamilyPath(
+            com.virogg.hbasecop.bridge.wire.pb.FamilyPath.newBuilder()
+                .setFamily(ByteString.copyFrom(p.getFirst()))
+                .setPath(p.getSecond() == null ? "" : p.getSecond())
+                .build());
+      }
+    }
+    HookResponse resp = dispatch(HookId.PRE_BULK_LOAD_H_FILE.value(), b.build().toByteArray());
+    applyHookResponse(c, resp);
   }
 
   @Override
@@ -1102,7 +1266,34 @@ public final class RegionObserverAdapter implements RegionObserver {
       List<Pair<byte[], String>> stagingFamilyPaths,
       Map<byte[], List<org.apache.hadoop.fs.Path>> finalPaths)
       throws IOException {
-    dispatchStub(c, HookId.POST_BULK_LOAD_H_FILE, PostBulkLoadHFileRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    PostBulkLoadHFileRequest.Builder b = PostBulkLoadHFileRequest.newBuilder().setCtx(hookCtx);
+    if (stagingFamilyPaths != null) {
+      for (Pair<byte[], String> p : stagingFamilyPaths) {
+        b.addStagingFamilyPath(
+            com.virogg.hbasecop.bridge.wire.pb.FamilyPath.newBuilder()
+                .setFamily(ByteString.copyFrom(p.getFirst()))
+                .setPath(p.getSecond() == null ? "" : p.getSecond())
+                .build());
+      }
+    }
+    if (finalPaths != null) {
+      for (Map.Entry<byte[], List<org.apache.hadoop.fs.Path>> e : finalPaths.entrySet()) {
+        com.virogg.hbasecop.bridge.wire.pb.BulkLoadFamilyPaths.Builder fb =
+            com.virogg.hbasecop.bridge.wire.pb.BulkLoadFamilyPaths.newBuilder()
+                .setFamily(ByteString.copyFrom(e.getKey()));
+        if (e.getValue() != null) {
+          for (org.apache.hadoop.fs.Path p : e.getValue()) {
+            if (p != null) {
+              fb.addPath(p.toString());
+            }
+          }
+        }
+        b.addFinalPath(fb);
+      }
+    }
+    HookResponse resp = dispatch(HookId.POST_BULK_LOAD_H_FILE.value(), b.build().toByteArray());
+    applyHookResponse(c, resp);
   }
 
   @Override
@@ -1111,7 +1302,22 @@ public final class RegionObserverAdapter implements RegionObserver {
       byte[] family,
       List<Pair<org.apache.hadoop.fs.Path, org.apache.hadoop.fs.Path>> pairs)
       throws IOException {
-    dispatchStub(c, HookId.PRE_COMMIT_STORE_FILE, PreCommitStoreFileRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    PreCommitStoreFileRequest.Builder b =
+        PreCommitStoreFileRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setFamily(family == null ? ByteString.EMPTY : ByteString.copyFrom(family));
+    if (pairs != null) {
+      for (Pair<org.apache.hadoop.fs.Path, org.apache.hadoop.fs.Path> p : pairs) {
+        b.addPair(
+            com.virogg.hbasecop.bridge.wire.pb.PathPair.newBuilder()
+                .setSource(p.getFirst() == null ? "" : p.getFirst().toString())
+                .setDestination(p.getSecond() == null ? "" : p.getSecond().toString())
+                .build());
+      }
+    }
+    HookResponse resp = dispatch(HookId.PRE_COMMIT_STORE_FILE.value(), b.build().toByteArray());
+    applyHookResponse(c, resp);
   }
 
   @Override
@@ -1121,10 +1327,20 @@ public final class RegionObserverAdapter implements RegionObserver {
       org.apache.hadoop.fs.Path srcPath,
       org.apache.hadoop.fs.Path dstPath)
       throws IOException {
-    dispatchStub(c, HookId.POST_COMMIT_STORE_FILE, PostCommitStoreFileRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    byte[] reqBytes =
+        PostCommitStoreFileRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setFamily(family == null ? ByteString.EMPTY : ByteString.copyFrom(family))
+            .setSourcePath(srcPath == null ? "" : srcPath.toString())
+            .setDestinationPath(dstPath == null ? "" : dstPath.toString())
+            .build()
+            .toByteArray();
+    HookResponse resp = dispatch(HookId.POST_COMMIT_STORE_FILE.value(), reqBytes);
+    applyHookResponse(c, resp);
   }
 
-  // --- Store-file reader -------------------------------------------------
+  // --- Store-file reader (T42 Wave 4: bodies populated) ----------------
 
   @Override
   public StoreFileReader preStoreFileReaderOpen(
@@ -1137,7 +1353,16 @@ public final class RegionObserverAdapter implements RegionObserver {
       Reference r,
       StoreFileReader reader)
       throws IOException {
-    dispatchStub(c, HookId.PRE_STORE_FILE_READER_OPEN, PreStoreFileReaderOpenRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    byte[] reqBytes =
+        PreStoreFileReaderOpenRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setPath(p == null ? "" : p.toString())
+            .setSizeBytes(size)
+            .build()
+            .toByteArray();
+    HookResponse resp = dispatch(HookId.PRE_STORE_FILE_READER_OPEN.value(), reqBytes);
+    applyHookResponse(c, resp);
     return reader;
   }
 
@@ -1152,9 +1377,64 @@ public final class RegionObserverAdapter implements RegionObserver {
       Reference r,
       StoreFileReader reader)
       throws IOException {
-    dispatchStub(
-        c, HookId.POST_STORE_FILE_READER_OPEN, PostStoreFileReaderOpenRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    byte[] reqBytes =
+        PostStoreFileReaderOpenRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setPath(p == null ? "" : p.toString())
+            .setSizeBytes(size)
+            .build()
+            .toByteArray();
+    HookResponse resp = dispatch(HookId.POST_STORE_FILE_READER_OPEN.value(), reqBytes);
+    applyHookResponse(c, resp);
     return reader;
+  }
+
+  private static HBaseProtos.RegionInfo regionInfoProto(RegionInfo info) {
+    HBaseProtos.RegionInfo.Builder b =
+        HBaseProtos.RegionInfo.newBuilder()
+            .setRegionId(info.getRegionId())
+            .setTableName(
+                HBaseProtos.TableName.newBuilder()
+                    .setNamespace(ByteString.copyFrom(info.getTable().getNamespace()))
+                    .setQualifier(ByteString.copyFrom(info.getTable().getQualifier())))
+            .setOffline(info.isOffline())
+            .setSplit(info.isSplit())
+            .setReplicaId(info.getReplicaId());
+    if (info.getStartKey() != null) {
+      b.setStartKey(ByteString.copyFrom(info.getStartKey()));
+    }
+    if (info.getEndKey() != null) {
+      b.setEndKey(ByteString.copyFrom(info.getEndKey()));
+    }
+    return b.build();
+  }
+
+  private static com.virogg.hbasecop.bridge.wire.pb.WalKeyProto walKey(WALKey logKey) {
+    com.virogg.hbasecop.bridge.wire.pb.WalKeyProto.Builder b =
+        com.virogg.hbasecop.bridge.wire.pb.WalKeyProto.newBuilder()
+            .setLogSeqNum(logKey.getSequenceId())
+            .setWriteTime(logKey.getWriteTime())
+            .setOriginSeqNum(logKey.getOrigLogSeqNum());
+    if (logKey.getEncodedRegionName() != null) {
+      b.setEncodedRegionName(ByteString.copyFrom(logKey.getEncodedRegionName()));
+    }
+    if (logKey.getTableName() != null) {
+      b.setTableName(ByteString.copyFrom(logKey.getTableName().getName()));
+    }
+    return b.build();
+  }
+
+  private static com.virogg.hbasecop.bridge.wire.pb.WalEditProto walEdit(WALEdit logEdit) {
+    com.virogg.hbasecop.bridge.wire.pb.WalEditProto.Builder b =
+        com.virogg.hbasecop.bridge.wire.pb.WalEditProto.newBuilder()
+            .setHasReplayMeta(logEdit.isReplay());
+    if (logEdit.getCells() != null) {
+      for (Cell cell : logEdit.getCells()) {
+        b.addCell(CellConverter.toProto(cell));
+      }
+    }
+    return b.build();
   }
 
   // --- Before-WAL hooks (T42 Wave 2: bodies populated) ------------------
@@ -1238,15 +1518,20 @@ public final class RegionObserverAdapter implements RegionObserver {
     return b.build();
   }
 
-  // --- Delete tracker, WAL append ---------------------------------------
+  // --- Delete tracker, WAL append (T42 Wave 4: bodies populated) -------
 
   @Override
   public DeleteTracker postInstantiateDeleteTracker(
       ObserverContext<RegionCoprocessorEnvironment> c, DeleteTracker tracker) throws IOException {
-    dispatchStub(
-        c,
-        HookId.POST_INSTANTIATE_DELETE_TRACKER,
-        PostInstantiateDeleteTrackerRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    byte[] reqBytes =
+        PostInstantiateDeleteTrackerRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setTrackerClass(tracker == null ? "" : tracker.getClass().getName())
+            .build()
+            .toByteArray();
+    HookResponse resp = dispatch(HookId.POST_INSTANTIATE_DELETE_TRACKER.value(), reqBytes);
+    applyHookResponse(c, resp);
     return tracker;
   }
 
@@ -1254,7 +1539,16 @@ public final class RegionObserverAdapter implements RegionObserver {
   public void preWALAppend(
       ObserverContext<RegionCoprocessorEnvironment> c, WALKey key, WALEdit edit)
       throws IOException {
-    dispatchStub(c, HookId.PRE_WAL_APPEND, PreWALAppendRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    PreWALAppendRequest.Builder b = PreWALAppendRequest.newBuilder().setCtx(hookCtx);
+    if (key != null) {
+      b.setLogKey(walKey(key));
+    }
+    if (edit != null) {
+      b.setLogEdit(walEdit(edit));
+    }
+    HookResponse resp = dispatch(HookId.PRE_WAL_APPEND.value(), b.build().toByteArray());
+    applyHookResponse(c, resp);
   }
 
   // === Internals =========================================================
