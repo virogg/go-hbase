@@ -239,6 +239,10 @@ GitHub Actions: lint → unit → contract → integration (only on PR to main +
 
 ## Open questions
 
-1. Multi-tenant (>1 Go-coproc разных jar'ов на одном RS) — MVP или потом?
+1. ~~Multi-tenant (>1 Go-coproc разных jar'ов на одном RS) — MVP или потом?~~ **Closed at
+   CP-δ (2026-05-14): out of scope for MVP.** Каждый coproc-jar получает свой
+   `CoprocessorRuntime` → свой `GoProcess` → свой shmem pair (через
+   `Files.createTempDirectory`), но formal cross-coproc isolation не валидируется
+   тестами в MVP. Defer to post-v0.1.0.
 2. Hot reload Go-binary без рестарта RS?
 3. Подпись/checksum Go-бинаря в jar — MVP или не сейчас?
