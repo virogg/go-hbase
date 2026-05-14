@@ -43,7 +43,7 @@
 - [x] **CP-δ:** strict/best-effort semantics validated; Open Q #1 (multi-tenant) → deferred post-MVP
 
 ## Phase 4 — Full RegionObserver
-- [ ] T41 Hook dispatch table generated from .proto (~30 hooks)
+- [x] T41 Hook dispatch table generated from .proto (68 hooks)
 - [ ] T42 Per-hook serialization mappers (HBase native ↔ proto)
 - [ ] T43 Read-path hooks (preGet, scanner)
 - [ ] T44 Batch hooks (preBatchMutate)
