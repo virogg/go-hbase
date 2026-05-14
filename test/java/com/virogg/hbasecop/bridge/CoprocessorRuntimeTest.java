@@ -7,13 +7,23 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.virogg.hbasecop.bridge.supervisor.RestartConfig;
 import com.virogg.hbasecop.bridge.supervisor.RestartController;
+import com.virogg.hbasecop.bridge.wire.FrameType;
+import com.virogg.hbasecop.bridge.wire.Message;
+import com.virogg.hbasecop.multiplex.GoSideCrashedException;
+import com.virogg.hbasecop.multiplex.Multiplexer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.junit.jupiter.api.Test;
@@ -179,6 +189,85 @@ final class CoprocessorRuntimeTest {
           RestartController.State.HEALTHY,
           rt.restartControllerForTesting().state(),
           "controller must return to HEALTHY after a successful restart");
+
+      rt.stop();
+    }
+  }
+
+  @Test
+  void crashFailsInflightCallsAndDefersNewOnesPastRestartDeadline(@TempDir Path tmp)
+      throws Exception {
+    Path inFile = tmp.resolve("in.mmap");
+    Path outFile = tmp.resolve("out.mmap");
+
+    // Aggressive watchdog so the scheduler runs frequently, and a small restart-deadline so the
+    // deferred-fail path lands quickly within the test budget.
+    CoprocessorRuntime.Config cfg =
+        CoprocessorRuntime.Config.builder()
+            .javaToGoFile(inFile)
+            .goToJavaFile(outFile)
+            .ringCapacity(64)
+            .ringMaxObjectSize(64 * 1024)
+            .heartbeatPeriodMs(50)
+            .hookTimeout(Duration.ofSeconds(5))
+            .gracefulShutdownTimeout(Duration.ofSeconds(2))
+            // Block restart so deferred calls actually wait + fail (T34 stays HEALTHY-side here).
+            .restartConfig(
+                RestartConfig.builder()
+                    .initialDelayMs(10_000L)
+                    .maxDelayMs(10_000L)
+                    .multiplier(2.0)
+                    .jitterRatio(0.0)
+                    .maxConsecutiveFails(5)
+                    .probeIntervalMs(30_000L)
+                    .build())
+            .restartDeadline(Duration.ofMillis(300))
+            .build();
+
+    try (CoprocessorRuntime rt = new CoprocessorRuntime(cfg)) {
+      rt.start();
+      Multiplexer mux = rt.multiplexerForTesting();
+      assertNotNull(mux);
+
+      // Issue 100 prePut-shaped calls into the mux. The Go runtime side won't respond
+      // (HOOK_PRE_PUT isn't registered on the bare hbasecop-runtime), so they sit pending.
+      final int n = 100;
+      List<CompletableFuture<Message>> futures = new ArrayList<>(n);
+      for (int i = 0; i < n; i++) {
+        futures.add(mux.call(new Message(FrameType.REQUEST, 0, 0, (byte) 1, new byte[] {})));
+      }
+
+      // Crash the Go process. The watchdog scheduler must observe the dead process and pause the
+      // mux, failing every pending future with GoSideCrashedException.
+      rt.crashGoProcessForTesting();
+
+      long deadline = System.currentTimeMillis() + 1_000L;
+      for (CompletableFuture<Message> f : futures) {
+        long remaining = deadline - System.currentTimeMillis();
+        ExecutionException ee =
+            assertThrows(
+                ExecutionException.class,
+                () -> f.get(Math.max(remaining, 0L) + 200L, TimeUnit.MILLISECONDS));
+        assertTrue(
+            ee.getCause() instanceof GoSideCrashedException,
+            () -> "expected GoSideCrashedException, got " + ee.getCause());
+      }
+
+      // A new call during the paused window must wait up to restart-deadline and then fail
+      // with GoSideCrashedException — restart was configured with a 10s initial delay so the
+      // process won't have come back yet.
+      long t0 = System.currentTimeMillis();
+      CompletableFuture<Message> deferred =
+          mux.call(new Message(FrameType.REQUEST, 0, 0, (byte) 1, new byte[] {}));
+      ExecutionException ee =
+          assertThrows(ExecutionException.class, () -> deferred.get(2, TimeUnit.SECONDS));
+      long elapsed = System.currentTimeMillis() - t0;
+      assertTrue(
+          ee.getCause() instanceof GoSideCrashedException,
+          () -> "expected GoSideCrashedException, got " + ee.getCause());
+      assertTrue(
+          elapsed >= 250L && elapsed < 1_500L,
+          () -> "deferred call must fail near restart-deadline; elapsed=" + elapsed + "ms");
 
       rt.stop();
     }
