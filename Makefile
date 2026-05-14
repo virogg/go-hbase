@@ -26,6 +26,9 @@ GO_RUNTIME_OUT := src/main/resources/bin/linux-amd64/hbasecop-runtime
 COUNTER_OBSERVER_DIR := examples/counter-observer
 COUNTER_OBSERVER_OUT := $(COUNTER_OBSERVER_DIR)/src/main/resources/bin/linux-amd64/hbasecop-runtime
 
+FAULT_OBSERVER_DIR := examples/fault-observer
+FAULT_OBSERVER_OUT := $(FAULT_OBSERVER_DIR)/src/main/resources/bin/linux-amd64/hbasecop-runtime
+
 # ---------------------------------------------------------------------------
 # Aggregates
 # ---------------------------------------------------------------------------
@@ -151,6 +154,30 @@ counter-observer-jar: go-build-counter ## T25: build deployable coproc-jar (inst
 	  grep -q 'com/virogg/hbasecop/bridge/observer/RegionObserverAdapter.class' || \
 	  { echo "ERROR: bridge classes not shaded into coproc-jar" >&2; exit 1; }
 	@echo "OK: counter-observer.jar -- bridge shaded, Go ELF embedded"
+
+# ---------------------------------------------------------------------------
+# Examples (T36): fault-injection coproc-jar.
+# ---------------------------------------------------------------------------
+
+.PHONY: go-build-fault
+go-build-fault: ## T36: build fault-observer Go ELF into example resources (Linux x86-64).
+	@mkdir -p $(dir $(FAULT_OBSERVER_OUT))
+	GOOS=linux GOARCH=amd64 $(GO) build $(GO_BUILD_FLAGS) -o $(FAULT_OBSERVER_OUT) ./$(FAULT_OBSERVER_DIR)
+
+.PHONY: fault-observer-jar
+fault-observer-jar: go-build-fault ## T36: build fault-observer coproc-jar (installs bridge into ~/.m2 first).
+	$(MVN) $(MVN_FLAGS) install -DskipTests
+	$(MVN) $(MVN_FLAGS) -f $(FAULT_OBSERVER_DIR)/pom.xml package
+	@unzip -l $(FAULT_OBSERVER_DIR)/target/fault-observer.jar | \
+	  grep -q 'bin/linux-amd64/hbasecop-runtime' || \
+	  { echo "ERROR: Go ELF missing from fault-observer.jar" >&2; exit 1; }
+	@unzip -l $(FAULT_OBSERVER_DIR)/target/fault-observer.jar | \
+	  grep -q 'com/virogg/hbasecop/examples/fault/FaultRegionObserver.class' || \
+	  { echo "ERROR: FaultRegionObserver class missing from coproc-jar" >&2; exit 1; }
+	@unzip -l $(FAULT_OBSERVER_DIR)/target/fault-observer.jar | \
+	  grep -q 'com/virogg/hbasecop/bridge/observer/RegionObserverAdapter.class' || \
+	  { echo "ERROR: bridge classes not shaded into coproc-jar" >&2; exit 1; }
+	@echo "OK: fault-observer.jar -- bridge shaded, Go ELF embedded"
 
 # ---------------------------------------------------------------------------
 # Integration (T26): HBase 2.5 standalone dev cluster.
