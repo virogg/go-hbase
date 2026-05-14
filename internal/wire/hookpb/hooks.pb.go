@@ -1720,16 +1720,72 @@ func (x *PrePrepareTimeStampForDeleteVersionRequest) GetGet() *hbasepb.Get {
 	return nil
 }
 
+type MutationOperation struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Mutation *hbasepb.MutationProto `protobuf:"bytes,1,opt,name=mutation,proto3" json:"mutation,omitempty"`
+	// Mirror of HBase's OperationStatusCode enum: SUCCESS=0, BAD_FAMILY=1,
+	// SANITY_CHECK_FAILURE=2, NOT_RUN=3, FAILURE=4. Int32 keeps proto3
+	// compatibility with the proto2 vendored enum.
+	OperationStatusCode int32 `protobuf:"varint,2,opt,name=operation_status_code,json=operationStatusCode,proto3" json:"operation_status_code,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *MutationOperation) Reset() {
+	*x = MutationOperation{}
+	mi := &file_hooks_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MutationOperation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MutationOperation) ProtoMessage() {}
+
+func (x *MutationOperation) ProtoReflect() protoreflect.Message {
+	mi := &file_hooks_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MutationOperation.ProtoReflect.Descriptor instead.
+func (*MutationOperation) Descriptor() ([]byte, []int) {
+	return file_hooks_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *MutationOperation) GetMutation() *hbasepb.MutationProto {
+	if x != nil {
+		return x.Mutation
+	}
+	return nil
+}
+
+func (x *MutationOperation) GetOperationStatusCode() int32 {
+	if x != nil {
+		return x.OperationStatusCode
+	}
+	return 0
+}
+
 type PreBatchMutateRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	Operation     []*MutationOperation   `protobuf:"bytes,2,rep,name=operation,proto3" json:"operation,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PreBatchMutateRequest) Reset() {
 	*x = PreBatchMutateRequest{}
-	mi := &file_hooks_proto_msgTypes[28]
+	mi := &file_hooks_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1741,7 +1797,7 @@ func (x *PreBatchMutateRequest) String() string {
 func (*PreBatchMutateRequest) ProtoMessage() {}
 
 func (x *PreBatchMutateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[28]
+	mi := &file_hooks_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1754,7 +1810,7 @@ func (x *PreBatchMutateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreBatchMutateRequest.ProtoReflect.Descriptor instead.
 func (*PreBatchMutateRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{28}
+	return file_hooks_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *PreBatchMutateRequest) GetCtx() *HookContext {
@@ -1764,16 +1820,24 @@ func (x *PreBatchMutateRequest) GetCtx() *HookContext {
 	return nil
 }
 
+func (x *PreBatchMutateRequest) GetOperation() []*MutationOperation {
+	if x != nil {
+		return x.Operation
+	}
+	return nil
+}
+
 type PostBatchMutateRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	Operation     []*MutationOperation   `protobuf:"bytes,2,rep,name=operation,proto3" json:"operation,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PostBatchMutateRequest) Reset() {
 	*x = PostBatchMutateRequest{}
-	mi := &file_hooks_proto_msgTypes[29]
+	mi := &file_hooks_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1785,7 +1849,7 @@ func (x *PostBatchMutateRequest) String() string {
 func (*PostBatchMutateRequest) ProtoMessage() {}
 
 func (x *PostBatchMutateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[29]
+	mi := &file_hooks_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1798,7 +1862,7 @@ func (x *PostBatchMutateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PostBatchMutateRequest.ProtoReflect.Descriptor instead.
 func (*PostBatchMutateRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{29}
+	return file_hooks_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *PostBatchMutateRequest) GetCtx() *HookContext {
@@ -1808,16 +1872,25 @@ func (x *PostBatchMutateRequest) GetCtx() *HookContext {
 	return nil
 }
 
+func (x *PostBatchMutateRequest) GetOperation() []*MutationOperation {
+	if x != nil {
+		return x.Operation
+	}
+	return nil
+}
+
 type PostBatchMutateIndispensablyRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	Operation     []*MutationOperation   `protobuf:"bytes,2,rep,name=operation,proto3" json:"operation,omitempty"`
+	Success       bool                   `protobuf:"varint,3,opt,name=success,proto3" json:"success,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PostBatchMutateIndispensablyRequest) Reset() {
 	*x = PostBatchMutateIndispensablyRequest{}
-	mi := &file_hooks_proto_msgTypes[30]
+	mi := &file_hooks_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1829,7 +1902,7 @@ func (x *PostBatchMutateIndispensablyRequest) String() string {
 func (*PostBatchMutateIndispensablyRequest) ProtoMessage() {}
 
 func (x *PostBatchMutateIndispensablyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[30]
+	mi := &file_hooks_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1842,7 +1915,7 @@ func (x *PostBatchMutateIndispensablyRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use PostBatchMutateIndispensablyRequest.ProtoReflect.Descriptor instead.
 func (*PostBatchMutateIndispensablyRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{30}
+	return file_hooks_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *PostBatchMutateIndispensablyRequest) GetCtx() *HookContext {
@@ -1852,16 +1925,34 @@ func (x *PostBatchMutateIndispensablyRequest) GetCtx() *HookContext {
 	return nil
 }
 
+func (x *PostBatchMutateIndispensablyRequest) GetOperation() []*MutationOperation {
+	if x != nil {
+		return x.Operation
+	}
+	return nil
+}
+
+func (x *PostBatchMutateIndispensablyRequest) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+// Region operation envelope (open / close round-trip the operation kind).
+// Region.Operation enum is mirrored as int32; see HBase's
+// org.apache.hadoop.hbase.regionserver.Region.Operation ordinal order.
 type PostStartRegionOperationRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	Operation     int32                  `protobuf:"varint,2,opt,name=operation,proto3" json:"operation,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PostStartRegionOperationRequest) Reset() {
 	*x = PostStartRegionOperationRequest{}
-	mi := &file_hooks_proto_msgTypes[31]
+	mi := &file_hooks_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1873,7 +1964,7 @@ func (x *PostStartRegionOperationRequest) String() string {
 func (*PostStartRegionOperationRequest) ProtoMessage() {}
 
 func (x *PostStartRegionOperationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[31]
+	mi := &file_hooks_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1886,7 +1977,7 @@ func (x *PostStartRegionOperationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PostStartRegionOperationRequest.ProtoReflect.Descriptor instead.
 func (*PostStartRegionOperationRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{31}
+	return file_hooks_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *PostStartRegionOperationRequest) GetCtx() *HookContext {
@@ -1896,16 +1987,24 @@ func (x *PostStartRegionOperationRequest) GetCtx() *HookContext {
 	return nil
 }
 
+func (x *PostStartRegionOperationRequest) GetOperation() int32 {
+	if x != nil {
+		return x.Operation
+	}
+	return 0
+}
+
 type PostCloseRegionOperationRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	Operation     int32                  `protobuf:"varint,2,opt,name=operation,proto3" json:"operation,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PostCloseRegionOperationRequest) Reset() {
 	*x = PostCloseRegionOperationRequest{}
-	mi := &file_hooks_proto_msgTypes[32]
+	mi := &file_hooks_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1917,7 +2016,7 @@ func (x *PostCloseRegionOperationRequest) String() string {
 func (*PostCloseRegionOperationRequest) ProtoMessage() {}
 
 func (x *PostCloseRegionOperationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[32]
+	mi := &file_hooks_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1930,7 +2029,7 @@ func (x *PostCloseRegionOperationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PostCloseRegionOperationRequest.ProtoReflect.Descriptor instead.
 func (*PostCloseRegionOperationRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{32}
+	return file_hooks_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *PostCloseRegionOperationRequest) GetCtx() *HookContext {
@@ -1940,16 +2039,31 @@ func (x *PostCloseRegionOperationRequest) GetCtx() *HookContext {
 	return nil
 }
 
+func (x *PostCloseRegionOperationRequest) GetOperation() int32 {
+	if x != nil {
+		return x.Operation
+	}
+	return 0
+}
+
 type PreCheckAndPutRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Ctx        *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	Row        []byte                 `protobuf:"bytes,2,opt,name=row,proto3" json:"row,omitempty"`
+	Family     []byte                 `protobuf:"bytes,3,opt,name=family,proto3" json:"family,omitempty"`
+	Qualifier  []byte                 `protobuf:"bytes,4,opt,name=qualifier,proto3" json:"qualifier,omitempty"`
+	CompareOp  int32                  `protobuf:"varint,5,opt,name=compare_op,json=compareOp,proto3" json:"compare_op,omitempty"`
+	Comparator *hbasepb.Comparator    `protobuf:"bytes,6,opt,name=comparator,proto3" json:"comparator,omitempty"`
+	Put        *hbasepb.MutationProto `protobuf:"bytes,7,opt,name=put,proto3" json:"put,omitempty"`
+	// Input flag passed by HBase to the pre-hook (current check result).
+	InputResult   bool `protobuf:"varint,8,opt,name=input_result,json=inputResult,proto3" json:"input_result,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PreCheckAndPutRequest) Reset() {
 	*x = PreCheckAndPutRequest{}
-	mi := &file_hooks_proto_msgTypes[33]
+	mi := &file_hooks_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1961,7 +2075,7 @@ func (x *PreCheckAndPutRequest) String() string {
 func (*PreCheckAndPutRequest) ProtoMessage() {}
 
 func (x *PreCheckAndPutRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[33]
+	mi := &file_hooks_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1974,7 +2088,7 @@ func (x *PreCheckAndPutRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreCheckAndPutRequest.ProtoReflect.Descriptor instead.
 func (*PreCheckAndPutRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{33}
+	return file_hooks_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *PreCheckAndPutRequest) GetCtx() *HookContext {
@@ -1984,16 +2098,72 @@ func (x *PreCheckAndPutRequest) GetCtx() *HookContext {
 	return nil
 }
 
+func (x *PreCheckAndPutRequest) GetRow() []byte {
+	if x != nil {
+		return x.Row
+	}
+	return nil
+}
+
+func (x *PreCheckAndPutRequest) GetFamily() []byte {
+	if x != nil {
+		return x.Family
+	}
+	return nil
+}
+
+func (x *PreCheckAndPutRequest) GetQualifier() []byte {
+	if x != nil {
+		return x.Qualifier
+	}
+	return nil
+}
+
+func (x *PreCheckAndPutRequest) GetCompareOp() int32 {
+	if x != nil {
+		return x.CompareOp
+	}
+	return 0
+}
+
+func (x *PreCheckAndPutRequest) GetComparator() *hbasepb.Comparator {
+	if x != nil {
+		return x.Comparator
+	}
+	return nil
+}
+
+func (x *PreCheckAndPutRequest) GetPut() *hbasepb.MutationProto {
+	if x != nil {
+		return x.Put
+	}
+	return nil
+}
+
+func (x *PreCheckAndPutRequest) GetInputResult() bool {
+	if x != nil {
+		return x.InputResult
+	}
+	return false
+}
+
 type PostCheckAndPutRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	Row           []byte                 `protobuf:"bytes,2,opt,name=row,proto3" json:"row,omitempty"`
+	Family        []byte                 `protobuf:"bytes,3,opt,name=family,proto3" json:"family,omitempty"`
+	Qualifier     []byte                 `protobuf:"bytes,4,opt,name=qualifier,proto3" json:"qualifier,omitempty"`
+	CompareOp     int32                  `protobuf:"varint,5,opt,name=compare_op,json=compareOp,proto3" json:"compare_op,omitempty"`
+	Comparator    *hbasepb.Comparator    `protobuf:"bytes,6,opt,name=comparator,proto3" json:"comparator,omitempty"`
+	Put           *hbasepb.MutationProto `protobuf:"bytes,7,opt,name=put,proto3" json:"put,omitempty"`
+	InputResult   bool                   `protobuf:"varint,8,opt,name=input_result,json=inputResult,proto3" json:"input_result,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PostCheckAndPutRequest) Reset() {
 	*x = PostCheckAndPutRequest{}
-	mi := &file_hooks_proto_msgTypes[34]
+	mi := &file_hooks_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2005,7 +2175,7 @@ func (x *PostCheckAndPutRequest) String() string {
 func (*PostCheckAndPutRequest) ProtoMessage() {}
 
 func (x *PostCheckAndPutRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[34]
+	mi := &file_hooks_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2018,7 +2188,7 @@ func (x *PostCheckAndPutRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PostCheckAndPutRequest.ProtoReflect.Descriptor instead.
 func (*PostCheckAndPutRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{34}
+	return file_hooks_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *PostCheckAndPutRequest) GetCtx() *HookContext {
@@ -2028,16 +2198,72 @@ func (x *PostCheckAndPutRequest) GetCtx() *HookContext {
 	return nil
 }
 
+func (x *PostCheckAndPutRequest) GetRow() []byte {
+	if x != nil {
+		return x.Row
+	}
+	return nil
+}
+
+func (x *PostCheckAndPutRequest) GetFamily() []byte {
+	if x != nil {
+		return x.Family
+	}
+	return nil
+}
+
+func (x *PostCheckAndPutRequest) GetQualifier() []byte {
+	if x != nil {
+		return x.Qualifier
+	}
+	return nil
+}
+
+func (x *PostCheckAndPutRequest) GetCompareOp() int32 {
+	if x != nil {
+		return x.CompareOp
+	}
+	return 0
+}
+
+func (x *PostCheckAndPutRequest) GetComparator() *hbasepb.Comparator {
+	if x != nil {
+		return x.Comparator
+	}
+	return nil
+}
+
+func (x *PostCheckAndPutRequest) GetPut() *hbasepb.MutationProto {
+	if x != nil {
+		return x.Put
+	}
+	return nil
+}
+
+func (x *PostCheckAndPutRequest) GetInputResult() bool {
+	if x != nil {
+		return x.InputResult
+	}
+	return false
+}
+
 type PreCheckAndPutAfterRowLockRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	Row           []byte                 `protobuf:"bytes,2,opt,name=row,proto3" json:"row,omitempty"`
+	Family        []byte                 `protobuf:"bytes,3,opt,name=family,proto3" json:"family,omitempty"`
+	Qualifier     []byte                 `protobuf:"bytes,4,opt,name=qualifier,proto3" json:"qualifier,omitempty"`
+	CompareOp     int32                  `protobuf:"varint,5,opt,name=compare_op,json=compareOp,proto3" json:"compare_op,omitempty"`
+	Comparator    *hbasepb.Comparator    `protobuf:"bytes,6,opt,name=comparator,proto3" json:"comparator,omitempty"`
+	Put           *hbasepb.MutationProto `protobuf:"bytes,7,opt,name=put,proto3" json:"put,omitempty"`
+	InputResult   bool                   `protobuf:"varint,8,opt,name=input_result,json=inputResult,proto3" json:"input_result,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PreCheckAndPutAfterRowLockRequest) Reset() {
 	*x = PreCheckAndPutAfterRowLockRequest{}
-	mi := &file_hooks_proto_msgTypes[35]
+	mi := &file_hooks_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2049,7 +2275,7 @@ func (x *PreCheckAndPutAfterRowLockRequest) String() string {
 func (*PreCheckAndPutAfterRowLockRequest) ProtoMessage() {}
 
 func (x *PreCheckAndPutAfterRowLockRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[35]
+	mi := &file_hooks_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2062,7 +2288,7 @@ func (x *PreCheckAndPutAfterRowLockRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use PreCheckAndPutAfterRowLockRequest.ProtoReflect.Descriptor instead.
 func (*PreCheckAndPutAfterRowLockRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{35}
+	return file_hooks_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *PreCheckAndPutAfterRowLockRequest) GetCtx() *HookContext {
@@ -2072,16 +2298,72 @@ func (x *PreCheckAndPutAfterRowLockRequest) GetCtx() *HookContext {
 	return nil
 }
 
+func (x *PreCheckAndPutAfterRowLockRequest) GetRow() []byte {
+	if x != nil {
+		return x.Row
+	}
+	return nil
+}
+
+func (x *PreCheckAndPutAfterRowLockRequest) GetFamily() []byte {
+	if x != nil {
+		return x.Family
+	}
+	return nil
+}
+
+func (x *PreCheckAndPutAfterRowLockRequest) GetQualifier() []byte {
+	if x != nil {
+		return x.Qualifier
+	}
+	return nil
+}
+
+func (x *PreCheckAndPutAfterRowLockRequest) GetCompareOp() int32 {
+	if x != nil {
+		return x.CompareOp
+	}
+	return 0
+}
+
+func (x *PreCheckAndPutAfterRowLockRequest) GetComparator() *hbasepb.Comparator {
+	if x != nil {
+		return x.Comparator
+	}
+	return nil
+}
+
+func (x *PreCheckAndPutAfterRowLockRequest) GetPut() *hbasepb.MutationProto {
+	if x != nil {
+		return x.Put
+	}
+	return nil
+}
+
+func (x *PreCheckAndPutAfterRowLockRequest) GetInputResult() bool {
+	if x != nil {
+		return x.InputResult
+	}
+	return false
+}
+
 type PreCheckAndDeleteRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	Row           []byte                 `protobuf:"bytes,2,opt,name=row,proto3" json:"row,omitempty"`
+	Family        []byte                 `protobuf:"bytes,3,opt,name=family,proto3" json:"family,omitempty"`
+	Qualifier     []byte                 `protobuf:"bytes,4,opt,name=qualifier,proto3" json:"qualifier,omitempty"`
+	CompareOp     int32                  `protobuf:"varint,5,opt,name=compare_op,json=compareOp,proto3" json:"compare_op,omitempty"`
+	Comparator    *hbasepb.Comparator    `protobuf:"bytes,6,opt,name=comparator,proto3" json:"comparator,omitempty"`
+	Delete        *hbasepb.MutationProto `protobuf:"bytes,7,opt,name=delete,proto3" json:"delete,omitempty"`
+	InputResult   bool                   `protobuf:"varint,8,opt,name=input_result,json=inputResult,proto3" json:"input_result,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PreCheckAndDeleteRequest) Reset() {
 	*x = PreCheckAndDeleteRequest{}
-	mi := &file_hooks_proto_msgTypes[36]
+	mi := &file_hooks_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2093,7 +2375,7 @@ func (x *PreCheckAndDeleteRequest) String() string {
 func (*PreCheckAndDeleteRequest) ProtoMessage() {}
 
 func (x *PreCheckAndDeleteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[36]
+	mi := &file_hooks_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2106,7 +2388,7 @@ func (x *PreCheckAndDeleteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreCheckAndDeleteRequest.ProtoReflect.Descriptor instead.
 func (*PreCheckAndDeleteRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{36}
+	return file_hooks_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *PreCheckAndDeleteRequest) GetCtx() *HookContext {
@@ -2116,16 +2398,72 @@ func (x *PreCheckAndDeleteRequest) GetCtx() *HookContext {
 	return nil
 }
 
+func (x *PreCheckAndDeleteRequest) GetRow() []byte {
+	if x != nil {
+		return x.Row
+	}
+	return nil
+}
+
+func (x *PreCheckAndDeleteRequest) GetFamily() []byte {
+	if x != nil {
+		return x.Family
+	}
+	return nil
+}
+
+func (x *PreCheckAndDeleteRequest) GetQualifier() []byte {
+	if x != nil {
+		return x.Qualifier
+	}
+	return nil
+}
+
+func (x *PreCheckAndDeleteRequest) GetCompareOp() int32 {
+	if x != nil {
+		return x.CompareOp
+	}
+	return 0
+}
+
+func (x *PreCheckAndDeleteRequest) GetComparator() *hbasepb.Comparator {
+	if x != nil {
+		return x.Comparator
+	}
+	return nil
+}
+
+func (x *PreCheckAndDeleteRequest) GetDelete() *hbasepb.MutationProto {
+	if x != nil {
+		return x.Delete
+	}
+	return nil
+}
+
+func (x *PreCheckAndDeleteRequest) GetInputResult() bool {
+	if x != nil {
+		return x.InputResult
+	}
+	return false
+}
+
 type PostCheckAndDeleteRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	Row           []byte                 `protobuf:"bytes,2,opt,name=row,proto3" json:"row,omitempty"`
+	Family        []byte                 `protobuf:"bytes,3,opt,name=family,proto3" json:"family,omitempty"`
+	Qualifier     []byte                 `protobuf:"bytes,4,opt,name=qualifier,proto3" json:"qualifier,omitempty"`
+	CompareOp     int32                  `protobuf:"varint,5,opt,name=compare_op,json=compareOp,proto3" json:"compare_op,omitempty"`
+	Comparator    *hbasepb.Comparator    `protobuf:"bytes,6,opt,name=comparator,proto3" json:"comparator,omitempty"`
+	Delete        *hbasepb.MutationProto `protobuf:"bytes,7,opt,name=delete,proto3" json:"delete,omitempty"`
+	InputResult   bool                   `protobuf:"varint,8,opt,name=input_result,json=inputResult,proto3" json:"input_result,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PostCheckAndDeleteRequest) Reset() {
 	*x = PostCheckAndDeleteRequest{}
-	mi := &file_hooks_proto_msgTypes[37]
+	mi := &file_hooks_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2137,7 +2475,7 @@ func (x *PostCheckAndDeleteRequest) String() string {
 func (*PostCheckAndDeleteRequest) ProtoMessage() {}
 
 func (x *PostCheckAndDeleteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[37]
+	mi := &file_hooks_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2150,7 +2488,7 @@ func (x *PostCheckAndDeleteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PostCheckAndDeleteRequest.ProtoReflect.Descriptor instead.
 func (*PostCheckAndDeleteRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{37}
+	return file_hooks_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *PostCheckAndDeleteRequest) GetCtx() *HookContext {
@@ -2160,16 +2498,72 @@ func (x *PostCheckAndDeleteRequest) GetCtx() *HookContext {
 	return nil
 }
 
+func (x *PostCheckAndDeleteRequest) GetRow() []byte {
+	if x != nil {
+		return x.Row
+	}
+	return nil
+}
+
+func (x *PostCheckAndDeleteRequest) GetFamily() []byte {
+	if x != nil {
+		return x.Family
+	}
+	return nil
+}
+
+func (x *PostCheckAndDeleteRequest) GetQualifier() []byte {
+	if x != nil {
+		return x.Qualifier
+	}
+	return nil
+}
+
+func (x *PostCheckAndDeleteRequest) GetCompareOp() int32 {
+	if x != nil {
+		return x.CompareOp
+	}
+	return 0
+}
+
+func (x *PostCheckAndDeleteRequest) GetComparator() *hbasepb.Comparator {
+	if x != nil {
+		return x.Comparator
+	}
+	return nil
+}
+
+func (x *PostCheckAndDeleteRequest) GetDelete() *hbasepb.MutationProto {
+	if x != nil {
+		return x.Delete
+	}
+	return nil
+}
+
+func (x *PostCheckAndDeleteRequest) GetInputResult() bool {
+	if x != nil {
+		return x.InputResult
+	}
+	return false
+}
+
 type PreCheckAndDeleteAfterRowLockRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	Row           []byte                 `protobuf:"bytes,2,opt,name=row,proto3" json:"row,omitempty"`
+	Family        []byte                 `protobuf:"bytes,3,opt,name=family,proto3" json:"family,omitempty"`
+	Qualifier     []byte                 `protobuf:"bytes,4,opt,name=qualifier,proto3" json:"qualifier,omitempty"`
+	CompareOp     int32                  `protobuf:"varint,5,opt,name=compare_op,json=compareOp,proto3" json:"compare_op,omitempty"`
+	Comparator    *hbasepb.Comparator    `protobuf:"bytes,6,opt,name=comparator,proto3" json:"comparator,omitempty"`
+	Delete        *hbasepb.MutationProto `protobuf:"bytes,7,opt,name=delete,proto3" json:"delete,omitempty"`
+	InputResult   bool                   `protobuf:"varint,8,opt,name=input_result,json=inputResult,proto3" json:"input_result,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PreCheckAndDeleteAfterRowLockRequest) Reset() {
 	*x = PreCheckAndDeleteAfterRowLockRequest{}
-	mi := &file_hooks_proto_msgTypes[38]
+	mi := &file_hooks_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2181,7 +2575,7 @@ func (x *PreCheckAndDeleteAfterRowLockRequest) String() string {
 func (*PreCheckAndDeleteAfterRowLockRequest) ProtoMessage() {}
 
 func (x *PreCheckAndDeleteAfterRowLockRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[38]
+	mi := &file_hooks_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2194,7 +2588,7 @@ func (x *PreCheckAndDeleteAfterRowLockRequest) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use PreCheckAndDeleteAfterRowLockRequest.ProtoReflect.Descriptor instead.
 func (*PreCheckAndDeleteAfterRowLockRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{38}
+	return file_hooks_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *PreCheckAndDeleteAfterRowLockRequest) GetCtx() *HookContext {
@@ -2204,16 +2598,217 @@ func (x *PreCheckAndDeleteAfterRowLockRequest) GetCtx() *HookContext {
 	return nil
 }
 
-type PreCheckAndMutateRequest struct {
+func (x *PreCheckAndDeleteAfterRowLockRequest) GetRow() []byte {
+	if x != nil {
+		return x.Row
+	}
+	return nil
+}
+
+func (x *PreCheckAndDeleteAfterRowLockRequest) GetFamily() []byte {
+	if x != nil {
+		return x.Family
+	}
+	return nil
+}
+
+func (x *PreCheckAndDeleteAfterRowLockRequest) GetQualifier() []byte {
+	if x != nil {
+		return x.Qualifier
+	}
+	return nil
+}
+
+func (x *PreCheckAndDeleteAfterRowLockRequest) GetCompareOp() int32 {
+	if x != nil {
+		return x.CompareOp
+	}
+	return 0
+}
+
+func (x *PreCheckAndDeleteAfterRowLockRequest) GetComparator() *hbasepb.Comparator {
+	if x != nil {
+		return x.Comparator
+	}
+	return nil
+}
+
+func (x *PreCheckAndDeleteAfterRowLockRequest) GetDelete() *hbasepb.MutationProto {
+	if x != nil {
+		return x.Delete
+	}
+	return nil
+}
+
+func (x *PreCheckAndDeleteAfterRowLockRequest) GetInputResult() bool {
+	if x != nil {
+		return x.InputResult
+	}
+	return false
+}
+
+// CheckAndMutate (HBase 2.4+). Either column-based check (family +
+// qualifier + compare_op + value) OR filter-based check (filter) is
+// populated by HBase; the action mutation type is encoded in the
+// MutationProto's mutate_type. Note: the legacy preCheckAndPut/Delete
+// overloads use a Comparator (above); CheckAndMutate uses a fixed
+// byte[] value instead.
+type CheckAndMutateAction struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	Row           []byte                 `protobuf:"bytes,1,opt,name=row,proto3" json:"row,omitempty"`
+	Family        []byte                 `protobuf:"bytes,2,opt,name=family,proto3" json:"family,omitempty"`
+	Qualifier     []byte                 `protobuf:"bytes,3,opt,name=qualifier,proto3" json:"qualifier,omitempty"`
+	CompareOp     int32                  `protobuf:"varint,4,opt,name=compare_op,json=compareOp,proto3" json:"compare_op,omitempty"`
+	Value         []byte                 `protobuf:"bytes,5,opt,name=value,proto3" json:"value,omitempty"`
+	Filter        *hbasepb.Filter        `protobuf:"bytes,6,opt,name=filter,proto3" json:"filter,omitempty"`
+	Action        *hbasepb.MutationProto `protobuf:"bytes,7,opt,name=action,proto3" json:"action,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CheckAndMutateAction) Reset() {
+	*x = CheckAndMutateAction{}
+	mi := &file_hooks_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckAndMutateAction) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckAndMutateAction) ProtoMessage() {}
+
+func (x *CheckAndMutateAction) ProtoReflect() protoreflect.Message {
+	mi := &file_hooks_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckAndMutateAction.ProtoReflect.Descriptor instead.
+func (*CheckAndMutateAction) Descriptor() ([]byte, []int) {
+	return file_hooks_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *CheckAndMutateAction) GetRow() []byte {
+	if x != nil {
+		return x.Row
+	}
+	return nil
+}
+
+func (x *CheckAndMutateAction) GetFamily() []byte {
+	if x != nil {
+		return x.Family
+	}
+	return nil
+}
+
+func (x *CheckAndMutateAction) GetQualifier() []byte {
+	if x != nil {
+		return x.Qualifier
+	}
+	return nil
+}
+
+func (x *CheckAndMutateAction) GetCompareOp() int32 {
+	if x != nil {
+		return x.CompareOp
+	}
+	return 0
+}
+
+func (x *CheckAndMutateAction) GetValue() []byte {
+	if x != nil {
+		return x.Value
+	}
+	return nil
+}
+
+func (x *CheckAndMutateAction) GetFilter() *hbasepb.Filter {
+	if x != nil {
+		return x.Filter
+	}
+	return nil
+}
+
+func (x *CheckAndMutateAction) GetAction() *hbasepb.MutationProto {
+	if x != nil {
+		return x.Action
+	}
+	return nil
+}
+
+type CheckAndMutateResultProto struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Result        *hbasepb.Result        `protobuf:"bytes,2,opt,name=result,proto3" json:"result,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CheckAndMutateResultProto) Reset() {
+	*x = CheckAndMutateResultProto{}
+	mi := &file_hooks_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckAndMutateResultProto) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckAndMutateResultProto) ProtoMessage() {}
+
+func (x *CheckAndMutateResultProto) ProtoReflect() protoreflect.Message {
+	mi := &file_hooks_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckAndMutateResultProto.ProtoReflect.Descriptor instead.
+func (*CheckAndMutateResultProto) Descriptor() ([]byte, []int) {
+	return file_hooks_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *CheckAndMutateResultProto) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *CheckAndMutateResultProto) GetResult() *hbasepb.Result {
+	if x != nil {
+		return x.Result
+	}
+	return nil
+}
+
+type PreCheckAndMutateRequest struct {
+	state         protoimpl.MessageState     `protogen:"open.v1"`
+	Ctx           *HookContext               `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	Action        *CheckAndMutateAction      `protobuf:"bytes,2,opt,name=action,proto3" json:"action,omitempty"`
+	InputResult   *CheckAndMutateResultProto `protobuf:"bytes,3,opt,name=input_result,json=inputResult,proto3" json:"input_result,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PreCheckAndMutateRequest) Reset() {
 	*x = PreCheckAndMutateRequest{}
-	mi := &file_hooks_proto_msgTypes[39]
+	mi := &file_hooks_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2225,7 +2820,7 @@ func (x *PreCheckAndMutateRequest) String() string {
 func (*PreCheckAndMutateRequest) ProtoMessage() {}
 
 func (x *PreCheckAndMutateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[39]
+	mi := &file_hooks_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2238,7 +2833,7 @@ func (x *PreCheckAndMutateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreCheckAndMutateRequest.ProtoReflect.Descriptor instead.
 func (*PreCheckAndMutateRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{39}
+	return file_hooks_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *PreCheckAndMutateRequest) GetCtx() *HookContext {
@@ -2248,16 +2843,32 @@ func (x *PreCheckAndMutateRequest) GetCtx() *HookContext {
 	return nil
 }
 
+func (x *PreCheckAndMutateRequest) GetAction() *CheckAndMutateAction {
+	if x != nil {
+		return x.Action
+	}
+	return nil
+}
+
+func (x *PreCheckAndMutateRequest) GetInputResult() *CheckAndMutateResultProto {
+	if x != nil {
+		return x.InputResult
+	}
+	return nil
+}
+
 type PostCheckAndMutateRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	state         protoimpl.MessageState     `protogen:"open.v1"`
+	Ctx           *HookContext               `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	Action        *CheckAndMutateAction      `protobuf:"bytes,2,opt,name=action,proto3" json:"action,omitempty"`
+	InputResult   *CheckAndMutateResultProto `protobuf:"bytes,3,opt,name=input_result,json=inputResult,proto3" json:"input_result,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PostCheckAndMutateRequest) Reset() {
 	*x = PostCheckAndMutateRequest{}
-	mi := &file_hooks_proto_msgTypes[40]
+	mi := &file_hooks_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2269,7 +2880,7 @@ func (x *PostCheckAndMutateRequest) String() string {
 func (*PostCheckAndMutateRequest) ProtoMessage() {}
 
 func (x *PostCheckAndMutateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[40]
+	mi := &file_hooks_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2282,7 +2893,7 @@ func (x *PostCheckAndMutateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PostCheckAndMutateRequest.ProtoReflect.Descriptor instead.
 func (*PostCheckAndMutateRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{40}
+	return file_hooks_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *PostCheckAndMutateRequest) GetCtx() *HookContext {
@@ -2292,16 +2903,32 @@ func (x *PostCheckAndMutateRequest) GetCtx() *HookContext {
 	return nil
 }
 
+func (x *PostCheckAndMutateRequest) GetAction() *CheckAndMutateAction {
+	if x != nil {
+		return x.Action
+	}
+	return nil
+}
+
+func (x *PostCheckAndMutateRequest) GetInputResult() *CheckAndMutateResultProto {
+	if x != nil {
+		return x.InputResult
+	}
+	return nil
+}
+
 type PreCheckAndMutateAfterRowLockRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	state         protoimpl.MessageState     `protogen:"open.v1"`
+	Ctx           *HookContext               `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	Action        *CheckAndMutateAction      `protobuf:"bytes,2,opt,name=action,proto3" json:"action,omitempty"`
+	InputResult   *CheckAndMutateResultProto `protobuf:"bytes,3,opt,name=input_result,json=inputResult,proto3" json:"input_result,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PreCheckAndMutateAfterRowLockRequest) Reset() {
 	*x = PreCheckAndMutateAfterRowLockRequest{}
-	mi := &file_hooks_proto_msgTypes[41]
+	mi := &file_hooks_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2313,7 +2940,7 @@ func (x *PreCheckAndMutateAfterRowLockRequest) String() string {
 func (*PreCheckAndMutateAfterRowLockRequest) ProtoMessage() {}
 
 func (x *PreCheckAndMutateAfterRowLockRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[41]
+	mi := &file_hooks_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2326,12 +2953,26 @@ func (x *PreCheckAndMutateAfterRowLockRequest) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use PreCheckAndMutateAfterRowLockRequest.ProtoReflect.Descriptor instead.
 func (*PreCheckAndMutateAfterRowLockRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{41}
+	return file_hooks_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *PreCheckAndMutateAfterRowLockRequest) GetCtx() *HookContext {
 	if x != nil {
 		return x.Ctx
+	}
+	return nil
+}
+
+func (x *PreCheckAndMutateAfterRowLockRequest) GetAction() *CheckAndMutateAction {
+	if x != nil {
+		return x.Action
+	}
+	return nil
+}
+
+func (x *PreCheckAndMutateAfterRowLockRequest) GetInputResult() *CheckAndMutateResultProto {
+	if x != nil {
+		return x.InputResult
 	}
 	return nil
 }
@@ -2348,7 +2989,7 @@ type PreAppendRequest struct {
 
 func (x *PreAppendRequest) Reset() {
 	*x = PreAppendRequest{}
-	mi := &file_hooks_proto_msgTypes[42]
+	mi := &file_hooks_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2360,7 +3001,7 @@ func (x *PreAppendRequest) String() string {
 func (*PreAppendRequest) ProtoMessage() {}
 
 func (x *PreAppendRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[42]
+	mi := &file_hooks_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2373,7 +3014,7 @@ func (x *PreAppendRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreAppendRequest.ProtoReflect.Descriptor instead.
 func (*PreAppendRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{42}
+	return file_hooks_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *PreAppendRequest) GetCtx() *HookContext {
@@ -2401,7 +3042,7 @@ type PostAppendRequest struct {
 
 func (x *PostAppendRequest) Reset() {
 	*x = PostAppendRequest{}
-	mi := &file_hooks_proto_msgTypes[43]
+	mi := &file_hooks_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2413,7 +3054,7 @@ func (x *PostAppendRequest) String() string {
 func (*PostAppendRequest) ProtoMessage() {}
 
 func (x *PostAppendRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[43]
+	mi := &file_hooks_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2426,7 +3067,7 @@ func (x *PostAppendRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PostAppendRequest.ProtoReflect.Descriptor instead.
 func (*PostAppendRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{43}
+	return file_hooks_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *PostAppendRequest) GetCtx() *HookContext {
@@ -2460,7 +3101,7 @@ type PreAppendAfterRowLockRequest struct {
 
 func (x *PreAppendAfterRowLockRequest) Reset() {
 	*x = PreAppendAfterRowLockRequest{}
-	mi := &file_hooks_proto_msgTypes[44]
+	mi := &file_hooks_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2472,7 +3113,7 @@ func (x *PreAppendAfterRowLockRequest) String() string {
 func (*PreAppendAfterRowLockRequest) ProtoMessage() {}
 
 func (x *PreAppendAfterRowLockRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[44]
+	mi := &file_hooks_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2485,7 +3126,7 @@ func (x *PreAppendAfterRowLockRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreAppendAfterRowLockRequest.ProtoReflect.Descriptor instead.
 func (*PreAppendAfterRowLockRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{44}
+	return file_hooks_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *PreAppendAfterRowLockRequest) GetCtx() *HookContext {
@@ -2514,7 +3155,7 @@ type PreIncrementRequest struct {
 
 func (x *PreIncrementRequest) Reset() {
 	*x = PreIncrementRequest{}
-	mi := &file_hooks_proto_msgTypes[45]
+	mi := &file_hooks_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2526,7 +3167,7 @@ func (x *PreIncrementRequest) String() string {
 func (*PreIncrementRequest) ProtoMessage() {}
 
 func (x *PreIncrementRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[45]
+	mi := &file_hooks_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2539,7 +3180,7 @@ func (x *PreIncrementRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreIncrementRequest.ProtoReflect.Descriptor instead.
 func (*PreIncrementRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{45}
+	return file_hooks_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *PreIncrementRequest) GetCtx() *HookContext {
@@ -2567,7 +3208,7 @@ type PostIncrementRequest struct {
 
 func (x *PostIncrementRequest) Reset() {
 	*x = PostIncrementRequest{}
-	mi := &file_hooks_proto_msgTypes[46]
+	mi := &file_hooks_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2579,7 +3220,7 @@ func (x *PostIncrementRequest) String() string {
 func (*PostIncrementRequest) ProtoMessage() {}
 
 func (x *PostIncrementRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[46]
+	mi := &file_hooks_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2592,7 +3233,7 @@ func (x *PostIncrementRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PostIncrementRequest.ProtoReflect.Descriptor instead.
 func (*PostIncrementRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{46}
+	return file_hooks_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *PostIncrementRequest) GetCtx() *HookContext {
@@ -2626,7 +3267,7 @@ type PreIncrementAfterRowLockRequest struct {
 
 func (x *PreIncrementAfterRowLockRequest) Reset() {
 	*x = PreIncrementAfterRowLockRequest{}
-	mi := &file_hooks_proto_msgTypes[47]
+	mi := &file_hooks_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2638,7 +3279,7 @@ func (x *PreIncrementAfterRowLockRequest) String() string {
 func (*PreIncrementAfterRowLockRequest) ProtoMessage() {}
 
 func (x *PreIncrementAfterRowLockRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[47]
+	mi := &file_hooks_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2651,7 +3292,7 @@ func (x *PreIncrementAfterRowLockRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreIncrementAfterRowLockRequest.ProtoReflect.Descriptor instead.
 func (*PreIncrementAfterRowLockRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{47}
+	return file_hooks_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *PreIncrementAfterRowLockRequest) GetCtx() *HookContext {
@@ -2683,7 +3324,7 @@ type PreScannerOpenRequest struct {
 
 func (x *PreScannerOpenRequest) Reset() {
 	*x = PreScannerOpenRequest{}
-	mi := &file_hooks_proto_msgTypes[48]
+	mi := &file_hooks_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2695,7 +3336,7 @@ func (x *PreScannerOpenRequest) String() string {
 func (*PreScannerOpenRequest) ProtoMessage() {}
 
 func (x *PreScannerOpenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[48]
+	mi := &file_hooks_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2708,7 +3349,7 @@ func (x *PreScannerOpenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreScannerOpenRequest.ProtoReflect.Descriptor instead.
 func (*PreScannerOpenRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{48}
+	return file_hooks_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *PreScannerOpenRequest) GetCtx() *HookContext {
@@ -2735,7 +3376,7 @@ type PostScannerOpenRequest struct {
 
 func (x *PostScannerOpenRequest) Reset() {
 	*x = PostScannerOpenRequest{}
-	mi := &file_hooks_proto_msgTypes[49]
+	mi := &file_hooks_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2747,7 +3388,7 @@ func (x *PostScannerOpenRequest) String() string {
 func (*PostScannerOpenRequest) ProtoMessage() {}
 
 func (x *PostScannerOpenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[49]
+	mi := &file_hooks_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2760,7 +3401,7 @@ func (x *PostScannerOpenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PostScannerOpenRequest.ProtoReflect.Descriptor instead.
 func (*PostScannerOpenRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{49}
+	return file_hooks_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *PostScannerOpenRequest) GetCtx() *HookContext {
@@ -2788,7 +3429,7 @@ type PreScannerNextRequest struct {
 
 func (x *PreScannerNextRequest) Reset() {
 	*x = PreScannerNextRequest{}
-	mi := &file_hooks_proto_msgTypes[50]
+	mi := &file_hooks_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2800,7 +3441,7 @@ func (x *PreScannerNextRequest) String() string {
 func (*PreScannerNextRequest) ProtoMessage() {}
 
 func (x *PreScannerNextRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[50]
+	mi := &file_hooks_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2813,7 +3454,7 @@ func (x *PreScannerNextRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreScannerNextRequest.ProtoReflect.Descriptor instead.
 func (*PreScannerNextRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{50}
+	return file_hooks_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *PreScannerNextRequest) GetCtx() *HookContext {
@@ -2851,7 +3492,7 @@ type PostScannerNextRequest struct {
 
 func (x *PostScannerNextRequest) Reset() {
 	*x = PostScannerNextRequest{}
-	mi := &file_hooks_proto_msgTypes[51]
+	mi := &file_hooks_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2863,7 +3504,7 @@ func (x *PostScannerNextRequest) String() string {
 func (*PostScannerNextRequest) ProtoMessage() {}
 
 func (x *PostScannerNextRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[51]
+	mi := &file_hooks_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2876,7 +3517,7 @@ func (x *PostScannerNextRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PostScannerNextRequest.ProtoReflect.Descriptor instead.
 func (*PostScannerNextRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{51}
+	return file_hooks_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *PostScannerNextRequest) GetCtx() *HookContext {
@@ -2918,7 +3559,7 @@ type PostScannerFilterRowRequest struct {
 
 func (x *PostScannerFilterRowRequest) Reset() {
 	*x = PostScannerFilterRowRequest{}
-	mi := &file_hooks_proto_msgTypes[52]
+	mi := &file_hooks_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2930,7 +3571,7 @@ func (x *PostScannerFilterRowRequest) String() string {
 func (*PostScannerFilterRowRequest) ProtoMessage() {}
 
 func (x *PostScannerFilterRowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[52]
+	mi := &file_hooks_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2943,7 +3584,7 @@ func (x *PostScannerFilterRowRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PostScannerFilterRowRequest.ProtoReflect.Descriptor instead.
 func (*PostScannerFilterRowRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{52}
+	return file_hooks_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *PostScannerFilterRowRequest) GetCtx() *HookContext {
@@ -2976,7 +3617,7 @@ type PreScannerCloseRequest struct {
 
 func (x *PreScannerCloseRequest) Reset() {
 	*x = PreScannerCloseRequest{}
-	mi := &file_hooks_proto_msgTypes[53]
+	mi := &file_hooks_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2988,7 +3629,7 @@ func (x *PreScannerCloseRequest) String() string {
 func (*PreScannerCloseRequest) ProtoMessage() {}
 
 func (x *PreScannerCloseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[53]
+	mi := &file_hooks_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3001,7 +3642,7 @@ func (x *PreScannerCloseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreScannerCloseRequest.ProtoReflect.Descriptor instead.
 func (*PreScannerCloseRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{53}
+	return file_hooks_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *PreScannerCloseRequest) GetCtx() *HookContext {
@@ -3020,7 +3661,7 @@ type PostScannerCloseRequest struct {
 
 func (x *PostScannerCloseRequest) Reset() {
 	*x = PostScannerCloseRequest{}
-	mi := &file_hooks_proto_msgTypes[54]
+	mi := &file_hooks_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3032,7 +3673,7 @@ func (x *PostScannerCloseRequest) String() string {
 func (*PostScannerCloseRequest) ProtoMessage() {}
 
 func (x *PostScannerCloseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[54]
+	mi := &file_hooks_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3045,7 +3686,7 @@ func (x *PostScannerCloseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PostScannerCloseRequest.ProtoReflect.Descriptor instead.
 func (*PostScannerCloseRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{54}
+	return file_hooks_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *PostScannerCloseRequest) GetCtx() *HookContext {
@@ -3067,7 +3708,7 @@ type PreStoreScannerOpenRequest struct {
 
 func (x *PreStoreScannerOpenRequest) Reset() {
 	*x = PreStoreScannerOpenRequest{}
-	mi := &file_hooks_proto_msgTypes[55]
+	mi := &file_hooks_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3079,7 +3720,7 @@ func (x *PreStoreScannerOpenRequest) String() string {
 func (*PreStoreScannerOpenRequest) ProtoMessage() {}
 
 func (x *PreStoreScannerOpenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[55]
+	mi := &file_hooks_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3092,7 +3733,7 @@ func (x *PreStoreScannerOpenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreStoreScannerOpenRequest.ProtoReflect.Descriptor instead.
 func (*PreStoreScannerOpenRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{55}
+	return file_hooks_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *PreStoreScannerOpenRequest) GetCtx() *HookContext {
@@ -3118,7 +3759,7 @@ type PreReplayWALsRequest struct {
 
 func (x *PreReplayWALsRequest) Reset() {
 	*x = PreReplayWALsRequest{}
-	mi := &file_hooks_proto_msgTypes[56]
+	mi := &file_hooks_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3130,7 +3771,7 @@ func (x *PreReplayWALsRequest) String() string {
 func (*PreReplayWALsRequest) ProtoMessage() {}
 
 func (x *PreReplayWALsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[56]
+	mi := &file_hooks_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3143,7 +3784,7 @@ func (x *PreReplayWALsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreReplayWALsRequest.ProtoReflect.Descriptor instead.
 func (*PreReplayWALsRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{56}
+	return file_hooks_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *PreReplayWALsRequest) GetCtx() *HookContext {
@@ -3162,7 +3803,7 @@ type PostReplayWALsRequest struct {
 
 func (x *PostReplayWALsRequest) Reset() {
 	*x = PostReplayWALsRequest{}
-	mi := &file_hooks_proto_msgTypes[57]
+	mi := &file_hooks_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3174,7 +3815,7 @@ func (x *PostReplayWALsRequest) String() string {
 func (*PostReplayWALsRequest) ProtoMessage() {}
 
 func (x *PostReplayWALsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[57]
+	mi := &file_hooks_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3187,7 +3828,7 @@ func (x *PostReplayWALsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PostReplayWALsRequest.ProtoReflect.Descriptor instead.
 func (*PostReplayWALsRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{57}
+	return file_hooks_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *PostReplayWALsRequest) GetCtx() *HookContext {
@@ -3206,7 +3847,7 @@ type PreWALRestoreRequest struct {
 
 func (x *PreWALRestoreRequest) Reset() {
 	*x = PreWALRestoreRequest{}
-	mi := &file_hooks_proto_msgTypes[58]
+	mi := &file_hooks_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3218,7 +3859,7 @@ func (x *PreWALRestoreRequest) String() string {
 func (*PreWALRestoreRequest) ProtoMessage() {}
 
 func (x *PreWALRestoreRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[58]
+	mi := &file_hooks_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3231,7 +3872,7 @@ func (x *PreWALRestoreRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreWALRestoreRequest.ProtoReflect.Descriptor instead.
 func (*PreWALRestoreRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{58}
+	return file_hooks_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *PreWALRestoreRequest) GetCtx() *HookContext {
@@ -3250,7 +3891,7 @@ type PostWALRestoreRequest struct {
 
 func (x *PostWALRestoreRequest) Reset() {
 	*x = PostWALRestoreRequest{}
-	mi := &file_hooks_proto_msgTypes[59]
+	mi := &file_hooks_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3262,7 +3903,7 @@ func (x *PostWALRestoreRequest) String() string {
 func (*PostWALRestoreRequest) ProtoMessage() {}
 
 func (x *PostWALRestoreRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[59]
+	mi := &file_hooks_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3275,7 +3916,7 @@ func (x *PostWALRestoreRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PostWALRestoreRequest.ProtoReflect.Descriptor instead.
 func (*PostWALRestoreRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{59}
+	return file_hooks_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *PostWALRestoreRequest) GetCtx() *HookContext {
@@ -3294,7 +3935,7 @@ type PreBulkLoadHFileRequest struct {
 
 func (x *PreBulkLoadHFileRequest) Reset() {
 	*x = PreBulkLoadHFileRequest{}
-	mi := &file_hooks_proto_msgTypes[60]
+	mi := &file_hooks_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3306,7 +3947,7 @@ func (x *PreBulkLoadHFileRequest) String() string {
 func (*PreBulkLoadHFileRequest) ProtoMessage() {}
 
 func (x *PreBulkLoadHFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[60]
+	mi := &file_hooks_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3319,7 +3960,7 @@ func (x *PreBulkLoadHFileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreBulkLoadHFileRequest.ProtoReflect.Descriptor instead.
 func (*PreBulkLoadHFileRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{60}
+	return file_hooks_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *PreBulkLoadHFileRequest) GetCtx() *HookContext {
@@ -3338,7 +3979,7 @@ type PostBulkLoadHFileRequest struct {
 
 func (x *PostBulkLoadHFileRequest) Reset() {
 	*x = PostBulkLoadHFileRequest{}
-	mi := &file_hooks_proto_msgTypes[61]
+	mi := &file_hooks_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3350,7 +3991,7 @@ func (x *PostBulkLoadHFileRequest) String() string {
 func (*PostBulkLoadHFileRequest) ProtoMessage() {}
 
 func (x *PostBulkLoadHFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[61]
+	mi := &file_hooks_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3363,7 +4004,7 @@ func (x *PostBulkLoadHFileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PostBulkLoadHFileRequest.ProtoReflect.Descriptor instead.
 func (*PostBulkLoadHFileRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{61}
+	return file_hooks_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *PostBulkLoadHFileRequest) GetCtx() *HookContext {
@@ -3382,7 +4023,7 @@ type PreCommitStoreFileRequest struct {
 
 func (x *PreCommitStoreFileRequest) Reset() {
 	*x = PreCommitStoreFileRequest{}
-	mi := &file_hooks_proto_msgTypes[62]
+	mi := &file_hooks_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3394,7 +4035,7 @@ func (x *PreCommitStoreFileRequest) String() string {
 func (*PreCommitStoreFileRequest) ProtoMessage() {}
 
 func (x *PreCommitStoreFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[62]
+	mi := &file_hooks_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3407,7 +4048,7 @@ func (x *PreCommitStoreFileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreCommitStoreFileRequest.ProtoReflect.Descriptor instead.
 func (*PreCommitStoreFileRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{62}
+	return file_hooks_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *PreCommitStoreFileRequest) GetCtx() *HookContext {
@@ -3426,7 +4067,7 @@ type PostCommitStoreFileRequest struct {
 
 func (x *PostCommitStoreFileRequest) Reset() {
 	*x = PostCommitStoreFileRequest{}
-	mi := &file_hooks_proto_msgTypes[63]
+	mi := &file_hooks_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3438,7 +4079,7 @@ func (x *PostCommitStoreFileRequest) String() string {
 func (*PostCommitStoreFileRequest) ProtoMessage() {}
 
 func (x *PostCommitStoreFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[63]
+	mi := &file_hooks_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3451,7 +4092,7 @@ func (x *PostCommitStoreFileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PostCommitStoreFileRequest.ProtoReflect.Descriptor instead.
 func (*PostCommitStoreFileRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{63}
+	return file_hooks_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *PostCommitStoreFileRequest) GetCtx() *HookContext {
@@ -3470,7 +4111,7 @@ type PreStoreFileReaderOpenRequest struct {
 
 func (x *PreStoreFileReaderOpenRequest) Reset() {
 	*x = PreStoreFileReaderOpenRequest{}
-	mi := &file_hooks_proto_msgTypes[64]
+	mi := &file_hooks_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3482,7 +4123,7 @@ func (x *PreStoreFileReaderOpenRequest) String() string {
 func (*PreStoreFileReaderOpenRequest) ProtoMessage() {}
 
 func (x *PreStoreFileReaderOpenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[64]
+	mi := &file_hooks_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3495,7 +4136,7 @@ func (x *PreStoreFileReaderOpenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreStoreFileReaderOpenRequest.ProtoReflect.Descriptor instead.
 func (*PreStoreFileReaderOpenRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{64}
+	return file_hooks_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *PreStoreFileReaderOpenRequest) GetCtx() *HookContext {
@@ -3514,7 +4155,7 @@ type PostStoreFileReaderOpenRequest struct {
 
 func (x *PostStoreFileReaderOpenRequest) Reset() {
 	*x = PostStoreFileReaderOpenRequest{}
-	mi := &file_hooks_proto_msgTypes[65]
+	mi := &file_hooks_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3526,7 +4167,7 @@ func (x *PostStoreFileReaderOpenRequest) String() string {
 func (*PostStoreFileReaderOpenRequest) ProtoMessage() {}
 
 func (x *PostStoreFileReaderOpenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[65]
+	mi := &file_hooks_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3539,7 +4180,7 @@ func (x *PostStoreFileReaderOpenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PostStoreFileReaderOpenRequest.ProtoReflect.Descriptor instead.
 func (*PostStoreFileReaderOpenRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{65}
+	return file_hooks_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *PostStoreFileReaderOpenRequest) GetCtx() *HookContext {
@@ -3561,7 +4202,7 @@ type CellPair struct {
 
 func (x *CellPair) Reset() {
 	*x = CellPair{}
-	mi := &file_hooks_proto_msgTypes[66]
+	mi := &file_hooks_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3573,7 +4214,7 @@ func (x *CellPair) String() string {
 func (*CellPair) ProtoMessage() {}
 
 func (x *CellPair) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[66]
+	mi := &file_hooks_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3586,7 +4227,7 @@ func (x *CellPair) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CellPair.ProtoReflect.Descriptor instead.
 func (*CellPair) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{66}
+	return file_hooks_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *CellPair) GetFirst() *hbasepb.Cell {
@@ -3620,7 +4261,7 @@ type PostMutationBeforeWALRequest struct {
 
 func (x *PostMutationBeforeWALRequest) Reset() {
 	*x = PostMutationBeforeWALRequest{}
-	mi := &file_hooks_proto_msgTypes[67]
+	mi := &file_hooks_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3632,7 +4273,7 @@ func (x *PostMutationBeforeWALRequest) String() string {
 func (*PostMutationBeforeWALRequest) ProtoMessage() {}
 
 func (x *PostMutationBeforeWALRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[67]
+	mi := &file_hooks_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3645,7 +4286,7 @@ func (x *PostMutationBeforeWALRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PostMutationBeforeWALRequest.ProtoReflect.Descriptor instead.
 func (*PostMutationBeforeWALRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{67}
+	return file_hooks_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *PostMutationBeforeWALRequest) GetCtx() *HookContext {
@@ -3694,7 +4335,7 @@ type PostIncrementBeforeWALRequest struct {
 
 func (x *PostIncrementBeforeWALRequest) Reset() {
 	*x = PostIncrementBeforeWALRequest{}
-	mi := &file_hooks_proto_msgTypes[68]
+	mi := &file_hooks_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3706,7 +4347,7 @@ func (x *PostIncrementBeforeWALRequest) String() string {
 func (*PostIncrementBeforeWALRequest) ProtoMessage() {}
 
 func (x *PostIncrementBeforeWALRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[68]
+	mi := &file_hooks_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3719,7 +4360,7 @@ func (x *PostIncrementBeforeWALRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PostIncrementBeforeWALRequest.ProtoReflect.Descriptor instead.
 func (*PostIncrementBeforeWALRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{68}
+	return file_hooks_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *PostIncrementBeforeWALRequest) GetCtx() *HookContext {
@@ -3754,7 +4395,7 @@ type PostAppendBeforeWALRequest struct {
 
 func (x *PostAppendBeforeWALRequest) Reset() {
 	*x = PostAppendBeforeWALRequest{}
-	mi := &file_hooks_proto_msgTypes[69]
+	mi := &file_hooks_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3766,7 +4407,7 @@ func (x *PostAppendBeforeWALRequest) String() string {
 func (*PostAppendBeforeWALRequest) ProtoMessage() {}
 
 func (x *PostAppendBeforeWALRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[69]
+	mi := &file_hooks_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3779,7 +4420,7 @@ func (x *PostAppendBeforeWALRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PostAppendBeforeWALRequest.ProtoReflect.Descriptor instead.
 func (*PostAppendBeforeWALRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{69}
+	return file_hooks_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *PostAppendBeforeWALRequest) GetCtx() *HookContext {
@@ -3812,7 +4453,7 @@ type PostInstantiateDeleteTrackerRequest struct {
 
 func (x *PostInstantiateDeleteTrackerRequest) Reset() {
 	*x = PostInstantiateDeleteTrackerRequest{}
-	mi := &file_hooks_proto_msgTypes[70]
+	mi := &file_hooks_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3824,7 +4465,7 @@ func (x *PostInstantiateDeleteTrackerRequest) String() string {
 func (*PostInstantiateDeleteTrackerRequest) ProtoMessage() {}
 
 func (x *PostInstantiateDeleteTrackerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[70]
+	mi := &file_hooks_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3837,7 +4478,7 @@ func (x *PostInstantiateDeleteTrackerRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use PostInstantiateDeleteTrackerRequest.ProtoReflect.Descriptor instead.
 func (*PostInstantiateDeleteTrackerRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{70}
+	return file_hooks_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *PostInstantiateDeleteTrackerRequest) GetCtx() *HookContext {
@@ -3856,7 +4497,7 @@ type PreWALAppendRequest struct {
 
 func (x *PreWALAppendRequest) Reset() {
 	*x = PreWALAppendRequest{}
-	mi := &file_hooks_proto_msgTypes[71]
+	mi := &file_hooks_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3868,7 +4509,7 @@ func (x *PreWALAppendRequest) String() string {
 func (*PreWALAppendRequest) ProtoMessage() {}
 
 func (x *PreWALAppendRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[71]
+	mi := &file_hooks_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3881,7 +4522,7 @@ func (x *PreWALAppendRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreWALAppendRequest.ProtoReflect.Descriptor instead.
 func (*PreWALAppendRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{71}
+	return file_hooks_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *PreWALAppendRequest) GetCtx() *HookContext {
@@ -3973,35 +4614,122 @@ const file_hooks_proto_rawDesc = "" +
 	"\bmutation\x18\x02 \x01(\v2'.virogg.hbasecop.hbase.v1.MutationProtoR\bmutation\x122\n" +
 	"\x04cell\x18\x03 \x01(\v2\x1e.virogg.hbasecop.hbase.v1.CellR\x04cell\x12\x19\n" +
 	"\bbyte_now\x18\x04 \x01(\fR\abyteNow\x12/\n" +
-	"\x03get\x18\x05 \x01(\v2\x1d.virogg.hbasecop.hbase.v1.GetR\x03get\"J\n" +
+	"\x03get\x18\x05 \x01(\v2\x1d.virogg.hbasecop.hbase.v1.GetR\x03get\"\x8c\x01\n" +
+	"\x11MutationOperation\x12C\n" +
+	"\bmutation\x18\x01 \x01(\v2'.virogg.hbasecop.hbase.v1.MutationProtoR\bmutation\x122\n" +
+	"\x15operation_status_code\x18\x02 \x01(\x05R\x13operationStatusCode\"\x8f\x01\n" +
 	"\x15PreBatchMutateRequest\x121\n" +
-	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"K\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12C\n" +
+	"\toperation\x18\x02 \x03(\v2%.virogg.hbasecop.v1.MutationOperationR\toperation\"\x90\x01\n" +
 	"\x16PostBatchMutateRequest\x121\n" +
-	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"X\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12C\n" +
+	"\toperation\x18\x02 \x03(\v2%.virogg.hbasecop.v1.MutationOperationR\toperation\"\xb7\x01\n" +
 	"#PostBatchMutateIndispensablyRequest\x121\n" +
-	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"T\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12C\n" +
+	"\toperation\x18\x02 \x03(\v2%.virogg.hbasecop.v1.MutationOperationR\toperation\x12\x18\n" +
+	"\asuccess\x18\x03 \x01(\bR\asuccess\"r\n" +
 	"\x1fPostStartRegionOperationRequest\x121\n" +
-	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"T\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12\x1c\n" +
+	"\toperation\x18\x02 \x01(\x05R\toperation\"r\n" +
 	"\x1fPostCloseRegionOperationRequest\x121\n" +
-	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"J\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12\x1c\n" +
+	"\toperation\x18\x02 \x01(\x05R\toperation\"\xd5\x02\n" +
 	"\x15PreCheckAndPutRequest\x121\n" +
-	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"K\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12\x10\n" +
+	"\x03row\x18\x02 \x01(\fR\x03row\x12\x16\n" +
+	"\x06family\x18\x03 \x01(\fR\x06family\x12\x1c\n" +
+	"\tqualifier\x18\x04 \x01(\fR\tqualifier\x12\x1d\n" +
+	"\n" +
+	"compare_op\x18\x05 \x01(\x05R\tcompareOp\x12D\n" +
+	"\n" +
+	"comparator\x18\x06 \x01(\v2$.virogg.hbasecop.hbase.v1.ComparatorR\n" +
+	"comparator\x129\n" +
+	"\x03put\x18\a \x01(\v2'.virogg.hbasecop.hbase.v1.MutationProtoR\x03put\x12!\n" +
+	"\finput_result\x18\b \x01(\bR\vinputResult\"\xd6\x02\n" +
 	"\x16PostCheckAndPutRequest\x121\n" +
-	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"V\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12\x10\n" +
+	"\x03row\x18\x02 \x01(\fR\x03row\x12\x16\n" +
+	"\x06family\x18\x03 \x01(\fR\x06family\x12\x1c\n" +
+	"\tqualifier\x18\x04 \x01(\fR\tqualifier\x12\x1d\n" +
+	"\n" +
+	"compare_op\x18\x05 \x01(\x05R\tcompareOp\x12D\n" +
+	"\n" +
+	"comparator\x18\x06 \x01(\v2$.virogg.hbasecop.hbase.v1.ComparatorR\n" +
+	"comparator\x129\n" +
+	"\x03put\x18\a \x01(\v2'.virogg.hbasecop.hbase.v1.MutationProtoR\x03put\x12!\n" +
+	"\finput_result\x18\b \x01(\bR\vinputResult\"\xe1\x02\n" +
 	"!PreCheckAndPutAfterRowLockRequest\x121\n" +
-	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"M\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12\x10\n" +
+	"\x03row\x18\x02 \x01(\fR\x03row\x12\x16\n" +
+	"\x06family\x18\x03 \x01(\fR\x06family\x12\x1c\n" +
+	"\tqualifier\x18\x04 \x01(\fR\tqualifier\x12\x1d\n" +
+	"\n" +
+	"compare_op\x18\x05 \x01(\x05R\tcompareOp\x12D\n" +
+	"\n" +
+	"comparator\x18\x06 \x01(\v2$.virogg.hbasecop.hbase.v1.ComparatorR\n" +
+	"comparator\x129\n" +
+	"\x03put\x18\a \x01(\v2'.virogg.hbasecop.hbase.v1.MutationProtoR\x03put\x12!\n" +
+	"\finput_result\x18\b \x01(\bR\vinputResult\"\xde\x02\n" +
 	"\x18PreCheckAndDeleteRequest\x121\n" +
-	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"N\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12\x10\n" +
+	"\x03row\x18\x02 \x01(\fR\x03row\x12\x16\n" +
+	"\x06family\x18\x03 \x01(\fR\x06family\x12\x1c\n" +
+	"\tqualifier\x18\x04 \x01(\fR\tqualifier\x12\x1d\n" +
+	"\n" +
+	"compare_op\x18\x05 \x01(\x05R\tcompareOp\x12D\n" +
+	"\n" +
+	"comparator\x18\x06 \x01(\v2$.virogg.hbasecop.hbase.v1.ComparatorR\n" +
+	"comparator\x12?\n" +
+	"\x06delete\x18\a \x01(\v2'.virogg.hbasecop.hbase.v1.MutationProtoR\x06delete\x12!\n" +
+	"\finput_result\x18\b \x01(\bR\vinputResult\"\xdf\x02\n" +
 	"\x19PostCheckAndDeleteRequest\x121\n" +
-	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"Y\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12\x10\n" +
+	"\x03row\x18\x02 \x01(\fR\x03row\x12\x16\n" +
+	"\x06family\x18\x03 \x01(\fR\x06family\x12\x1c\n" +
+	"\tqualifier\x18\x04 \x01(\fR\tqualifier\x12\x1d\n" +
+	"\n" +
+	"compare_op\x18\x05 \x01(\x05R\tcompareOp\x12D\n" +
+	"\n" +
+	"comparator\x18\x06 \x01(\v2$.virogg.hbasecop.hbase.v1.ComparatorR\n" +
+	"comparator\x12?\n" +
+	"\x06delete\x18\a \x01(\v2'.virogg.hbasecop.hbase.v1.MutationProtoR\x06delete\x12!\n" +
+	"\finput_result\x18\b \x01(\bR\vinputResult\"\xea\x02\n" +
 	"$PreCheckAndDeleteAfterRowLockRequest\x121\n" +
-	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"M\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12\x10\n" +
+	"\x03row\x18\x02 \x01(\fR\x03row\x12\x16\n" +
+	"\x06family\x18\x03 \x01(\fR\x06family\x12\x1c\n" +
+	"\tqualifier\x18\x04 \x01(\fR\tqualifier\x12\x1d\n" +
+	"\n" +
+	"compare_op\x18\x05 \x01(\x05R\tcompareOp\x12D\n" +
+	"\n" +
+	"comparator\x18\x06 \x01(\v2$.virogg.hbasecop.hbase.v1.ComparatorR\n" +
+	"comparator\x12?\n" +
+	"\x06delete\x18\a \x01(\v2'.virogg.hbasecop.hbase.v1.MutationProtoR\x06delete\x12!\n" +
+	"\finput_result\x18\b \x01(\bR\vinputResult\"\x8e\x02\n" +
+	"\x14CheckAndMutateAction\x12\x10\n" +
+	"\x03row\x18\x01 \x01(\fR\x03row\x12\x16\n" +
+	"\x06family\x18\x02 \x01(\fR\x06family\x12\x1c\n" +
+	"\tqualifier\x18\x03 \x01(\fR\tqualifier\x12\x1d\n" +
+	"\n" +
+	"compare_op\x18\x04 \x01(\x05R\tcompareOp\x12\x14\n" +
+	"\x05value\x18\x05 \x01(\fR\x05value\x128\n" +
+	"\x06filter\x18\x06 \x01(\v2 .virogg.hbasecop.hbase.v1.FilterR\x06filter\x12?\n" +
+	"\x06action\x18\a \x01(\v2'.virogg.hbasecop.hbase.v1.MutationProtoR\x06action\"o\n" +
+	"\x19CheckAndMutateResultProto\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x128\n" +
+	"\x06result\x18\x02 \x01(\v2 .virogg.hbasecop.hbase.v1.ResultR\x06result\"\xe1\x01\n" +
 	"\x18PreCheckAndMutateRequest\x121\n" +
-	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"N\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12@\n" +
+	"\x06action\x18\x02 \x01(\v2(.virogg.hbasecop.v1.CheckAndMutateActionR\x06action\x12P\n" +
+	"\finput_result\x18\x03 \x01(\v2-.virogg.hbasecop.v1.CheckAndMutateResultProtoR\vinputResult\"\xe2\x01\n" +
 	"\x19PostCheckAndMutateRequest\x121\n" +
-	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"Y\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12@\n" +
+	"\x06action\x18\x02 \x01(\v2(.virogg.hbasecop.v1.CheckAndMutateActionR\x06action\x12P\n" +
+	"\finput_result\x18\x03 \x01(\v2-.virogg.hbasecop.v1.CheckAndMutateResultProtoR\vinputResult\"\xed\x01\n" +
 	"$PreCheckAndMutateAfterRowLockRequest\x121\n" +
-	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"\x86\x01\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12@\n" +
+	"\x06action\x18\x02 \x01(\v2(.virogg.hbasecop.v1.CheckAndMutateActionR\x06action\x12P\n" +
+	"\finput_result\x18\x03 \x01(\v2-.virogg.hbasecop.v1.CheckAndMutateResultProtoR\vinputResult\"\x86\x01\n" +
 	"\x10PreAppendRequest\x121\n" +
 	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12?\n" +
 	"\x06append\x18\x02 \x01(\v2'.virogg.hbasecop.hbase.v1.MutationProtoR\x06append\"\xc1\x01\n" +
@@ -4177,7 +4905,7 @@ func file_hooks_proto_rawDescGZIP() []byte {
 }
 
 var file_hooks_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_hooks_proto_msgTypes = make([]protoimpl.MessageInfo, 72)
+var file_hooks_proto_msgTypes = make([]protoimpl.MessageInfo, 75)
 var file_hooks_proto_goTypes = []any{
 	(HookId)(0),                                            // 0: virogg.hbasecop.v1.HookId
 	(*HookContext)(nil),                                    // 1: virogg.hbasecop.v1.HookContext
@@ -4208,64 +4936,69 @@ var file_hooks_proto_goTypes = []any{
 	(*PreDeleteRequest)(nil),                               // 26: virogg.hbasecop.v1.PreDeleteRequest
 	(*PostDeleteRequest)(nil),                              // 27: virogg.hbasecop.v1.PostDeleteRequest
 	(*PrePrepareTimeStampForDeleteVersionRequest)(nil),     // 28: virogg.hbasecop.v1.PrePrepareTimeStampForDeleteVersionRequest
-	(*PreBatchMutateRequest)(nil),                          // 29: virogg.hbasecop.v1.PreBatchMutateRequest
-	(*PostBatchMutateRequest)(nil),                         // 30: virogg.hbasecop.v1.PostBatchMutateRequest
-	(*PostBatchMutateIndispensablyRequest)(nil),            // 31: virogg.hbasecop.v1.PostBatchMutateIndispensablyRequest
-	(*PostStartRegionOperationRequest)(nil),                // 32: virogg.hbasecop.v1.PostStartRegionOperationRequest
-	(*PostCloseRegionOperationRequest)(nil),                // 33: virogg.hbasecop.v1.PostCloseRegionOperationRequest
-	(*PreCheckAndPutRequest)(nil),                          // 34: virogg.hbasecop.v1.PreCheckAndPutRequest
-	(*PostCheckAndPutRequest)(nil),                         // 35: virogg.hbasecop.v1.PostCheckAndPutRequest
-	(*PreCheckAndPutAfterRowLockRequest)(nil),              // 36: virogg.hbasecop.v1.PreCheckAndPutAfterRowLockRequest
-	(*PreCheckAndDeleteRequest)(nil),                       // 37: virogg.hbasecop.v1.PreCheckAndDeleteRequest
-	(*PostCheckAndDeleteRequest)(nil),                      // 38: virogg.hbasecop.v1.PostCheckAndDeleteRequest
-	(*PreCheckAndDeleteAfterRowLockRequest)(nil),           // 39: virogg.hbasecop.v1.PreCheckAndDeleteAfterRowLockRequest
-	(*PreCheckAndMutateRequest)(nil),                       // 40: virogg.hbasecop.v1.PreCheckAndMutateRequest
-	(*PostCheckAndMutateRequest)(nil),                      // 41: virogg.hbasecop.v1.PostCheckAndMutateRequest
-	(*PreCheckAndMutateAfterRowLockRequest)(nil),           // 42: virogg.hbasecop.v1.PreCheckAndMutateAfterRowLockRequest
-	(*PreAppendRequest)(nil),                               // 43: virogg.hbasecop.v1.PreAppendRequest
-	(*PostAppendRequest)(nil),                              // 44: virogg.hbasecop.v1.PostAppendRequest
-	(*PreAppendAfterRowLockRequest)(nil),                   // 45: virogg.hbasecop.v1.PreAppendAfterRowLockRequest
-	(*PreIncrementRequest)(nil),                            // 46: virogg.hbasecop.v1.PreIncrementRequest
-	(*PostIncrementRequest)(nil),                           // 47: virogg.hbasecop.v1.PostIncrementRequest
-	(*PreIncrementAfterRowLockRequest)(nil),                // 48: virogg.hbasecop.v1.PreIncrementAfterRowLockRequest
-	(*PreScannerOpenRequest)(nil),                          // 49: virogg.hbasecop.v1.PreScannerOpenRequest
-	(*PostScannerOpenRequest)(nil),                         // 50: virogg.hbasecop.v1.PostScannerOpenRequest
-	(*PreScannerNextRequest)(nil),                          // 51: virogg.hbasecop.v1.PreScannerNextRequest
-	(*PostScannerNextRequest)(nil),                         // 52: virogg.hbasecop.v1.PostScannerNextRequest
-	(*PostScannerFilterRowRequest)(nil),                    // 53: virogg.hbasecop.v1.PostScannerFilterRowRequest
-	(*PreScannerCloseRequest)(nil),                         // 54: virogg.hbasecop.v1.PreScannerCloseRequest
-	(*PostScannerCloseRequest)(nil),                        // 55: virogg.hbasecop.v1.PostScannerCloseRequest
-	(*PreStoreScannerOpenRequest)(nil),                     // 56: virogg.hbasecop.v1.PreStoreScannerOpenRequest
-	(*PreReplayWALsRequest)(nil),                           // 57: virogg.hbasecop.v1.PreReplayWALsRequest
-	(*PostReplayWALsRequest)(nil),                          // 58: virogg.hbasecop.v1.PostReplayWALsRequest
-	(*PreWALRestoreRequest)(nil),                           // 59: virogg.hbasecop.v1.PreWALRestoreRequest
-	(*PostWALRestoreRequest)(nil),                          // 60: virogg.hbasecop.v1.PostWALRestoreRequest
-	(*PreBulkLoadHFileRequest)(nil),                        // 61: virogg.hbasecop.v1.PreBulkLoadHFileRequest
-	(*PostBulkLoadHFileRequest)(nil),                       // 62: virogg.hbasecop.v1.PostBulkLoadHFileRequest
-	(*PreCommitStoreFileRequest)(nil),                      // 63: virogg.hbasecop.v1.PreCommitStoreFileRequest
-	(*PostCommitStoreFileRequest)(nil),                     // 64: virogg.hbasecop.v1.PostCommitStoreFileRequest
-	(*PreStoreFileReaderOpenRequest)(nil),                  // 65: virogg.hbasecop.v1.PreStoreFileReaderOpenRequest
-	(*PostStoreFileReaderOpenRequest)(nil),                 // 66: virogg.hbasecop.v1.PostStoreFileReaderOpenRequest
-	(*CellPair)(nil),                                       // 67: virogg.hbasecop.v1.CellPair
-	(*PostMutationBeforeWALRequest)(nil),                   // 68: virogg.hbasecop.v1.PostMutationBeforeWALRequest
-	(*PostIncrementBeforeWALRequest)(nil),                  // 69: virogg.hbasecop.v1.PostIncrementBeforeWALRequest
-	(*PostAppendBeforeWALRequest)(nil),                     // 70: virogg.hbasecop.v1.PostAppendBeforeWALRequest
-	(*PostInstantiateDeleteTrackerRequest)(nil),            // 71: virogg.hbasecop.v1.PostInstantiateDeleteTrackerRequest
-	(*PreWALAppendRequest)(nil),                            // 72: virogg.hbasecop.v1.PreWALAppendRequest
-	(*hbasepb.TableName)(nil),                              // 73: virogg.hbasecop.hbase.v1.TableName
-	(*hbasepb.MutationProto)(nil),                          // 74: virogg.hbasecop.hbase.v1.MutationProto
-	(*hbasepb.Get)(nil),                                    // 75: virogg.hbasecop.hbase.v1.Get
-	(*hbasepb.Cell)(nil),                                   // 76: virogg.hbasecop.hbase.v1.Cell
-	(*hbasepb.Result)(nil),                                 // 77: virogg.hbasecop.hbase.v1.Result
-	(*hbasepb.Scan)(nil),                                   // 78: virogg.hbasecop.hbase.v1.Scan
+	(*MutationOperation)(nil),                              // 29: virogg.hbasecop.v1.MutationOperation
+	(*PreBatchMutateRequest)(nil),                          // 30: virogg.hbasecop.v1.PreBatchMutateRequest
+	(*PostBatchMutateRequest)(nil),                         // 31: virogg.hbasecop.v1.PostBatchMutateRequest
+	(*PostBatchMutateIndispensablyRequest)(nil),            // 32: virogg.hbasecop.v1.PostBatchMutateIndispensablyRequest
+	(*PostStartRegionOperationRequest)(nil),                // 33: virogg.hbasecop.v1.PostStartRegionOperationRequest
+	(*PostCloseRegionOperationRequest)(nil),                // 34: virogg.hbasecop.v1.PostCloseRegionOperationRequest
+	(*PreCheckAndPutRequest)(nil),                          // 35: virogg.hbasecop.v1.PreCheckAndPutRequest
+	(*PostCheckAndPutRequest)(nil),                         // 36: virogg.hbasecop.v1.PostCheckAndPutRequest
+	(*PreCheckAndPutAfterRowLockRequest)(nil),              // 37: virogg.hbasecop.v1.PreCheckAndPutAfterRowLockRequest
+	(*PreCheckAndDeleteRequest)(nil),                       // 38: virogg.hbasecop.v1.PreCheckAndDeleteRequest
+	(*PostCheckAndDeleteRequest)(nil),                      // 39: virogg.hbasecop.v1.PostCheckAndDeleteRequest
+	(*PreCheckAndDeleteAfterRowLockRequest)(nil),           // 40: virogg.hbasecop.v1.PreCheckAndDeleteAfterRowLockRequest
+	(*CheckAndMutateAction)(nil),                           // 41: virogg.hbasecop.v1.CheckAndMutateAction
+	(*CheckAndMutateResultProto)(nil),                      // 42: virogg.hbasecop.v1.CheckAndMutateResultProto
+	(*PreCheckAndMutateRequest)(nil),                       // 43: virogg.hbasecop.v1.PreCheckAndMutateRequest
+	(*PostCheckAndMutateRequest)(nil),                      // 44: virogg.hbasecop.v1.PostCheckAndMutateRequest
+	(*PreCheckAndMutateAfterRowLockRequest)(nil),           // 45: virogg.hbasecop.v1.PreCheckAndMutateAfterRowLockRequest
+	(*PreAppendRequest)(nil),                               // 46: virogg.hbasecop.v1.PreAppendRequest
+	(*PostAppendRequest)(nil),                              // 47: virogg.hbasecop.v1.PostAppendRequest
+	(*PreAppendAfterRowLockRequest)(nil),                   // 48: virogg.hbasecop.v1.PreAppendAfterRowLockRequest
+	(*PreIncrementRequest)(nil),                            // 49: virogg.hbasecop.v1.PreIncrementRequest
+	(*PostIncrementRequest)(nil),                           // 50: virogg.hbasecop.v1.PostIncrementRequest
+	(*PreIncrementAfterRowLockRequest)(nil),                // 51: virogg.hbasecop.v1.PreIncrementAfterRowLockRequest
+	(*PreScannerOpenRequest)(nil),                          // 52: virogg.hbasecop.v1.PreScannerOpenRequest
+	(*PostScannerOpenRequest)(nil),                         // 53: virogg.hbasecop.v1.PostScannerOpenRequest
+	(*PreScannerNextRequest)(nil),                          // 54: virogg.hbasecop.v1.PreScannerNextRequest
+	(*PostScannerNextRequest)(nil),                         // 55: virogg.hbasecop.v1.PostScannerNextRequest
+	(*PostScannerFilterRowRequest)(nil),                    // 56: virogg.hbasecop.v1.PostScannerFilterRowRequest
+	(*PreScannerCloseRequest)(nil),                         // 57: virogg.hbasecop.v1.PreScannerCloseRequest
+	(*PostScannerCloseRequest)(nil),                        // 58: virogg.hbasecop.v1.PostScannerCloseRequest
+	(*PreStoreScannerOpenRequest)(nil),                     // 59: virogg.hbasecop.v1.PreStoreScannerOpenRequest
+	(*PreReplayWALsRequest)(nil),                           // 60: virogg.hbasecop.v1.PreReplayWALsRequest
+	(*PostReplayWALsRequest)(nil),                          // 61: virogg.hbasecop.v1.PostReplayWALsRequest
+	(*PreWALRestoreRequest)(nil),                           // 62: virogg.hbasecop.v1.PreWALRestoreRequest
+	(*PostWALRestoreRequest)(nil),                          // 63: virogg.hbasecop.v1.PostWALRestoreRequest
+	(*PreBulkLoadHFileRequest)(nil),                        // 64: virogg.hbasecop.v1.PreBulkLoadHFileRequest
+	(*PostBulkLoadHFileRequest)(nil),                       // 65: virogg.hbasecop.v1.PostBulkLoadHFileRequest
+	(*PreCommitStoreFileRequest)(nil),                      // 66: virogg.hbasecop.v1.PreCommitStoreFileRequest
+	(*PostCommitStoreFileRequest)(nil),                     // 67: virogg.hbasecop.v1.PostCommitStoreFileRequest
+	(*PreStoreFileReaderOpenRequest)(nil),                  // 68: virogg.hbasecop.v1.PreStoreFileReaderOpenRequest
+	(*PostStoreFileReaderOpenRequest)(nil),                 // 69: virogg.hbasecop.v1.PostStoreFileReaderOpenRequest
+	(*CellPair)(nil),                                       // 70: virogg.hbasecop.v1.CellPair
+	(*PostMutationBeforeWALRequest)(nil),                   // 71: virogg.hbasecop.v1.PostMutationBeforeWALRequest
+	(*PostIncrementBeforeWALRequest)(nil),                  // 72: virogg.hbasecop.v1.PostIncrementBeforeWALRequest
+	(*PostAppendBeforeWALRequest)(nil),                     // 73: virogg.hbasecop.v1.PostAppendBeforeWALRequest
+	(*PostInstantiateDeleteTrackerRequest)(nil),            // 74: virogg.hbasecop.v1.PostInstantiateDeleteTrackerRequest
+	(*PreWALAppendRequest)(nil),                            // 75: virogg.hbasecop.v1.PreWALAppendRequest
+	(*hbasepb.TableName)(nil),                              // 76: virogg.hbasecop.hbase.v1.TableName
+	(*hbasepb.MutationProto)(nil),                          // 77: virogg.hbasecop.hbase.v1.MutationProto
+	(*hbasepb.Get)(nil),                                    // 78: virogg.hbasecop.hbase.v1.Get
+	(*hbasepb.Cell)(nil),                                   // 79: virogg.hbasecop.hbase.v1.Cell
+	(*hbasepb.Comparator)(nil),                             // 80: virogg.hbasecop.hbase.v1.Comparator
+	(*hbasepb.Filter)(nil),                                 // 81: virogg.hbasecop.hbase.v1.Filter
+	(*hbasepb.Result)(nil),                                 // 82: virogg.hbasecop.hbase.v1.Result
+	(*hbasepb.Scan)(nil),                                   // 83: virogg.hbasecop.hbase.v1.Scan
 }
 var file_hooks_proto_depIdxs = []int32{
-	73,  // 0: virogg.hbasecop.v1.HookContext.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
+	76,  // 0: virogg.hbasecop.v1.HookContext.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
 	2,   // 1: virogg.hbasecop.v1.HookResponse.error:type_name -> virogg.hbasecop.v1.HookError
 	1,   // 2: virogg.hbasecop.v1.PrePutRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	74,  // 3: virogg.hbasecop.v1.PrePutRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	77,  // 3: virogg.hbasecop.v1.PrePutRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 4: virogg.hbasecop.v1.PostPutRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	74,  // 5: virogg.hbasecop.v1.PostPutRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	77,  // 5: virogg.hbasecop.v1.PostPutRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 6: virogg.hbasecop.v1.PreOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	1,   // 7: virogg.hbasecop.v1.PostOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	1,   // 8: virogg.hbasecop.v1.PreCloseRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
@@ -4283,91 +5016,116 @@ var file_hooks_proto_depIdxs = []int32{
 	1,   // 20: virogg.hbasecop.v1.PreCompactRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	1,   // 21: virogg.hbasecop.v1.PostCompactRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	1,   // 22: virogg.hbasecop.v1.PreGetOpRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	75,  // 23: virogg.hbasecop.v1.PreGetOpRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
+	78,  // 23: virogg.hbasecop.v1.PreGetOpRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
 	1,   // 24: virogg.hbasecop.v1.PostGetOpRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	75,  // 25: virogg.hbasecop.v1.PostGetOpRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
-	76,  // 26: virogg.hbasecop.v1.PostGetOpRequest.result:type_name -> virogg.hbasecop.hbase.v1.Cell
+	78,  // 25: virogg.hbasecop.v1.PostGetOpRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
+	79,  // 26: virogg.hbasecop.v1.PostGetOpRequest.result:type_name -> virogg.hbasecop.hbase.v1.Cell
 	1,   // 27: virogg.hbasecop.v1.PreExistsRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	75,  // 28: virogg.hbasecop.v1.PreExistsRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
+	78,  // 28: virogg.hbasecop.v1.PreExistsRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
 	1,   // 29: virogg.hbasecop.v1.PostExistsRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	75,  // 30: virogg.hbasecop.v1.PostExistsRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
+	78,  // 30: virogg.hbasecop.v1.PostExistsRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
 	1,   // 31: virogg.hbasecop.v1.PreDeleteRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	74,  // 32: virogg.hbasecop.v1.PreDeleteRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	77,  // 32: virogg.hbasecop.v1.PreDeleteRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 33: virogg.hbasecop.v1.PostDeleteRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	74,  // 34: virogg.hbasecop.v1.PostDeleteRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	77,  // 34: virogg.hbasecop.v1.PostDeleteRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 35: virogg.hbasecop.v1.PrePrepareTimeStampForDeleteVersionRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	74,  // 36: virogg.hbasecop.v1.PrePrepareTimeStampForDeleteVersionRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
-	76,  // 37: virogg.hbasecop.v1.PrePrepareTimeStampForDeleteVersionRequest.cell:type_name -> virogg.hbasecop.hbase.v1.Cell
-	75,  // 38: virogg.hbasecop.v1.PrePrepareTimeStampForDeleteVersionRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
-	1,   // 39: virogg.hbasecop.v1.PreBatchMutateRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,   // 40: virogg.hbasecop.v1.PostBatchMutateRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,   // 41: virogg.hbasecop.v1.PostBatchMutateIndispensablyRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,   // 42: virogg.hbasecop.v1.PostStartRegionOperationRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,   // 43: virogg.hbasecop.v1.PostCloseRegionOperationRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,   // 44: virogg.hbasecop.v1.PreCheckAndPutRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,   // 45: virogg.hbasecop.v1.PostCheckAndPutRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,   // 46: virogg.hbasecop.v1.PreCheckAndPutAfterRowLockRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,   // 47: virogg.hbasecop.v1.PreCheckAndDeleteRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,   // 48: virogg.hbasecop.v1.PostCheckAndDeleteRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,   // 49: virogg.hbasecop.v1.PreCheckAndDeleteAfterRowLockRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,   // 50: virogg.hbasecop.v1.PreCheckAndMutateRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,   // 51: virogg.hbasecop.v1.PostCheckAndMutateRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,   // 52: virogg.hbasecop.v1.PreCheckAndMutateAfterRowLockRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,   // 53: virogg.hbasecop.v1.PreAppendRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	74,  // 54: virogg.hbasecop.v1.PreAppendRequest.append:type_name -> virogg.hbasecop.hbase.v1.MutationProto
-	1,   // 55: virogg.hbasecop.v1.PostAppendRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	74,  // 56: virogg.hbasecop.v1.PostAppendRequest.append:type_name -> virogg.hbasecop.hbase.v1.MutationProto
-	77,  // 57: virogg.hbasecop.v1.PostAppendRequest.result:type_name -> virogg.hbasecop.hbase.v1.Result
-	1,   // 58: virogg.hbasecop.v1.PreAppendAfterRowLockRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	74,  // 59: virogg.hbasecop.v1.PreAppendAfterRowLockRequest.append:type_name -> virogg.hbasecop.hbase.v1.MutationProto
-	1,   // 60: virogg.hbasecop.v1.PreIncrementRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	74,  // 61: virogg.hbasecop.v1.PreIncrementRequest.increment:type_name -> virogg.hbasecop.hbase.v1.MutationProto
-	1,   // 62: virogg.hbasecop.v1.PostIncrementRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	74,  // 63: virogg.hbasecop.v1.PostIncrementRequest.increment:type_name -> virogg.hbasecop.hbase.v1.MutationProto
-	77,  // 64: virogg.hbasecop.v1.PostIncrementRequest.result:type_name -> virogg.hbasecop.hbase.v1.Result
-	1,   // 65: virogg.hbasecop.v1.PreIncrementAfterRowLockRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	74,  // 66: virogg.hbasecop.v1.PreIncrementAfterRowLockRequest.increment:type_name -> virogg.hbasecop.hbase.v1.MutationProto
-	1,   // 67: virogg.hbasecop.v1.PreScannerOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	78,  // 68: virogg.hbasecop.v1.PreScannerOpenRequest.scan:type_name -> virogg.hbasecop.hbase.v1.Scan
-	1,   // 69: virogg.hbasecop.v1.PostScannerOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	78,  // 70: virogg.hbasecop.v1.PostScannerOpenRequest.scan:type_name -> virogg.hbasecop.hbase.v1.Scan
-	1,   // 71: virogg.hbasecop.v1.PreScannerNextRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,   // 72: virogg.hbasecop.v1.PostScannerNextRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	77,  // 73: virogg.hbasecop.v1.PostScannerNextRequest.result:type_name -> virogg.hbasecop.hbase.v1.Result
-	1,   // 74: virogg.hbasecop.v1.PostScannerFilterRowRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	76,  // 75: virogg.hbasecop.v1.PostScannerFilterRowRequest.current_row:type_name -> virogg.hbasecop.hbase.v1.Cell
-	1,   // 76: virogg.hbasecop.v1.PreScannerCloseRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,   // 77: virogg.hbasecop.v1.PostScannerCloseRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,   // 78: virogg.hbasecop.v1.PreStoreScannerOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,   // 79: virogg.hbasecop.v1.PreReplayWALsRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,   // 80: virogg.hbasecop.v1.PostReplayWALsRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,   // 81: virogg.hbasecop.v1.PreWALRestoreRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,   // 82: virogg.hbasecop.v1.PostWALRestoreRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,   // 83: virogg.hbasecop.v1.PreBulkLoadHFileRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,   // 84: virogg.hbasecop.v1.PostBulkLoadHFileRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,   // 85: virogg.hbasecop.v1.PreCommitStoreFileRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,   // 86: virogg.hbasecop.v1.PostCommitStoreFileRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,   // 87: virogg.hbasecop.v1.PreStoreFileReaderOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,   // 88: virogg.hbasecop.v1.PostStoreFileReaderOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	76,  // 89: virogg.hbasecop.v1.CellPair.first:type_name -> virogg.hbasecop.hbase.v1.Cell
-	76,  // 90: virogg.hbasecop.v1.CellPair.second:type_name -> virogg.hbasecop.hbase.v1.Cell
-	1,   // 91: virogg.hbasecop.v1.PostMutationBeforeWALRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	74,  // 92: virogg.hbasecop.v1.PostMutationBeforeWALRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
-	76,  // 93: virogg.hbasecop.v1.PostMutationBeforeWALRequest.old_cell:type_name -> virogg.hbasecop.hbase.v1.Cell
-	76,  // 94: virogg.hbasecop.v1.PostMutationBeforeWALRequest.new_cell:type_name -> virogg.hbasecop.hbase.v1.Cell
-	1,   // 95: virogg.hbasecop.v1.PostIncrementBeforeWALRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	74,  // 96: virogg.hbasecop.v1.PostIncrementBeforeWALRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
-	67,  // 97: virogg.hbasecop.v1.PostIncrementBeforeWALRequest.cell_pair:type_name -> virogg.hbasecop.v1.CellPair
-	1,   // 98: virogg.hbasecop.v1.PostAppendBeforeWALRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	74,  // 99: virogg.hbasecop.v1.PostAppendBeforeWALRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
-	67,  // 100: virogg.hbasecop.v1.PostAppendBeforeWALRequest.cell_pair:type_name -> virogg.hbasecop.v1.CellPair
-	1,   // 101: virogg.hbasecop.v1.PostInstantiateDeleteTrackerRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,   // 102: virogg.hbasecop.v1.PreWALAppendRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	103, // [103:103] is the sub-list for method output_type
-	103, // [103:103] is the sub-list for method input_type
-	103, // [103:103] is the sub-list for extension type_name
-	103, // [103:103] is the sub-list for extension extendee
-	0,   // [0:103] is the sub-list for field type_name
+	77,  // 36: virogg.hbasecop.v1.PrePrepareTimeStampForDeleteVersionRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	79,  // 37: virogg.hbasecop.v1.PrePrepareTimeStampForDeleteVersionRequest.cell:type_name -> virogg.hbasecop.hbase.v1.Cell
+	78,  // 38: virogg.hbasecop.v1.PrePrepareTimeStampForDeleteVersionRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
+	77,  // 39: virogg.hbasecop.v1.MutationOperation.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	1,   // 40: virogg.hbasecop.v1.PreBatchMutateRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	29,  // 41: virogg.hbasecop.v1.PreBatchMutateRequest.operation:type_name -> virogg.hbasecop.v1.MutationOperation
+	1,   // 42: virogg.hbasecop.v1.PostBatchMutateRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	29,  // 43: virogg.hbasecop.v1.PostBatchMutateRequest.operation:type_name -> virogg.hbasecop.v1.MutationOperation
+	1,   // 44: virogg.hbasecop.v1.PostBatchMutateIndispensablyRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	29,  // 45: virogg.hbasecop.v1.PostBatchMutateIndispensablyRequest.operation:type_name -> virogg.hbasecop.v1.MutationOperation
+	1,   // 46: virogg.hbasecop.v1.PostStartRegionOperationRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,   // 47: virogg.hbasecop.v1.PostCloseRegionOperationRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,   // 48: virogg.hbasecop.v1.PreCheckAndPutRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	80,  // 49: virogg.hbasecop.v1.PreCheckAndPutRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
+	77,  // 50: virogg.hbasecop.v1.PreCheckAndPutRequest.put:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	1,   // 51: virogg.hbasecop.v1.PostCheckAndPutRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	80,  // 52: virogg.hbasecop.v1.PostCheckAndPutRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
+	77,  // 53: virogg.hbasecop.v1.PostCheckAndPutRequest.put:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	1,   // 54: virogg.hbasecop.v1.PreCheckAndPutAfterRowLockRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	80,  // 55: virogg.hbasecop.v1.PreCheckAndPutAfterRowLockRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
+	77,  // 56: virogg.hbasecop.v1.PreCheckAndPutAfterRowLockRequest.put:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	1,   // 57: virogg.hbasecop.v1.PreCheckAndDeleteRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	80,  // 58: virogg.hbasecop.v1.PreCheckAndDeleteRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
+	77,  // 59: virogg.hbasecop.v1.PreCheckAndDeleteRequest.delete:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	1,   // 60: virogg.hbasecop.v1.PostCheckAndDeleteRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	80,  // 61: virogg.hbasecop.v1.PostCheckAndDeleteRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
+	77,  // 62: virogg.hbasecop.v1.PostCheckAndDeleteRequest.delete:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	1,   // 63: virogg.hbasecop.v1.PreCheckAndDeleteAfterRowLockRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	80,  // 64: virogg.hbasecop.v1.PreCheckAndDeleteAfterRowLockRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
+	77,  // 65: virogg.hbasecop.v1.PreCheckAndDeleteAfterRowLockRequest.delete:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	81,  // 66: virogg.hbasecop.v1.CheckAndMutateAction.filter:type_name -> virogg.hbasecop.hbase.v1.Filter
+	77,  // 67: virogg.hbasecop.v1.CheckAndMutateAction.action:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	82,  // 68: virogg.hbasecop.v1.CheckAndMutateResultProto.result:type_name -> virogg.hbasecop.hbase.v1.Result
+	1,   // 69: virogg.hbasecop.v1.PreCheckAndMutateRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	41,  // 70: virogg.hbasecop.v1.PreCheckAndMutateRequest.action:type_name -> virogg.hbasecop.v1.CheckAndMutateAction
+	42,  // 71: virogg.hbasecop.v1.PreCheckAndMutateRequest.input_result:type_name -> virogg.hbasecop.v1.CheckAndMutateResultProto
+	1,   // 72: virogg.hbasecop.v1.PostCheckAndMutateRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	41,  // 73: virogg.hbasecop.v1.PostCheckAndMutateRequest.action:type_name -> virogg.hbasecop.v1.CheckAndMutateAction
+	42,  // 74: virogg.hbasecop.v1.PostCheckAndMutateRequest.input_result:type_name -> virogg.hbasecop.v1.CheckAndMutateResultProto
+	1,   // 75: virogg.hbasecop.v1.PreCheckAndMutateAfterRowLockRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	41,  // 76: virogg.hbasecop.v1.PreCheckAndMutateAfterRowLockRequest.action:type_name -> virogg.hbasecop.v1.CheckAndMutateAction
+	42,  // 77: virogg.hbasecop.v1.PreCheckAndMutateAfterRowLockRequest.input_result:type_name -> virogg.hbasecop.v1.CheckAndMutateResultProto
+	1,   // 78: virogg.hbasecop.v1.PreAppendRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	77,  // 79: virogg.hbasecop.v1.PreAppendRequest.append:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	1,   // 80: virogg.hbasecop.v1.PostAppendRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	77,  // 81: virogg.hbasecop.v1.PostAppendRequest.append:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	82,  // 82: virogg.hbasecop.v1.PostAppendRequest.result:type_name -> virogg.hbasecop.hbase.v1.Result
+	1,   // 83: virogg.hbasecop.v1.PreAppendAfterRowLockRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	77,  // 84: virogg.hbasecop.v1.PreAppendAfterRowLockRequest.append:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	1,   // 85: virogg.hbasecop.v1.PreIncrementRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	77,  // 86: virogg.hbasecop.v1.PreIncrementRequest.increment:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	1,   // 87: virogg.hbasecop.v1.PostIncrementRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	77,  // 88: virogg.hbasecop.v1.PostIncrementRequest.increment:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	82,  // 89: virogg.hbasecop.v1.PostIncrementRequest.result:type_name -> virogg.hbasecop.hbase.v1.Result
+	1,   // 90: virogg.hbasecop.v1.PreIncrementAfterRowLockRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	77,  // 91: virogg.hbasecop.v1.PreIncrementAfterRowLockRequest.increment:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	1,   // 92: virogg.hbasecop.v1.PreScannerOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	83,  // 93: virogg.hbasecop.v1.PreScannerOpenRequest.scan:type_name -> virogg.hbasecop.hbase.v1.Scan
+	1,   // 94: virogg.hbasecop.v1.PostScannerOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	83,  // 95: virogg.hbasecop.v1.PostScannerOpenRequest.scan:type_name -> virogg.hbasecop.hbase.v1.Scan
+	1,   // 96: virogg.hbasecop.v1.PreScannerNextRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,   // 97: virogg.hbasecop.v1.PostScannerNextRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	82,  // 98: virogg.hbasecop.v1.PostScannerNextRequest.result:type_name -> virogg.hbasecop.hbase.v1.Result
+	1,   // 99: virogg.hbasecop.v1.PostScannerFilterRowRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	79,  // 100: virogg.hbasecop.v1.PostScannerFilterRowRequest.current_row:type_name -> virogg.hbasecop.hbase.v1.Cell
+	1,   // 101: virogg.hbasecop.v1.PreScannerCloseRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,   // 102: virogg.hbasecop.v1.PostScannerCloseRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,   // 103: virogg.hbasecop.v1.PreStoreScannerOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,   // 104: virogg.hbasecop.v1.PreReplayWALsRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,   // 105: virogg.hbasecop.v1.PostReplayWALsRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,   // 106: virogg.hbasecop.v1.PreWALRestoreRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,   // 107: virogg.hbasecop.v1.PostWALRestoreRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,   // 108: virogg.hbasecop.v1.PreBulkLoadHFileRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,   // 109: virogg.hbasecop.v1.PostBulkLoadHFileRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,   // 110: virogg.hbasecop.v1.PreCommitStoreFileRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,   // 111: virogg.hbasecop.v1.PostCommitStoreFileRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,   // 112: virogg.hbasecop.v1.PreStoreFileReaderOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,   // 113: virogg.hbasecop.v1.PostStoreFileReaderOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	79,  // 114: virogg.hbasecop.v1.CellPair.first:type_name -> virogg.hbasecop.hbase.v1.Cell
+	79,  // 115: virogg.hbasecop.v1.CellPair.second:type_name -> virogg.hbasecop.hbase.v1.Cell
+	1,   // 116: virogg.hbasecop.v1.PostMutationBeforeWALRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	77,  // 117: virogg.hbasecop.v1.PostMutationBeforeWALRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	79,  // 118: virogg.hbasecop.v1.PostMutationBeforeWALRequest.old_cell:type_name -> virogg.hbasecop.hbase.v1.Cell
+	79,  // 119: virogg.hbasecop.v1.PostMutationBeforeWALRequest.new_cell:type_name -> virogg.hbasecop.hbase.v1.Cell
+	1,   // 120: virogg.hbasecop.v1.PostIncrementBeforeWALRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	77,  // 121: virogg.hbasecop.v1.PostIncrementBeforeWALRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	70,  // 122: virogg.hbasecop.v1.PostIncrementBeforeWALRequest.cell_pair:type_name -> virogg.hbasecop.v1.CellPair
+	1,   // 123: virogg.hbasecop.v1.PostAppendBeforeWALRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	77,  // 124: virogg.hbasecop.v1.PostAppendBeforeWALRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	70,  // 125: virogg.hbasecop.v1.PostAppendBeforeWALRequest.cell_pair:type_name -> virogg.hbasecop.v1.CellPair
+	1,   // 126: virogg.hbasecop.v1.PostInstantiateDeleteTrackerRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,   // 127: virogg.hbasecop.v1.PreWALAppendRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	128, // [128:128] is the sub-list for method output_type
+	128, // [128:128] is the sub-list for method input_type
+	128, // [128:128] is the sub-list for extension type_name
+	128, // [128:128] is the sub-list for extension extendee
+	0,   // [0:128] is the sub-list for field type_name
 }
 
 func init() { file_hooks_proto_init() }
@@ -4381,7 +5139,7 @@ func file_hooks_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_hooks_proto_rawDesc), len(file_hooks_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   72,
+			NumMessages:   75,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -45,6 +45,16 @@ enum Consistency {
   TIMELINE = 1;
 }
 
+/**
+ * Comparator envelope (mirrors hbase-protocol-shaded Comparator.proto).
+ * Ships (class-name, serialized-bytes); reconstruction is opaque to the
+ * Go side today.
+ */
+message Comparator {
+  required string name = 1;
+  optional bytes serialized_comparator = 2;
+}
+
 /** Container for a list of column qualifier names of a family. */
 message Column {
   required bytes family = 1;

@@ -256,23 +256,149 @@ message PrePrepareTimeStampForDeleteVersionRequest {
   virogg.hbasecop.hbase.v1.Get get = 5;
 }
 
-message PreBatchMutateRequest { HookContext ctx = 1; }
-message PostBatchMutateRequest { HookContext ctx = 1; }
-message PostBatchMutateIndispensablyRequest { HookContext ctx = 1; }
-message PostStartRegionOperationRequest { HookContext ctx = 1; }
-message PostCloseRegionOperationRequest { HookContext ctx = 1; }
+// Batch mutate (T42 Wave 3). HBase's MiniBatchOperationInProgress
+// holds an array of Mutation operations with parallel
+// OperationStatus codes; we ship one MutationOperation per slot.
 
-message PreCheckAndPutRequest { HookContext ctx = 1; }
-message PostCheckAndPutRequest { HookContext ctx = 1; }
-message PreCheckAndPutAfterRowLockRequest { HookContext ctx = 1; }
+message MutationOperation {
+  virogg.hbasecop.hbase.v1.MutationProto mutation = 1;
+  // Mirror of HBase's OperationStatusCode enum: SUCCESS=0, BAD_FAMILY=1,
+  // SANITY_CHECK_FAILURE=2, NOT_RUN=3, FAILURE=4. Int32 keeps proto3
+  // compatibility with the proto2 vendored enum.
+  int32 operation_status_code = 2;
+}
 
-message PreCheckAndDeleteRequest { HookContext ctx = 1; }
-message PostCheckAndDeleteRequest { HookContext ctx = 1; }
-message PreCheckAndDeleteAfterRowLockRequest { HookContext ctx = 1; }
+message PreBatchMutateRequest {
+  HookContext ctx = 1;
+  repeated MutationOperation operation = 2;
+}
+message PostBatchMutateRequest {
+  HookContext ctx = 1;
+  repeated MutationOperation operation = 2;
+}
+message PostBatchMutateIndispensablyRequest {
+  HookContext ctx = 1;
+  repeated MutationOperation operation = 2;
+  bool success = 3;
+}
 
-message PreCheckAndMutateRequest { HookContext ctx = 1; }
-message PostCheckAndMutateRequest { HookContext ctx = 1; }
-message PreCheckAndMutateAfterRowLockRequest { HookContext ctx = 1; }
+// Region operation envelope (open / close round-trip the operation kind).
+// Region.Operation enum is mirrored as int32; see HBase's
+// org.apache.hadoop.hbase.regionserver.Region.Operation ordinal order.
+message PostStartRegionOperationRequest {
+  HookContext ctx = 1;
+  int32 operation = 2;
+}
+message PostCloseRegionOperationRequest {
+  HookContext ctx = 1;
+  int32 operation = 2;
+}
+
+// Check-and-* (T42 Wave 3). All three families share the same column-
+// based check shape (row + family + qualifier + compare_op + comparator
+// + mutation + input flag). compare_op is an int32 mirror of
+// org.apache.hadoop.hbase.CompareOperator (LESS=0, LESS_OR_EQUAL=1,
+// EQUAL=2, NOT_EQUAL=3, GREATER_OR_EQUAL=4, GREATER=5, NO_OP=6).
+
+message PreCheckAndPutRequest {
+  HookContext ctx = 1;
+  bytes row = 2;
+  bytes family = 3;
+  bytes qualifier = 4;
+  int32 compare_op = 5;
+  virogg.hbasecop.hbase.v1.Comparator comparator = 6;
+  virogg.hbasecop.hbase.v1.MutationProto put = 7;
+  // Input flag passed by HBase to the pre-hook (current check result).
+  bool input_result = 8;
+}
+message PostCheckAndPutRequest {
+  HookContext ctx = 1;
+  bytes row = 2;
+  bytes family = 3;
+  bytes qualifier = 4;
+  int32 compare_op = 5;
+  virogg.hbasecop.hbase.v1.Comparator comparator = 6;
+  virogg.hbasecop.hbase.v1.MutationProto put = 7;
+  bool input_result = 8;
+}
+message PreCheckAndPutAfterRowLockRequest {
+  HookContext ctx = 1;
+  bytes row = 2;
+  bytes family = 3;
+  bytes qualifier = 4;
+  int32 compare_op = 5;
+  virogg.hbasecop.hbase.v1.Comparator comparator = 6;
+  virogg.hbasecop.hbase.v1.MutationProto put = 7;
+  bool input_result = 8;
+}
+
+message PreCheckAndDeleteRequest {
+  HookContext ctx = 1;
+  bytes row = 2;
+  bytes family = 3;
+  bytes qualifier = 4;
+  int32 compare_op = 5;
+  virogg.hbasecop.hbase.v1.Comparator comparator = 6;
+  virogg.hbasecop.hbase.v1.MutationProto delete = 7;
+  bool input_result = 8;
+}
+message PostCheckAndDeleteRequest {
+  HookContext ctx = 1;
+  bytes row = 2;
+  bytes family = 3;
+  bytes qualifier = 4;
+  int32 compare_op = 5;
+  virogg.hbasecop.hbase.v1.Comparator comparator = 6;
+  virogg.hbasecop.hbase.v1.MutationProto delete = 7;
+  bool input_result = 8;
+}
+message PreCheckAndDeleteAfterRowLockRequest {
+  HookContext ctx = 1;
+  bytes row = 2;
+  bytes family = 3;
+  bytes qualifier = 4;
+  int32 compare_op = 5;
+  virogg.hbasecop.hbase.v1.Comparator comparator = 6;
+  virogg.hbasecop.hbase.v1.MutationProto delete = 7;
+  bool input_result = 8;
+}
+
+// CheckAndMutate (HBase 2.4+). Either column-based check (family +
+// qualifier + compare_op + value) OR filter-based check (filter) is
+// populated by HBase; the action mutation type is encoded in the
+// MutationProto's mutate_type. Note: the legacy preCheckAndPut/Delete
+// overloads use a Comparator (above); CheckAndMutate uses a fixed
+// byte[] value instead.
+message CheckAndMutateAction {
+  bytes row = 1;
+  bytes family = 2;
+  bytes qualifier = 3;
+  int32 compare_op = 4;
+  bytes value = 5;
+  virogg.hbasecop.hbase.v1.Filter filter = 6;
+  virogg.hbasecop.hbase.v1.MutationProto action = 7;
+}
+
+message CheckAndMutateResultProto {
+  bool success = 1;
+  virogg.hbasecop.hbase.v1.Result result = 2;
+}
+
+message PreCheckAndMutateRequest {
+  HookContext ctx = 1;
+  CheckAndMutateAction action = 2;
+  CheckAndMutateResultProto input_result = 3;
+}
+message PostCheckAndMutateRequest {
+  HookContext ctx = 1;
+  CheckAndMutateAction action = 2;
+  CheckAndMutateResultProto input_result = 3;
+}
+message PreCheckAndMutateAfterRowLockRequest {
+  HookContext ctx = 1;
+  CheckAndMutateAction action = 2;
+  CheckAndMutateResultProto input_result = 3;
+}
 
 // Append (T42 Wave 2). HBase's Append maps to MutationProto with
 // mutate_type=APPEND; the post-hook also carries the read-side Result.
