@@ -38,7 +38,7 @@
 - [x] T32 Strict-mode wiring → IOException; best-effort → log+continue
 - [x] T33 Heartbeat watchdog (kill -9 on miss)
 - [x] T34 Auto-restart with exponential backoff
-- [ ] T35 Inflight handling on crash + restart-deadline
+- [x] T35 Inflight handling on crash + restart-deadline
 - [ ] T36 Fault-injection test suite (≥10 matrix cases)
 - [ ] **CP-δ:** strict/best-effort semantics validated; **gate:** decide Open Q #1 (multi-tenant)
 

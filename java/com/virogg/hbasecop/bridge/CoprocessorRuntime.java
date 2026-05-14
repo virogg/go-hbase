@@ -19,6 +19,7 @@ import com.virogg.hbasecop.bridge.wire.Decoder;
 import com.virogg.hbasecop.bridge.wire.Encoder;
 import com.virogg.hbasecop.bridge.wire.Message;
 import com.virogg.hbasecop.bridge.wire.WireException;
+import com.virogg.hbasecop.multiplex.GoSideCrashedException;
 import com.virogg.hbasecop.multiplex.Multiplexer;
 import java.io.IOException;
 import java.lang.System.Logger;
@@ -76,6 +77,12 @@ public final class CoprocessorRuntime implements AutoCloseable {
 
   /** Configuration key: cap on the per-attempt restart delay. */
   public static final String KEY_RESTART_MAX_DELAY = "hbasecop.restart.max-delay";
+
+  /** Configuration key: deadline for deferred calls during a paused-by-crash window. */
+  public static final String KEY_RESTART_DEADLINE = "hbasecop.restart.deadline";
+
+  /** Default deadline a call issued during a paused-by-crash window waits before failing. */
+  public static final Duration DEFAULT_RESTART_DEADLINE = Duration.ofSeconds(3);
 
   private final Config cfg;
 
@@ -139,7 +146,12 @@ public final class CoprocessorRuntime implements AutoCloseable {
       }
 
       Encoder enc = new Encoder();
-      mux = new Multiplexer(msg -> sendOnChannel(javaToGo, enc, msg));
+      long restartDeadlineMs = resolveRestartDeadlineMs(cfg);
+      mux =
+          Multiplexer.builder(msg -> sendOnChannel(javaToGo, enc, msg))
+              .restartDeadlineMs(restartDeadlineMs)
+              .scheduler(watchdogScheduler)
+              .build();
 
       reader = new ChannelReader(goToJava, new Decoder(), mux, watchdog);
       readerThread = new Thread(reader, "hbasecop-reader");
@@ -209,6 +221,11 @@ public final class CoprocessorRuntime implements AutoCloseable {
   /** Visible-for-testing: current Go pid, or {@code -1} if no process is running. */
   synchronized long goProcessPidForTesting() {
     return goProcess == null ? -1L : goProcess.pid();
+  }
+
+  /** Visible-for-testing: the active multiplexer, or {@code null} before {@link #start()}. */
+  synchronized Multiplexer multiplexerForTesting() {
+    return mux;
   }
 
   /**
@@ -321,12 +338,22 @@ public final class CoprocessorRuntime implements AutoCloseable {
   private void detectExitedGoProcess() {
     GoProcess gp;
     RestartController c;
+    Multiplexer m;
+    long pid;
     synchronized (this) {
       gp = goProcess;
       c = restartController;
+      m = mux;
+      pid = gp == null ? -1L : gp.pid();
     }
-    if (gp != null && !gp.isAlive() && c != null) {
-      c.notifyDead();
+    if (gp != null && !gp.isAlive()) {
+      if (m != null) {
+        m.pauseInflightFailing(
+            new GoSideCrashedException("Go process pid=" + pid + " exited unexpectedly"));
+      }
+      if (c != null) {
+        c.notifyDead();
+      }
     }
   }
 
@@ -336,8 +363,10 @@ public final class CoprocessorRuntime implements AutoCloseable {
    */
   private void onHung(long elapsedMs) {
     GoProcess gp;
+    Multiplexer m;
     synchronized (this) {
       gp = goProcess;
+      m = mux;
     }
     long pid = gp == null ? -1L : gp.pid();
     LOG.log(
@@ -347,6 +376,11 @@ public final class CoprocessorRuntime implements AutoCloseable {
         elapsedMs);
     if (gp != null) {
       gp.destroyForcibly();
+    }
+    if (m != null) {
+      m.pauseInflightFailing(
+          new GoSideCrashedException(
+              "Go process pid=" + pid + " hung for " + elapsedMs + "ms, SIGKILLed"));
     }
     RestartController c = restartController;
     if (c != null) {
@@ -389,6 +423,11 @@ public final class CoprocessorRuntime implements AutoCloseable {
         if (wd != null) {
           wd.recordHeartbeat();
         }
+        // Let any deferred (post-crash) calls go through to the new process.
+        Multiplexer m = mux;
+        if (m != null) {
+          m.resume();
+        }
         LOG.log(
             Level.INFO,
             "CoprocessorRuntime: restart succeeded (old pid={0}, new pid={1})",
@@ -423,6 +462,18 @@ public final class CoprocessorRuntime implements AutoCloseable {
         System::currentTimeMillis,
         this::attemptRestart,
         ThreadLocalRandom.current()::nextDouble);
+  }
+
+  private static long resolveRestartDeadlineMs(Config cfg) {
+    if (cfg.restartDeadline() != null) {
+      return cfg.restartDeadline().toMillis();
+    }
+    Configuration conf = cfg.configuration();
+    if (conf == null) {
+      return DEFAULT_RESTART_DEADLINE.toMillis();
+    }
+    return conf.getTimeDuration(
+        KEY_RESTART_DEADLINE, DEFAULT_RESTART_DEADLINE.toMillis(), TimeUnit.MILLISECONDS);
   }
 
   private static RestartConfig resolveRestartConfig(Config cfg) {
@@ -600,6 +651,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
     private final Duration gracefulShutdownTimeout;
     private final Configuration configuration;
     private final RestartConfig restartConfig;
+    private final Duration restartDeadline;
 
     private Config(Builder b) {
       this.binaryResourcePath = b.binaryResourcePath;
@@ -619,6 +671,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
           Objects.requireNonNull(b.gracefulShutdownTimeout, "gracefulShutdownTimeout");
       this.configuration = b.configuration;
       this.restartConfig = b.restartConfig;
+      this.restartDeadline = b.restartDeadline;
     }
 
     public String binaryResourcePath() {
@@ -671,6 +724,15 @@ public final class CoprocessorRuntime implements AutoCloseable {
       return restartConfig;
     }
 
+    /**
+     * Deadline a call issued during a paused-by-crash window waits for restart before failing with
+     * {@link GoSideCrashedException}. {@code null} → derive from {@link #configuration()} via
+     * {@link #KEY_RESTART_DEADLINE} or fall back to {@link #DEFAULT_RESTART_DEADLINE}.
+     */
+    public Duration restartDeadline() {
+      return restartDeadline;
+    }
+
     public static Builder builder() {
       return new Builder();
     }
@@ -687,6 +749,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
       private Duration gracefulShutdownTimeout = Duration.ofSeconds(2);
       private Configuration configuration;
       private RestartConfig restartConfig;
+      private Duration restartDeadline;
 
       public Builder binaryResourcePath(String s) {
         this.binaryResourcePath = s;
@@ -745,6 +808,17 @@ public final class CoprocessorRuntime implements AutoCloseable {
        */
       public Builder restartConfig(RestartConfig rc) {
         this.restartConfig = rc;
+        return this;
+      }
+
+      /**
+       * Override the deadline a call waits during a paused-by-crash window before failing with
+       * {@link GoSideCrashedException}. When omitted, the runtime derives it from {@link
+       * #configuration(Configuration)} via {@code hbasecop.restart.deadline}, falling back to
+       * {@link #DEFAULT_RESTART_DEADLINE}.
+       */
+      public Builder restartDeadline(Duration d) {
+        this.restartDeadline = d;
         return this;
       }
 

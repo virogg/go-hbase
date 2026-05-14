@@ -3,6 +3,7 @@
 
 package com.virogg.hbasecop.multiplex;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -24,9 +25,11 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 class MultiplexerTest {
@@ -248,6 +251,186 @@ class MultiplexerTest {
     // Second deliver for the same reqId is an orphan.
     assertFalse(
         mux.deliver(new Message(FrameType.RESPONSE, sent.reqId(), 1, (byte) 9, new byte[0])));
+  }
+
+  @Test
+  void pauseInflightFailsPendingWithGoSideCrashedException() throws Exception {
+    Multiplexer mux = new Multiplexer(msg -> {});
+
+    List<CompletableFuture<Message>> futures = new ArrayList<>();
+    for (int i = 0; i < 5; i++) {
+      futures.add(mux.call(new Message(FrameType.REQUEST, 0, 0, (byte) 0, null)));
+    }
+
+    GoSideCrashedException reason = new GoSideCrashedException("pid 1234 exited");
+    mux.pauseInflightFailing(reason);
+
+    for (CompletableFuture<Message> f : futures) {
+      ExecutionException ee =
+          assertThrows(ExecutionException.class, () -> f.get(1, TimeUnit.SECONDS));
+      assertSame(reason, ee.getCause(), () -> "cause=" + ee.getCause());
+    }
+    mux.close();
+  }
+
+  @Test
+  void pauseIsIdempotent() {
+    Multiplexer mux = new Multiplexer(msg -> {});
+    mux.pauseInflightFailing(new GoSideCrashedException("first"));
+    // Second pause must not throw and is a no-op when already paused.
+    mux.pauseInflightFailing(new GoSideCrashedException("second"));
+    mux.close();
+  }
+
+  @Test
+  void callDuringPauseDefersAndDoesNotInvokeSender() {
+    AtomicInteger sends = new AtomicInteger();
+    ScheduledExecutorService scheduler =
+        Executors.newSingleThreadScheduledExecutor(
+            r -> {
+              Thread t = new Thread(r, "mux-test-scheduler");
+              t.setDaemon(true);
+              return t;
+            });
+    try {
+      Multiplexer mux =
+          Multiplexer.builder(msg -> sends.incrementAndGet())
+              .restartDeadlineMs(1_000L)
+              .scheduler(scheduler)
+              .build();
+      mux.pauseInflightFailing(new GoSideCrashedException("paused"));
+
+      CompletableFuture<Message> f = mux.call(new Message(FrameType.REQUEST, 0, 0, (byte) 0, null));
+      assertFalse(f.isDone(), "deferred call must not complete while paused");
+      assertEquals(0, sends.get(), "sender must not be invoked during pause");
+
+      mux.close();
+      ExecutionException ee = assertThrows(ExecutionException.class, () -> f.get(1, SECONDS));
+      assertTrue(ee.getCause() instanceof ChannelClosedException);
+    } finally {
+      scheduler.shutdownNow();
+    }
+  }
+
+  @Test
+  void resumeDispatchesDeferredCalls() throws Exception {
+    ConcurrentLinkedQueue<Message> outbox = new ConcurrentLinkedQueue<>();
+    ScheduledExecutorService scheduler =
+        Executors.newSingleThreadScheduledExecutor(
+            r -> {
+              Thread t = new Thread(r, "mux-test-scheduler");
+              t.setDaemon(true);
+              return t;
+            });
+    try {
+      Multiplexer mux =
+          Multiplexer.builder(outbox::add).restartDeadlineMs(5_000L).scheduler(scheduler).build();
+      mux.pauseInflightFailing(new GoSideCrashedException("paused"));
+
+      CompletableFuture<Message> f =
+          mux.call(new Message(FrameType.REQUEST, 0, 7, (byte) 9, new byte[] {1, 2, 3}));
+      assertFalse(f.isDone(), "deferred while paused");
+      assertTrue(outbox.isEmpty(), "no send yet");
+
+      mux.resume();
+
+      // After resume, the queued call must reach the sender as REQUEST with the
+      // mux-assigned reqId.
+      Message sent = null;
+      long deadline = System.currentTimeMillis() + 1_000L;
+      while (System.currentTimeMillis() < deadline && sent == null) {
+        sent = outbox.poll();
+        if (sent == null) Thread.sleep(5);
+      }
+      assertNotNull(sent, "resume must dispatch deferred calls");
+      assertEquals(FrameType.REQUEST, sent.type());
+      assertEquals(7, sent.regionId());
+      assertEquals((byte) 9, sent.hookId());
+
+      assertTrue(
+          mux.deliver(new Message(FrameType.RESPONSE, sent.reqId(), 7, (byte) 9, new byte[0])));
+      assertNotNull(f.get(1, SECONDS));
+    } finally {
+      scheduler.shutdownNow();
+    }
+  }
+
+  @Test
+  void deferredCallFailsAfterRestartDeadline() throws Exception {
+    AtomicInteger sends = new AtomicInteger();
+    ScheduledExecutorService scheduler =
+        Executors.newSingleThreadScheduledExecutor(
+            r -> {
+              Thread t = new Thread(r, "mux-test-scheduler");
+              t.setDaemon(true);
+              return t;
+            });
+    try {
+      Multiplexer mux =
+          Multiplexer.builder(msg -> sends.incrementAndGet())
+              .restartDeadlineMs(100L)
+              .scheduler(scheduler)
+              .build();
+      mux.pauseInflightFailing(new GoSideCrashedException("paused"));
+
+      long t0 = System.currentTimeMillis();
+      CompletableFuture<Message> f = mux.call(new Message(FrameType.REQUEST, 0, 0, (byte) 0, null));
+
+      ExecutionException ee = assertThrows(ExecutionException.class, () -> f.get(2, SECONDS));
+      long elapsed = System.currentTimeMillis() - t0;
+      assertTrue(
+          ee.getCause() instanceof GoSideCrashedException,
+          () -> "expected GoSideCrashedException, got " + ee.getCause());
+      assertTrue(
+          elapsed >= 100L && elapsed < 1_000L,
+          () -> "deferred fail should fire near deadline; elapsed=" + elapsed + "ms");
+      assertEquals(0, sends.get(), "sender must not be invoked for deferred-then-failed call");
+      mux.close();
+    } finally {
+      scheduler.shutdownNow();
+    }
+  }
+
+  @Test
+  void callDuringPauseFailsImmediatelyWhenNoSchedulerWired() {
+    AtomicInteger sends = new AtomicInteger();
+    Multiplexer mux = new Multiplexer(msg -> sends.incrementAndGet()); // no scheduler / deadline
+    GoSideCrashedException reason = new GoSideCrashedException("kill -9");
+    mux.pauseInflightFailing(reason);
+
+    CompletableFuture<Message> f = mux.call(new Message(FrameType.REQUEST, 0, 0, (byte) 0, null));
+    assertTrue(f.isCompletedExceptionally());
+    ExecutionException ee = assertThrows(ExecutionException.class, f::get);
+    assertSame(reason, ee.getCause());
+    assertEquals(0, sends.get(), "sender must not run during pause");
+    mux.close();
+  }
+
+  @Test
+  void closeDuringPauseFailsDeferredCallsWithChannelClosed() throws Exception {
+    ScheduledExecutorService scheduler =
+        Executors.newSingleThreadScheduledExecutor(
+            r -> {
+              Thread t = new Thread(r, "mux-test-scheduler");
+              t.setDaemon(true);
+              return t;
+            });
+    try {
+      Multiplexer mux =
+          Multiplexer.builder(msg -> {}).restartDeadlineMs(5_000L).scheduler(scheduler).build();
+      mux.pauseInflightFailing(new GoSideCrashedException("paused"));
+
+      CompletableFuture<Message> f = mux.call(new Message(FrameType.REQUEST, 0, 0, (byte) 0, null));
+      assertFalse(f.isDone());
+
+      mux.close();
+      ExecutionException ee = assertThrows(ExecutionException.class, () -> f.get(1, SECONDS));
+      assertTrue(
+          ee.getCause() instanceof ChannelClosedException,
+          () -> "expected ChannelClosedException, got " + ee.getCause());
+    } finally {
+      scheduler.shutdownNow();
+    }
   }
 
   @Test
