@@ -382,7 +382,7 @@ public final class RegionObserverAdapter implements RegionObserver {
       ObserverContext<RegionCoprocessorEnvironment> c, Put put, WALEdit edit, Durability durability)
       throws IOException {
     HookContext hookCtx = buildHookContext(c);
-    MutationProto mutation = PutConverter.toProto(put);
+    MutationProto mutation = MutationConverter.toProto(put);
     byte[] reqBytes =
         PrePutRequest.newBuilder().setCtx(hookCtx).setMutation(mutation).build().toByteArray();
     HookResponse resp = dispatch(HOOK_PRE_PUT, reqBytes);
@@ -394,7 +394,7 @@ public final class RegionObserverAdapter implements RegionObserver {
       ObserverContext<RegionCoprocessorEnvironment> c, Put put, WALEdit edit, Durability durability)
       throws IOException {
     HookContext hookCtx = buildHookContext(c);
-    MutationProto mutation = PutConverter.toProto(put);
+    MutationProto mutation = MutationConverter.toProto(put);
     byte[] reqBytes =
         PostPutRequest.newBuilder().setCtx(hookCtx).setMutation(mutation).build().toByteArray();
     HookResponse resp = dispatch(HOOK_POST_PUT, reqBytes);
@@ -410,7 +410,15 @@ public final class RegionObserverAdapter implements RegionObserver {
       WALEdit edit,
       Durability durability)
       throws IOException {
-    dispatchStub(c, HookId.PRE_DELETE, PreDeleteRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    byte[] reqBytes =
+        PreDeleteRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setMutation(MutationConverter.toProto(delete))
+            .build()
+            .toByteArray();
+    HookResponse resp = dispatch(HookId.PRE_DELETE.value(), reqBytes);
+    applyHookResponse(c, resp);
   }
 
   @Override
@@ -420,7 +428,15 @@ public final class RegionObserverAdapter implements RegionObserver {
       WALEdit edit,
       Durability durability)
       throws IOException {
-    dispatchStub(c, HookId.POST_DELETE, PostDeleteRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    byte[] reqBytes =
+        PostDeleteRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setMutation(MutationConverter.toProto(delete))
+            .build()
+            .toByteArray();
+    HookResponse resp = dispatch(HookId.POST_DELETE.value(), reqBytes);
+    applyHookResponse(c, resp);
   }
 
   @Override
@@ -431,10 +447,21 @@ public final class RegionObserverAdapter implements RegionObserver {
       byte[] byteNow,
       Get get)
       throws IOException {
-    dispatchStub(
-        c,
-        HookId.PRE_PREPARE_TIME_STAMP_FOR_DELETE_VERSION,
-        PrePrepareTimeStampForDeleteVersionRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    PrePrepareTimeStampForDeleteVersionRequest.Builder b =
+        PrePrepareTimeStampForDeleteVersionRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setMutation(MutationConverter.toProto(mutation))
+            .setCell(CellConverter.toProto(cell));
+    if (byteNow != null) {
+      b.setByteNow(ByteString.copyFrom(byteNow));
+    }
+    if (get != null) {
+      b.setGet(GetConverter.toProto(get));
+    }
+    HookResponse resp =
+        dispatch(HookId.PRE_PREPARE_TIME_STAMP_FOR_DELETE_VERSION.value(), b.build().toByteArray());
+    applyHookResponse(c, resp);
   }
 
   // --- Batch mutate + region operation envelope -------------------------
@@ -614,12 +641,20 @@ public final class RegionObserverAdapter implements RegionObserver {
     return result;
   }
 
-  // --- Append ------------------------------------------------------------
+  // --- Append (T42 Wave 2: bodies populated) ----------------------------
 
   @Override
   public Result preAppend(ObserverContext<RegionCoprocessorEnvironment> c, Append append)
       throws IOException {
-    dispatchStub(c, HookId.PRE_APPEND, PreAppendRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    byte[] reqBytes =
+        PreAppendRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setAppend(MutationConverter.toProto(append))
+            .build()
+            .toByteArray();
+    HookResponse resp = dispatch(HookId.PRE_APPEND.value(), reqBytes);
+    applyHookResponse(c, resp);
     return null;
   }
 
@@ -627,23 +662,46 @@ public final class RegionObserverAdapter implements RegionObserver {
   public Result postAppend(
       ObserverContext<RegionCoprocessorEnvironment> c, Append append, Result result)
       throws IOException {
-    dispatchStub(c, HookId.POST_APPEND, PostAppendRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    PostAppendRequest.Builder b =
+        PostAppendRequest.newBuilder().setCtx(hookCtx).setAppend(MutationConverter.toProto(append));
+    if (result != null) {
+      b.setResult(ResultConverter.toProto(result));
+    }
+    HookResponse resp = dispatch(HookId.POST_APPEND.value(), b.build().toByteArray());
+    applyHookResponse(c, resp);
     return result;
   }
 
   @Override
   public Result preAppendAfterRowLock(
       ObserverContext<RegionCoprocessorEnvironment> c, Append append) throws IOException {
-    dispatchStub(c, HookId.PRE_APPEND_AFTER_ROW_LOCK, PreAppendAfterRowLockRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    byte[] reqBytes =
+        PreAppendAfterRowLockRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setAppend(MutationConverter.toProto(append))
+            .build()
+            .toByteArray();
+    HookResponse resp = dispatch(HookId.PRE_APPEND_AFTER_ROW_LOCK.value(), reqBytes);
+    applyHookResponse(c, resp);
     return null;
   }
 
-  // --- Increment ---------------------------------------------------------
+  // --- Increment (T42 Wave 2: bodies populated) -------------------------
 
   @Override
   public Result preIncrement(ObserverContext<RegionCoprocessorEnvironment> c, Increment increment)
       throws IOException {
-    dispatchStub(c, HookId.PRE_INCREMENT, PreIncrementRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    byte[] reqBytes =
+        PreIncrementRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setIncrement(MutationConverter.toProto(increment))
+            .build()
+            .toByteArray();
+    HookResponse resp = dispatch(HookId.PRE_INCREMENT.value(), reqBytes);
+    applyHookResponse(c, resp);
     return null;
   }
 
@@ -651,15 +709,31 @@ public final class RegionObserverAdapter implements RegionObserver {
   public Result postIncrement(
       ObserverContext<RegionCoprocessorEnvironment> c, Increment increment, Result result)
       throws IOException {
-    dispatchStub(c, HookId.POST_INCREMENT, PostIncrementRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    PostIncrementRequest.Builder b =
+        PostIncrementRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setIncrement(MutationConverter.toProto(increment));
+    if (result != null) {
+      b.setResult(ResultConverter.toProto(result));
+    }
+    HookResponse resp = dispatch(HookId.POST_INCREMENT.value(), b.build().toByteArray());
+    applyHookResponse(c, resp);
     return result;
   }
 
   @Override
   public Result preIncrementAfterRowLock(
       ObserverContext<RegionCoprocessorEnvironment> c, Increment increment) throws IOException {
-    dispatchStub(
-        c, HookId.PRE_INCREMENT_AFTER_ROW_LOCK, PreIncrementAfterRowLockRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    byte[] reqBytes =
+        PreIncrementAfterRowLockRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setIncrement(MutationConverter.toProto(increment))
+            .build()
+            .toByteArray();
+    HookResponse resp = dispatch(HookId.PRE_INCREMENT_AFTER_ROW_LOCK.value(), reqBytes);
+    applyHookResponse(c, resp);
     return null;
   }
 
@@ -898,7 +972,7 @@ public final class RegionObserverAdapter implements RegionObserver {
     return reader;
   }
 
-  // --- Before-WAL hooks --------------------------------------------------
+  // --- Before-WAL hooks (T42 Wave 2: bodies populated) ------------------
 
   @Override
   public Cell postMutationBeforeWAL(
@@ -908,7 +982,20 @@ public final class RegionObserverAdapter implements RegionObserver {
       Cell oldCell,
       Cell newCell)
       throws IOException {
-    dispatchStub(c, HookId.POST_MUTATION_BEFORE_WAL, PostMutationBeforeWALRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    PostMutationBeforeWALRequest.Builder b =
+        PostMutationBeforeWALRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setMutationType(opType == null ? 0 : opType.ordinal())
+            .setMutation(MutationConverter.toProto(mutation));
+    if (oldCell != null) {
+      b.setOldCell(CellConverter.toProto(oldCell));
+    }
+    if (newCell != null) {
+      b.setNewCell(CellConverter.toProto(newCell));
+    }
+    HookResponse resp = dispatch(HookId.POST_MUTATION_BEFORE_WAL.value(), b.build().toByteArray());
+    applyHookResponse(c, resp);
     return newCell;
   }
 
@@ -918,7 +1005,18 @@ public final class RegionObserverAdapter implements RegionObserver {
       Mutation mutation,
       List<Pair<Cell, Cell>> cellPairs)
       throws IOException {
-    dispatchStub(c, HookId.POST_INCREMENT_BEFORE_WAL, PostIncrementBeforeWALRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    PostIncrementBeforeWALRequest.Builder b =
+        PostIncrementBeforeWALRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setMutation(MutationConverter.toProto(mutation));
+    if (cellPairs != null) {
+      for (Pair<Cell, Cell> p : cellPairs) {
+        b.addCellPair(buildCellPair(p));
+      }
+    }
+    HookResponse resp = dispatch(HookId.POST_INCREMENT_BEFORE_WAL.value(), b.build().toByteArray());
+    applyHookResponse(c, resp);
     return cellPairs;
   }
 
@@ -928,8 +1026,31 @@ public final class RegionObserverAdapter implements RegionObserver {
       Mutation mutation,
       List<Pair<Cell, Cell>> cellPairs)
       throws IOException {
-    dispatchStub(c, HookId.POST_APPEND_BEFORE_WAL, PostAppendBeforeWALRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    PostAppendBeforeWALRequest.Builder b =
+        PostAppendBeforeWALRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setMutation(MutationConverter.toProto(mutation));
+    if (cellPairs != null) {
+      for (Pair<Cell, Cell> p : cellPairs) {
+        b.addCellPair(buildCellPair(p));
+      }
+    }
+    HookResponse resp = dispatch(HookId.POST_APPEND_BEFORE_WAL.value(), b.build().toByteArray());
+    applyHookResponse(c, resp);
     return cellPairs;
+  }
+
+  private static com.virogg.hbasecop.bridge.wire.pb.CellPair buildCellPair(Pair<Cell, Cell> p) {
+    com.virogg.hbasecop.bridge.wire.pb.CellPair.Builder b =
+        com.virogg.hbasecop.bridge.wire.pb.CellPair.newBuilder();
+    if (p.getFirst() != null) {
+      b.setFirst(CellConverter.toProto(p.getFirst()));
+    }
+    if (p.getSecond() != null) {
+      b.setSecond(CellConverter.toProto(p.getSecond()));
+    }
+    return b.build();
   }
 
   // --- Delete tracker, WAL append ---------------------------------------

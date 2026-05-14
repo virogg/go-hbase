@@ -237,9 +237,24 @@ message PostExistsRequest {
   bool exists = 3;
 }
 
-message PreDeleteRequest { HookContext ctx = 1; }
-message PostDeleteRequest { HookContext ctx = 1; }
-message PrePrepareTimeStampForDeleteVersionRequest { HookContext ctx = 1; }
+// Write path — Delete + version-stamp prepare (T42 Wave 2).
+message PreDeleteRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.MutationProto mutation = 2;
+}
+message PostDeleteRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.MutationProto mutation = 2;
+}
+message PrePrepareTimeStampForDeleteVersionRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.MutationProto mutation = 2;
+  virogg.hbasecop.hbase.v1.Cell cell = 3;
+  // The "now" timestamp HBase considers for the delete version, as a
+  // raw 8-byte big-endian buffer (matches HBase's internal byte[] form).
+  bytes byte_now = 4;
+  virogg.hbasecop.hbase.v1.Get get = 5;
+}
 
 message PreBatchMutateRequest { HookContext ctx = 1; }
 message PostBatchMutateRequest { HookContext ctx = 1; }
@@ -259,13 +274,37 @@ message PreCheckAndMutateRequest { HookContext ctx = 1; }
 message PostCheckAndMutateRequest { HookContext ctx = 1; }
 message PreCheckAndMutateAfterRowLockRequest { HookContext ctx = 1; }
 
-message PreAppendRequest { HookContext ctx = 1; }
-message PostAppendRequest { HookContext ctx = 1; }
-message PreAppendAfterRowLockRequest { HookContext ctx = 1; }
+// Append (T42 Wave 2). HBase's Append maps to MutationProto with
+// mutate_type=APPEND; the post-hook also carries the read-side Result.
+message PreAppendRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.MutationProto append = 2;
+}
+message PostAppendRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.MutationProto append = 2;
+  virogg.hbasecop.hbase.v1.Result result = 3;
+}
+message PreAppendAfterRowLockRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.MutationProto append = 2;
+}
 
-message PreIncrementRequest { HookContext ctx = 1; }
-message PostIncrementRequest { HookContext ctx = 1; }
-message PreIncrementAfterRowLockRequest { HookContext ctx = 1; }
+// Increment (T42 Wave 2). Same shape as Append; mutate_type=INCREMENT
+// distinguishes on the wire.
+message PreIncrementRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.MutationProto increment = 2;
+}
+message PostIncrementRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.MutationProto increment = 2;
+  virogg.hbasecop.hbase.v1.Result result = 3;
+}
+message PreIncrementAfterRowLockRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.MutationProto increment = 2;
+}
 
 // Scanner hooks (T42 Wave 1). The scanner state itself (InternalScanner,
 // RegionScanner) is runtime-only and not shippable; we send the Scan
@@ -320,9 +359,38 @@ message PostCommitStoreFileRequest { HookContext ctx = 1; }
 message PreStoreFileReaderOpenRequest { HookContext ctx = 1; }
 message PostStoreFileReaderOpenRequest { HookContext ctx = 1; }
 
-message PostMutationBeforeWALRequest { HookContext ctx = 1; }
-message PostIncrementBeforeWALRequest { HookContext ctx = 1; }
-message PostAppendBeforeWALRequest { HookContext ctx = 1; }
+// Before-WAL hooks (T42 Wave 2). HBase invokes these on the cell stream
+// HBase will write to the WAL, giving the observer a chance to rewrite
+// individual cells (e.g. tag-injection).
+
+// CellPair carries the (old, new) cell pair the Increment/Append
+// before-WAL hooks expose to the observer.
+message CellPair {
+  virogg.hbasecop.hbase.v1.Cell first = 1;
+  virogg.hbasecop.hbase.v1.Cell second = 2;
+}
+
+message PostMutationBeforeWALRequest {
+  HookContext ctx = 1;
+  // Discriminator carrying the value of RegionObserver.MutationType, mapped
+  // 1:1 onto MutationProto.MutationType (APPEND=0, INCREMENT=1, PUT=2, DELETE=3).
+  // Held as int32 because proto3 messages cannot reference proto2 enums
+  // directly — the vendored MutationProto.MutationType is proto2.
+  int32 mutation_type = 2;
+  virogg.hbasecop.hbase.v1.MutationProto mutation = 3;
+  virogg.hbasecop.hbase.v1.Cell old_cell = 4;
+  virogg.hbasecop.hbase.v1.Cell new_cell = 5;
+}
+message PostIncrementBeforeWALRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.MutationProto mutation = 2;
+  repeated CellPair cell_pair = 3;
+}
+message PostAppendBeforeWALRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.MutationProto mutation = 2;
+  repeated CellPair cell_pair = 3;
+}
 
 message PostInstantiateDeleteTrackerRequest { HookContext ctx = 1; }
 message PreWALAppendRequest { HookContext ctx = 1; }
