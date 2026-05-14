@@ -24,9 +24,9 @@ const (
 )
 
 // dispatcher routes inbound wire-level Request frames to the
-// appropriate RegionObserver method and serialises the result back
-// into a Response (or Error) frame. It is the only place where the SDK
-// crosses between the wire encoding and the user-facing API.
+// appropriate RegionObserver method via the canonical hookTable (T41).
+// It is the only place where the SDK crosses between the wire encoding
+// and the user-facing API.
 type dispatcher struct {
 	observer RegionObserver
 	logger   *slog.Logger
@@ -39,12 +39,13 @@ func newDispatcher(observer RegionObserver, logger *slog.Logger) *dispatcher {
 	return &dispatcher{observer: observer, logger: logger}
 }
 
-// dispatch decodes one Request frame, invokes the matching observer
-// method and returns the frame to send back. Returning a TypeError
-// frame signals a protocol-level failure (malformed Request, unknown
-// hook id, marshal error); observer-level failures travel inside a
-// TypeResponse with HookResponse.error populated, so the Java adapter
-// can apply the configured failure policy uniformly (T31/T32).
+// dispatch decodes one Request frame, looks up the hook in the
+// canonical dispatch table, invokes the matching observer method and
+// returns the frame to send back. Returning a TypeError frame signals
+// a protocol-level failure (malformed Request, unknown hook id,
+// marshal error); observer-level failures travel inside a TypeResponse
+// with HookResponse.error populated, so the Java adapter can apply the
+// configured failure policy uniformly (T31/T32).
 func (d *dispatcher) dispatch(ctx context.Context, req *wire.Message) *wire.Message {
 	var wireReq wirepb.Request
 	if err := proto.Unmarshal(req.Payload, &wireReq); err != nil {
@@ -53,40 +54,40 @@ func (d *dispatcher) dispatch(ctx context.Context, req *wire.Message) *wire.Mess
 		return d.errorFrame(req, errCodeInvalidWireRequest, "invalid wire Request: "+err.Error())
 	}
 
-	switch HookID(req.HookID) {
-	case HookIDPrePut:
-		return d.dispatchPrePut(ctx, req, wireReq.GetHookCtx())
-	case HookIDPostPut:
-		return d.dispatchPostPut(ctx, req, wireReq.GetHookCtx())
-	default:
+	entry, ok := hooksByID[HookID(req.HookID)]
+	if !ok {
 		d.logger.Warn("hbasecop: unknown hook_id",
 			"hook_id", req.HookID, "req_id", req.ReqID)
 		return d.errorFrame(req, errCodeUnknownHook, "unknown hook")
 	}
-}
 
-func (d *dispatcher) dispatchPrePut(ctx context.Context, req *wire.Message, hookCtxBytes []byte) *wire.Message {
-	var prePut hookpb.PrePutRequest
-	if err := proto.Unmarshal(hookCtxBytes, &prePut); err != nil {
-		d.logger.Error("hbasecop: invalid PrePutRequest",
-			"err", err, "req_id", req.ReqID)
-		return d.errorFrame(req, errCodeInvalidWireRequest, "invalid PrePutRequest: "+err.Error())
+	inner := entry.decode()
+	if err := proto.Unmarshal(wireReq.GetHookCtx(), inner); err != nil {
+		d.logger.Error("hbasecop: invalid "+entry.name+"Request",
+			"err", err, "req_id", req.ReqID, "hook", entry.name)
+		return d.errorFrame(req, errCodeInvalidWireRequest,
+			"invalid "+entry.name+"Request: "+err.Error())
 	}
-	env := envFromHookContext(prePut.GetCtx())
-	result, callErr := d.observer.PrePut(ctx, env, prePut.GetMutation())
+	env := envFromHookContext(extractHookCtx(inner))
+
+	result, callErr := entry.invoke(d.observer, ctx, env, inner)
 	return d.responseFrame(req, result.Bypass, callErr)
 }
 
-func (d *dispatcher) dispatchPostPut(ctx context.Context, req *wire.Message, hookCtxBytes []byte) *wire.Message {
-	var postPut hookpb.PostPutRequest
-	if err := proto.Unmarshal(hookCtxBytes, &postPut); err != nil {
-		d.logger.Error("hbasecop: invalid PostPutRequest",
-			"err", err, "req_id", req.ReqID)
-		return d.errorFrame(req, errCodeInvalidWireRequest, "invalid PostPutRequest: "+err.Error())
+// extractHookCtx pulls the shared HookContext out of any per-hook
+// Request type. Every T41 stub message embeds HookContext at field 1
+// (see proto/hooks.proto); the generated Go code therefore exposes
+// GetCtx() on each. We rely on the structural interface so the
+// dispatch table can stay request-type-agnostic.
+type hookContextGetter interface {
+	GetCtx() *hookpb.HookContext
+}
+
+func extractHookCtx(msg proto.Message) *hookpb.HookContext {
+	if g, ok := msg.(hookContextGetter); ok {
+		return g.GetCtx()
 	}
-	env := envFromHookContext(postPut.GetCtx())
-	callErr := d.observer.PostPut(ctx, env, postPut.GetMutation())
-	return d.responseFrame(req, false, callErr)
+	return nil
 }
 
 func envFromHookContext(hc *hookpb.HookContext) ObserverEnv {

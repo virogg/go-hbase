@@ -3,11 +3,16 @@
 
 // Per-hook request/response messages for HBase Observer coprocessors.
 //
-// Each Observer method maps to one HookId (T41 hook table) and one
-// concrete Request/Response message pair. The set below is the Phase 2
-// MVP — PrePut + PostPut over real HBase types (vendored under
-// proto/hbase/). T41+ extends this file to the full RegionObserver
-// surface and adds Master/RegionServer/WAL/BulkLoad envelopes.
+// Each Observer method maps to one HookId value (T41 dispatch table) and
+// one concrete Request message. Both sides agree on the HookId enum and
+// the per-hook envelope shapes; the Go SDK and the Java RegionObserver
+// adapter share this proto as their single source of truth.
+//
+// Phase 2 wired PrePut/PostPut end-to-end with real HBase types
+// (vendored under proto/hbase/). T41 extends the surface to every
+// RegionObserver hook from HBase 2.5 — the messages other than
+// Pre/PostPutRequest carry only HookContext for now; T42 grows each
+// stub with its per-hook payload (Cell, Get, Scan, …).
 //
 // Stability: alpha.
 
@@ -23,14 +28,128 @@ option java_package = "com.virogg.hbasecop.bridge.wire.pb";
 option java_multiple_files = true;
 option java_outer_classname = "HooksProto";
 
+// HookId is the on-wire discriminator that selects a RegionObserver
+// method on the Go side. Values are stable across versions; both
+// FrameHeader.hook_id and the Go-side dispatch table key on this enum.
+//
+// The wire frame layout uses a single byte for hook_id (see
+// internal/wire), so values must fit in uint8 (<=255). 68 RegionObserver
+// hooks today; well under the cap.
+enum HookId {
+  HOOK_ID_UNSPECIFIED = 0;
+
+  // Lifecycle.
+  HOOK_ID_PRE_OPEN = 1;
+  HOOK_ID_POST_OPEN = 2;
+  HOOK_ID_PRE_CLOSE = 3;
+  HOOK_ID_POST_CLOSE = 4;
+
+  // Flush.
+  HOOK_ID_PRE_FLUSH = 5;
+  HOOK_ID_PRE_FLUSH_SCANNER_OPEN = 6;
+  HOOK_ID_POST_FLUSH = 7;
+
+  // MemStore compaction.
+  HOOK_ID_PRE_MEM_STORE_COMPACTION = 8;
+  HOOK_ID_PRE_MEM_STORE_COMPACTION_COMPACT_SCANNER_OPEN = 9;
+  HOOK_ID_PRE_MEM_STORE_COMPACTION_COMPACT = 10;
+  HOOK_ID_POST_MEM_STORE_COMPACTION = 11;
+
+  // Compaction.
+  HOOK_ID_PRE_COMPACT_SELECTION = 12;
+  HOOK_ID_POST_COMPACT_SELECTION = 13;
+  HOOK_ID_PRE_COMPACT_SCANNER_OPEN = 14;
+  HOOK_ID_PRE_COMPACT = 15;
+  HOOK_ID_POST_COMPACT = 16;
+
+  // Read path.
+  HOOK_ID_PRE_GET_OP = 17;
+  HOOK_ID_POST_GET_OP = 18;
+  HOOK_ID_PRE_EXISTS = 19;
+  HOOK_ID_POST_EXISTS = 20;
+
+  // Write path (single-row).
+  HOOK_ID_PRE_PUT = 21;
+  HOOK_ID_POST_PUT = 22;
+  HOOK_ID_PRE_DELETE = 23;
+  HOOK_ID_POST_DELETE = 24;
+  HOOK_ID_PRE_PREPARE_TIME_STAMP_FOR_DELETE_VERSION = 25;
+
+  // Batch mutate + region operation envelope.
+  HOOK_ID_PRE_BATCH_MUTATE = 26;
+  HOOK_ID_POST_BATCH_MUTATE = 27;
+  HOOK_ID_POST_BATCH_MUTATE_INDISPENSABLY = 28;
+  HOOK_ID_POST_START_REGION_OPERATION = 29;
+  HOOK_ID_POST_CLOSE_REGION_OPERATION = 30;
+
+  // Check-and-Put family.
+  HOOK_ID_PRE_CHECK_AND_PUT = 31;
+  HOOK_ID_POST_CHECK_AND_PUT = 32;
+  HOOK_ID_PRE_CHECK_AND_PUT_AFTER_ROW_LOCK = 33;
+
+  // Check-and-Delete family.
+  HOOK_ID_PRE_CHECK_AND_DELETE = 34;
+  HOOK_ID_POST_CHECK_AND_DELETE = 35;
+  HOOK_ID_PRE_CHECK_AND_DELETE_AFTER_ROW_LOCK = 36;
+
+  // Check-and-Mutate family.
+  HOOK_ID_PRE_CHECK_AND_MUTATE = 37;
+  HOOK_ID_POST_CHECK_AND_MUTATE = 38;
+  HOOK_ID_PRE_CHECK_AND_MUTATE_AFTER_ROW_LOCK = 39;
+
+  // Append.
+  HOOK_ID_PRE_APPEND = 40;
+  HOOK_ID_POST_APPEND = 41;
+  HOOK_ID_PRE_APPEND_AFTER_ROW_LOCK = 42;
+
+  // Increment.
+  HOOK_ID_PRE_INCREMENT = 43;
+  HOOK_ID_POST_INCREMENT = 44;
+  HOOK_ID_PRE_INCREMENT_AFTER_ROW_LOCK = 45;
+
+  // Scanner.
+  HOOK_ID_PRE_SCANNER_OPEN = 46;
+  HOOK_ID_POST_SCANNER_OPEN = 47;
+  HOOK_ID_PRE_SCANNER_NEXT = 48;
+  HOOK_ID_POST_SCANNER_NEXT = 49;
+  HOOK_ID_POST_SCANNER_FILTER_ROW = 50;
+  HOOK_ID_PRE_SCANNER_CLOSE = 51;
+  HOOK_ID_POST_SCANNER_CLOSE = 52;
+  HOOK_ID_PRE_STORE_SCANNER_OPEN = 53;
+
+  // WAL replay/restore.
+  HOOK_ID_PRE_REPLAY_WA_LS = 54;
+  HOOK_ID_POST_REPLAY_WA_LS = 55;
+  HOOK_ID_PRE_WAL_RESTORE = 56;
+  HOOK_ID_POST_WAL_RESTORE = 57;
+
+  // Bulk load + store-file commit.
+  HOOK_ID_PRE_BULK_LOAD_H_FILE = 58;
+  HOOK_ID_POST_BULK_LOAD_H_FILE = 59;
+  HOOK_ID_PRE_COMMIT_STORE_FILE = 60;
+  HOOK_ID_POST_COMMIT_STORE_FILE = 61;
+
+  // Store-file reader.
+  HOOK_ID_PRE_STORE_FILE_READER_OPEN = 62;
+  HOOK_ID_POST_STORE_FILE_READER_OPEN = 63;
+
+  // Before-WAL hooks.
+  HOOK_ID_POST_MUTATION_BEFORE_WAL = 64;
+  HOOK_ID_POST_INCREMENT_BEFORE_WAL = 65;
+  HOOK_ID_POST_APPEND_BEFORE_WAL = 66;
+
+  // Delete tracker, WAL append.
+  HOOK_ID_POST_INSTANTIATE_DELETE_TRACKER = 67;
+  HOOK_ID_PRE_WAL_APPEND = 68;
+}
+
 // HookContext is the shared per-call envelope sent with every hook
 // invocation. Identifies the table + region the call is bound to and
 // carries the observer-supplied request id used to correlate logs and
-// traces across the bridge. Caller identity, observer environment refs
-// and configured policy land here in later tasks (T22+).
+// traces across the bridge.
 message HookContext {
   virogg.hbasecop.hbase.v1.TableName table_name = 1;
-  bytes region_name = 2; // encoded region name (RegionInfo.encoded_name)
+  bytes region_name = 2;  // encoded region name (RegionInfo.encoded_name)
   uint64 request_id = 3;
 }
 
@@ -47,25 +166,109 @@ message HookError {
 // field triggers the corresponding RegionObserver semantics on the
 // Java side.
 message HookResponse {
-  // If true, the Java adapter calls ObserverContext.bypass() before
-  // returning so HBase skips its own implementation of the hook.
   bool bypass = 1;
-  // Set when the observer wants the operation rejected; mapped to the
-  // configured failure policy (T31/T32).
   HookError error = 2;
 }
 
-// PrePutRequest is the inbound payload for the prePut RegionObserver
-// hook. Carries the Put mutation as protobuf so the Go side never has
-// to know about HBase's native Cell layout.
+// PrePutRequest is the inbound payload for prePut. Phase-2 message,
+// kept stable for the frozen PrePut/PostPut SDK contract.
 message PrePutRequest {
   HookContext ctx = 1;
   virogg.hbasecop.hbase.v1.MutationProto mutation = 2;
 }
 
-// PostPutRequest is the inbound payload for postPut. Identical shape
-// to PrePutRequest at the wire level; the hook_id discriminates.
+// PostPutRequest is the inbound payload for postPut.
 message PostPutRequest {
   HookContext ctx = 1;
   virogg.hbasecop.hbase.v1.MutationProto mutation = 2;
 }
+
+// ---------------------------------------------------------------------
+// T41 stub requests. Each carries HookContext only — per-hook payload
+// (Cell, Get, Scan, …) lands in T42 as fields are appended. The proto
+// number-1 ctx field stays stable for forward compatibility.
+// ---------------------------------------------------------------------
+
+message PreOpenRequest { HookContext ctx = 1; }
+message PostOpenRequest { HookContext ctx = 1; }
+message PreCloseRequest { HookContext ctx = 1; }
+message PostCloseRequest { HookContext ctx = 1; }
+
+message PreFlushRequest { HookContext ctx = 1; }
+message PreFlushScannerOpenRequest { HookContext ctx = 1; }
+message PostFlushRequest { HookContext ctx = 1; }
+
+message PreMemStoreCompactionRequest { HookContext ctx = 1; }
+message PreMemStoreCompactionCompactScannerOpenRequest { HookContext ctx = 1; }
+message PreMemStoreCompactionCompactRequest { HookContext ctx = 1; }
+message PostMemStoreCompactionRequest { HookContext ctx = 1; }
+
+message PreCompactSelectionRequest { HookContext ctx = 1; }
+message PostCompactSelectionRequest { HookContext ctx = 1; }
+message PreCompactScannerOpenRequest { HookContext ctx = 1; }
+message PreCompactRequest { HookContext ctx = 1; }
+message PostCompactRequest { HookContext ctx = 1; }
+
+message PreGetOpRequest { HookContext ctx = 1; }
+message PostGetOpRequest { HookContext ctx = 1; }
+message PreExistsRequest { HookContext ctx = 1; }
+message PostExistsRequest { HookContext ctx = 1; }
+
+message PreDeleteRequest { HookContext ctx = 1; }
+message PostDeleteRequest { HookContext ctx = 1; }
+message PrePrepareTimeStampForDeleteVersionRequest { HookContext ctx = 1; }
+
+message PreBatchMutateRequest { HookContext ctx = 1; }
+message PostBatchMutateRequest { HookContext ctx = 1; }
+message PostBatchMutateIndispensablyRequest { HookContext ctx = 1; }
+message PostStartRegionOperationRequest { HookContext ctx = 1; }
+message PostCloseRegionOperationRequest { HookContext ctx = 1; }
+
+message PreCheckAndPutRequest { HookContext ctx = 1; }
+message PostCheckAndPutRequest { HookContext ctx = 1; }
+message PreCheckAndPutAfterRowLockRequest { HookContext ctx = 1; }
+
+message PreCheckAndDeleteRequest { HookContext ctx = 1; }
+message PostCheckAndDeleteRequest { HookContext ctx = 1; }
+message PreCheckAndDeleteAfterRowLockRequest { HookContext ctx = 1; }
+
+message PreCheckAndMutateRequest { HookContext ctx = 1; }
+message PostCheckAndMutateRequest { HookContext ctx = 1; }
+message PreCheckAndMutateAfterRowLockRequest { HookContext ctx = 1; }
+
+message PreAppendRequest { HookContext ctx = 1; }
+message PostAppendRequest { HookContext ctx = 1; }
+message PreAppendAfterRowLockRequest { HookContext ctx = 1; }
+
+message PreIncrementRequest { HookContext ctx = 1; }
+message PostIncrementRequest { HookContext ctx = 1; }
+message PreIncrementAfterRowLockRequest { HookContext ctx = 1; }
+
+message PreScannerOpenRequest { HookContext ctx = 1; }
+message PostScannerOpenRequest { HookContext ctx = 1; }
+message PreScannerNextRequest { HookContext ctx = 1; }
+message PostScannerNextRequest { HookContext ctx = 1; }
+message PostScannerFilterRowRequest { HookContext ctx = 1; }
+message PreScannerCloseRequest { HookContext ctx = 1; }
+message PostScannerCloseRequest { HookContext ctx = 1; }
+message PreStoreScannerOpenRequest { HookContext ctx = 1; }
+
+message PreReplayWALsRequest { HookContext ctx = 1; }
+message PostReplayWALsRequest { HookContext ctx = 1; }
+message PreWALRestoreRequest { HookContext ctx = 1; }
+message PostWALRestoreRequest { HookContext ctx = 1; }
+
+message PreBulkLoadHFileRequest { HookContext ctx = 1; }
+message PostBulkLoadHFileRequest { HookContext ctx = 1; }
+message PreCommitStoreFileRequest { HookContext ctx = 1; }
+message PostCommitStoreFileRequest { HookContext ctx = 1; }
+
+message PreStoreFileReaderOpenRequest { HookContext ctx = 1; }
+message PostStoreFileReaderOpenRequest { HookContext ctx = 1; }
+
+message PostMutationBeforeWALRequest { HookContext ctx = 1; }
+message PostIncrementBeforeWALRequest { HookContext ctx = 1; }
+message PostAppendBeforeWALRequest { HookContext ctx = 1; }
+
+message PostInstantiateDeleteTrackerRequest { HookContext ctx = 1; }
+message PreWALAppendRequest { HookContext ctx = 1; }
