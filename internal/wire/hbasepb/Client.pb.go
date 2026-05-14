@@ -164,7 +164,7 @@ func (x *Scan_ReadType) UnmarshalJSON(b []byte) error {
 
 // Deprecated: Use Scan_ReadType.Descriptor instead.
 func (Scan_ReadType) EnumDescriptor() ([]byte, []int) {
-	return file_hbase_Client_proto_rawDescGZIP(), []int{5, 0}
+	return file_hbase_Client_proto_rawDescGZIP(), []int{6, 0}
 }
 
 type MutationProto_Durability int32
@@ -229,7 +229,7 @@ func (x *MutationProto_Durability) UnmarshalJSON(b []byte) error {
 
 // Deprecated: Use MutationProto_Durability.Descriptor instead.
 func (MutationProto_Durability) EnumDescriptor() ([]byte, []int) {
-	return file_hbase_Client_proto_rawDescGZIP(), []int{6, 0}
+	return file_hbase_Client_proto_rawDescGZIP(), []int{7, 0}
 }
 
 type MutationProto_MutationType int32
@@ -291,7 +291,7 @@ func (x *MutationProto_MutationType) UnmarshalJSON(b []byte) error {
 
 // Deprecated: Use MutationProto_MutationType.Descriptor instead.
 func (MutationProto_MutationType) EnumDescriptor() ([]byte, []int) {
-	return file_hbase_Client_proto_rawDescGZIP(), []int{6, 1}
+	return file_hbase_Client_proto_rawDescGZIP(), []int{7, 1}
 }
 
 type MutationProto_DeleteType int32
@@ -353,7 +353,63 @@ func (x *MutationProto_DeleteType) UnmarshalJSON(b []byte) error {
 
 // Deprecated: Use MutationProto_DeleteType.Descriptor instead.
 func (MutationProto_DeleteType) EnumDescriptor() ([]byte, []int) {
-	return file_hbase_Client_proto_rawDescGZIP(), []int{6, 2}
+	return file_hbase_Client_proto_rawDescGZIP(), []int{7, 2}
+}
+
+// *
+// Comparator envelope (mirrors hbase-protocol-shaded Comparator.proto).
+// Ships (class-name, serialized-bytes); reconstruction is opaque to the
+// Go side today.
+type Comparator struct {
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	Name                 *string                `protobuf:"bytes,1,req,name=name" json:"name,omitempty"`
+	SerializedComparator []byte                 `protobuf:"bytes,2,opt,name=serialized_comparator,json=serializedComparator" json:"serialized_comparator,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *Comparator) Reset() {
+	*x = Comparator{}
+	mi := &file_hbase_Client_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Comparator) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Comparator) ProtoMessage() {}
+
+func (x *Comparator) ProtoReflect() protoreflect.Message {
+	mi := &file_hbase_Client_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Comparator.ProtoReflect.Descriptor instead.
+func (*Comparator) Descriptor() ([]byte, []int) {
+	return file_hbase_Client_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *Comparator) GetName() string {
+	if x != nil && x.Name != nil {
+		return *x.Name
+	}
+	return ""
+}
+
+func (x *Comparator) GetSerializedComparator() []byte {
+	if x != nil {
+		return x.SerializedComparator
+	}
+	return nil
 }
 
 // * Container for a list of column qualifier names of a family.
@@ -367,7 +423,7 @@ type Column struct {
 
 func (x *Column) Reset() {
 	*x = Column{}
-	mi := &file_hbase_Client_proto_msgTypes[0]
+	mi := &file_hbase_Client_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -379,7 +435,7 @@ func (x *Column) String() string {
 func (*Column) ProtoMessage() {}
 
 func (x *Column) ProtoReflect() protoreflect.Message {
-	mi := &file_hbase_Client_proto_msgTypes[0]
+	mi := &file_hbase_Client_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -392,7 +448,7 @@ func (x *Column) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Column.ProtoReflect.Descriptor instead.
 func (*Column) Descriptor() ([]byte, []int) {
-	return file_hbase_Client_proto_rawDescGZIP(), []int{0}
+	return file_hbase_Client_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *Column) GetFamily() []byte {
@@ -423,7 +479,7 @@ type Filter struct {
 
 func (x *Filter) Reset() {
 	*x = Filter{}
-	mi := &file_hbase_Client_proto_msgTypes[1]
+	mi := &file_hbase_Client_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -435,7 +491,7 @@ func (x *Filter) String() string {
 func (*Filter) ProtoMessage() {}
 
 func (x *Filter) ProtoReflect() protoreflect.Message {
-	mi := &file_hbase_Client_proto_msgTypes[1]
+	mi := &file_hbase_Client_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -448,7 +504,7 @@ func (x *Filter) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Filter.ProtoReflect.Descriptor instead.
 func (*Filter) Descriptor() ([]byte, []int) {
-	return file_hbase_Client_proto_rawDescGZIP(), []int{1}
+	return file_hbase_Client_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Filter) GetName() string {
@@ -495,7 +551,7 @@ const (
 
 func (x *Get) Reset() {
 	*x = Get{}
-	mi := &file_hbase_Client_proto_msgTypes[2]
+	mi := &file_hbase_Client_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -507,7 +563,7 @@ func (x *Get) String() string {
 func (*Get) ProtoMessage() {}
 
 func (x *Get) ProtoReflect() protoreflect.Message {
-	mi := &file_hbase_Client_proto_msgTypes[2]
+	mi := &file_hbase_Client_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -520,7 +576,7 @@ func (x *Get) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Get.ProtoReflect.Descriptor instead.
 func (*Get) Descriptor() ([]byte, []int) {
-	return file_hbase_Client_proto_rawDescGZIP(), []int{2}
+	return file_hbase_Client_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Get) GetRow() []byte {
@@ -637,7 +693,7 @@ const (
 
 func (x *Result) Reset() {
 	*x = Result{}
-	mi := &file_hbase_Client_proto_msgTypes[3]
+	mi := &file_hbase_Client_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -649,7 +705,7 @@ func (x *Result) String() string {
 func (*Result) ProtoMessage() {}
 
 func (x *Result) ProtoReflect() protoreflect.Message {
-	mi := &file_hbase_Client_proto_msgTypes[3]
+	mi := &file_hbase_Client_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -662,7 +718,7 @@ func (x *Result) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Result.ProtoReflect.Descriptor instead.
 func (*Result) Descriptor() ([]byte, []int) {
-	return file_hbase_Client_proto_rawDescGZIP(), []int{3}
+	return file_hbase_Client_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Result) GetCell() []*Cell {
@@ -710,7 +766,7 @@ type Cursor struct {
 
 func (x *Cursor) Reset() {
 	*x = Cursor{}
-	mi := &file_hbase_Client_proto_msgTypes[4]
+	mi := &file_hbase_Client_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -722,7 +778,7 @@ func (x *Cursor) String() string {
 func (*Cursor) ProtoMessage() {}
 
 func (x *Cursor) ProtoReflect() protoreflect.Message {
-	mi := &file_hbase_Client_proto_msgTypes[4]
+	mi := &file_hbase_Client_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -735,7 +791,7 @@ func (x *Cursor) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Cursor.ProtoReflect.Descriptor instead.
 func (*Cursor) Descriptor() ([]byte, []int) {
-	return file_hbase_Client_proto_rawDescGZIP(), []int{4}
+	return file_hbase_Client_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Cursor) GetRow() []byte {
@@ -792,7 +848,7 @@ const (
 
 func (x *Scan) Reset() {
 	*x = Scan{}
-	mi := &file_hbase_Client_proto_msgTypes[5]
+	mi := &file_hbase_Client_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -804,7 +860,7 @@ func (x *Scan) String() string {
 func (*Scan) ProtoMessage() {}
 
 func (x *Scan) ProtoReflect() protoreflect.Message {
-	mi := &file_hbase_Client_proto_msgTypes[5]
+	mi := &file_hbase_Client_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -817,7 +873,7 @@ func (x *Scan) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Scan.ProtoReflect.Descriptor instead.
 func (*Scan) Descriptor() ([]byte, []int) {
-	return file_hbase_Client_proto_rawDescGZIP(), []int{5}
+	return file_hbase_Client_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Scan) GetColumn() []*Column {
@@ -1017,7 +1073,7 @@ const (
 
 func (x *MutationProto) Reset() {
 	*x = MutationProto{}
-	mi := &file_hbase_Client_proto_msgTypes[6]
+	mi := &file_hbase_Client_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1029,7 +1085,7 @@ func (x *MutationProto) String() string {
 func (*MutationProto) ProtoMessage() {}
 
 func (x *MutationProto) ProtoReflect() protoreflect.Message {
-	mi := &file_hbase_Client_proto_msgTypes[6]
+	mi := &file_hbase_Client_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1042,7 +1098,7 @@ func (x *MutationProto) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MutationProto.ProtoReflect.Descriptor instead.
 func (*MutationProto) Descriptor() ([]byte, []int) {
-	return file_hbase_Client_proto_rawDescGZIP(), []int{6}
+	return file_hbase_Client_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *MutationProto) GetRow() []byte {
@@ -1118,7 +1174,7 @@ type MutationProto_ColumnValue struct {
 
 func (x *MutationProto_ColumnValue) Reset() {
 	*x = MutationProto_ColumnValue{}
-	mi := &file_hbase_Client_proto_msgTypes[7]
+	mi := &file_hbase_Client_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1130,7 +1186,7 @@ func (x *MutationProto_ColumnValue) String() string {
 func (*MutationProto_ColumnValue) ProtoMessage() {}
 
 func (x *MutationProto_ColumnValue) ProtoReflect() protoreflect.Message {
-	mi := &file_hbase_Client_proto_msgTypes[7]
+	mi := &file_hbase_Client_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1143,7 +1199,7 @@ func (x *MutationProto_ColumnValue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MutationProto_ColumnValue.ProtoReflect.Descriptor instead.
 func (*MutationProto_ColumnValue) Descriptor() ([]byte, []int) {
-	return file_hbase_Client_proto_rawDescGZIP(), []int{6, 0}
+	return file_hbase_Client_proto_rawDescGZIP(), []int{7, 0}
 }
 
 func (x *MutationProto_ColumnValue) GetFamily() []byte {
@@ -1173,7 +1229,7 @@ type MutationProto_ColumnValue_QualifierValue struct {
 
 func (x *MutationProto_ColumnValue_QualifierValue) Reset() {
 	*x = MutationProto_ColumnValue_QualifierValue{}
-	mi := &file_hbase_Client_proto_msgTypes[8]
+	mi := &file_hbase_Client_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1185,7 +1241,7 @@ func (x *MutationProto_ColumnValue_QualifierValue) String() string {
 func (*MutationProto_ColumnValue_QualifierValue) ProtoMessage() {}
 
 func (x *MutationProto_ColumnValue_QualifierValue) ProtoReflect() protoreflect.Message {
-	mi := &file_hbase_Client_proto_msgTypes[8]
+	mi := &file_hbase_Client_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1198,7 +1254,7 @@ func (x *MutationProto_ColumnValue_QualifierValue) ProtoReflect() protoreflect.M
 
 // Deprecated: Use MutationProto_ColumnValue_QualifierValue.ProtoReflect.Descriptor instead.
 func (*MutationProto_ColumnValue_QualifierValue) Descriptor() ([]byte, []int) {
-	return file_hbase_Client_proto_rawDescGZIP(), []int{6, 0, 0}
+	return file_hbase_Client_proto_rawDescGZIP(), []int{7, 0, 0}
 }
 
 func (x *MutationProto_ColumnValue_QualifierValue) GetQualifier() []byte {
@@ -1240,7 +1296,11 @@ var File_hbase_Client_proto protoreflect.FileDescriptor
 
 const file_hbase_Client_proto_rawDesc = "" +
 	"\n" +
-	"\x12hbase/Client.proto\x12\x18virogg.hbasecop.hbase.v1\x1a\x10hbase/Cell.proto\x1a\x11hbase/HBase.proto\">\n" +
+	"\x12hbase/Client.proto\x12\x18virogg.hbasecop.hbase.v1\x1a\x10hbase/Cell.proto\x1a\x11hbase/HBase.proto\"U\n" +
+	"\n" +
+	"Comparator\x12\x12\n" +
+	"\x04name\x18\x01 \x02(\tR\x04name\x123\n" +
+	"\x15serialized_comparator\x18\x02 \x01(\fR\x14serializedComparator\">\n" +
 	"\x06Column\x12\x16\n" +
 	"\x06family\x18\x01 \x02(\fR\x06family\x12\x1c\n" +
 	"\tqualifier\x18\x02 \x03(\fR\tqualifier\"I\n" +
@@ -1369,48 +1429,49 @@ func file_hbase_Client_proto_rawDescGZIP() []byte {
 }
 
 var file_hbase_Client_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_hbase_Client_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_hbase_Client_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_hbase_Client_proto_goTypes = []any{
 	(Consistency)(0),                  // 0: virogg.hbasecop.hbase.v1.Consistency
 	(Scan_ReadType)(0),                // 1: virogg.hbasecop.hbase.v1.Scan.ReadType
 	(MutationProto_Durability)(0),     // 2: virogg.hbasecop.hbase.v1.MutationProto.Durability
 	(MutationProto_MutationType)(0),   // 3: virogg.hbasecop.hbase.v1.MutationProto.MutationType
 	(MutationProto_DeleteType)(0),     // 4: virogg.hbasecop.hbase.v1.MutationProto.DeleteType
-	(*Column)(nil),                    // 5: virogg.hbasecop.hbase.v1.Column
-	(*Filter)(nil),                    // 6: virogg.hbasecop.hbase.v1.Filter
-	(*Get)(nil),                       // 7: virogg.hbasecop.hbase.v1.Get
-	(*Result)(nil),                    // 8: virogg.hbasecop.hbase.v1.Result
-	(*Cursor)(nil),                    // 9: virogg.hbasecop.hbase.v1.Cursor
-	(*Scan)(nil),                      // 10: virogg.hbasecop.hbase.v1.Scan
-	(*MutationProto)(nil),             // 11: virogg.hbasecop.hbase.v1.MutationProto
-	(*MutationProto_ColumnValue)(nil), // 12: virogg.hbasecop.hbase.v1.MutationProto.ColumnValue
-	(*MutationProto_ColumnValue_QualifierValue)(nil), // 13: virogg.hbasecop.hbase.v1.MutationProto.ColumnValue.QualifierValue
-	(*NameBytesPair)(nil),                            // 14: virogg.hbasecop.hbase.v1.NameBytesPair
-	(*TimeRange)(nil),                                // 15: virogg.hbasecop.hbase.v1.TimeRange
-	(*ColumnFamilyTimeRange)(nil),                    // 16: virogg.hbasecop.hbase.v1.ColumnFamilyTimeRange
-	(*Cell)(nil),                                     // 17: virogg.hbasecop.hbase.v1.Cell
+	(*Comparator)(nil),                // 5: virogg.hbasecop.hbase.v1.Comparator
+	(*Column)(nil),                    // 6: virogg.hbasecop.hbase.v1.Column
+	(*Filter)(nil),                    // 7: virogg.hbasecop.hbase.v1.Filter
+	(*Get)(nil),                       // 8: virogg.hbasecop.hbase.v1.Get
+	(*Result)(nil),                    // 9: virogg.hbasecop.hbase.v1.Result
+	(*Cursor)(nil),                    // 10: virogg.hbasecop.hbase.v1.Cursor
+	(*Scan)(nil),                      // 11: virogg.hbasecop.hbase.v1.Scan
+	(*MutationProto)(nil),             // 12: virogg.hbasecop.hbase.v1.MutationProto
+	(*MutationProto_ColumnValue)(nil), // 13: virogg.hbasecop.hbase.v1.MutationProto.ColumnValue
+	(*MutationProto_ColumnValue_QualifierValue)(nil), // 14: virogg.hbasecop.hbase.v1.MutationProto.ColumnValue.QualifierValue
+	(*NameBytesPair)(nil),                            // 15: virogg.hbasecop.hbase.v1.NameBytesPair
+	(*TimeRange)(nil),                                // 16: virogg.hbasecop.hbase.v1.TimeRange
+	(*ColumnFamilyTimeRange)(nil),                    // 17: virogg.hbasecop.hbase.v1.ColumnFamilyTimeRange
+	(*Cell)(nil),                                     // 18: virogg.hbasecop.hbase.v1.Cell
 }
 var file_hbase_Client_proto_depIdxs = []int32{
-	5,  // 0: virogg.hbasecop.hbase.v1.Get.column:type_name -> virogg.hbasecop.hbase.v1.Column
-	14, // 1: virogg.hbasecop.hbase.v1.Get.attribute:type_name -> virogg.hbasecop.hbase.v1.NameBytesPair
-	6,  // 2: virogg.hbasecop.hbase.v1.Get.filter:type_name -> virogg.hbasecop.hbase.v1.Filter
-	15, // 3: virogg.hbasecop.hbase.v1.Get.time_range:type_name -> virogg.hbasecop.hbase.v1.TimeRange
+	6,  // 0: virogg.hbasecop.hbase.v1.Get.column:type_name -> virogg.hbasecop.hbase.v1.Column
+	15, // 1: virogg.hbasecop.hbase.v1.Get.attribute:type_name -> virogg.hbasecop.hbase.v1.NameBytesPair
+	7,  // 2: virogg.hbasecop.hbase.v1.Get.filter:type_name -> virogg.hbasecop.hbase.v1.Filter
+	16, // 3: virogg.hbasecop.hbase.v1.Get.time_range:type_name -> virogg.hbasecop.hbase.v1.TimeRange
 	0,  // 4: virogg.hbasecop.hbase.v1.Get.consistency:type_name -> virogg.hbasecop.hbase.v1.Consistency
-	16, // 5: virogg.hbasecop.hbase.v1.Get.cf_time_range:type_name -> virogg.hbasecop.hbase.v1.ColumnFamilyTimeRange
-	17, // 6: virogg.hbasecop.hbase.v1.Result.cell:type_name -> virogg.hbasecop.hbase.v1.Cell
-	5,  // 7: virogg.hbasecop.hbase.v1.Scan.column:type_name -> virogg.hbasecop.hbase.v1.Column
-	14, // 8: virogg.hbasecop.hbase.v1.Scan.attribute:type_name -> virogg.hbasecop.hbase.v1.NameBytesPair
-	6,  // 9: virogg.hbasecop.hbase.v1.Scan.filter:type_name -> virogg.hbasecop.hbase.v1.Filter
-	15, // 10: virogg.hbasecop.hbase.v1.Scan.time_range:type_name -> virogg.hbasecop.hbase.v1.TimeRange
+	17, // 5: virogg.hbasecop.hbase.v1.Get.cf_time_range:type_name -> virogg.hbasecop.hbase.v1.ColumnFamilyTimeRange
+	18, // 6: virogg.hbasecop.hbase.v1.Result.cell:type_name -> virogg.hbasecop.hbase.v1.Cell
+	6,  // 7: virogg.hbasecop.hbase.v1.Scan.column:type_name -> virogg.hbasecop.hbase.v1.Column
+	15, // 8: virogg.hbasecop.hbase.v1.Scan.attribute:type_name -> virogg.hbasecop.hbase.v1.NameBytesPair
+	7,  // 9: virogg.hbasecop.hbase.v1.Scan.filter:type_name -> virogg.hbasecop.hbase.v1.Filter
+	16, // 10: virogg.hbasecop.hbase.v1.Scan.time_range:type_name -> virogg.hbasecop.hbase.v1.TimeRange
 	0,  // 11: virogg.hbasecop.hbase.v1.Scan.consistency:type_name -> virogg.hbasecop.hbase.v1.Consistency
-	16, // 12: virogg.hbasecop.hbase.v1.Scan.cf_time_range:type_name -> virogg.hbasecop.hbase.v1.ColumnFamilyTimeRange
+	17, // 12: virogg.hbasecop.hbase.v1.Scan.cf_time_range:type_name -> virogg.hbasecop.hbase.v1.ColumnFamilyTimeRange
 	1,  // 13: virogg.hbasecop.hbase.v1.Scan.read_type:type_name -> virogg.hbasecop.hbase.v1.Scan.ReadType
 	3,  // 14: virogg.hbasecop.hbase.v1.MutationProto.mutate_type:type_name -> virogg.hbasecop.hbase.v1.MutationProto.MutationType
-	12, // 15: virogg.hbasecop.hbase.v1.MutationProto.column_value:type_name -> virogg.hbasecop.hbase.v1.MutationProto.ColumnValue
-	14, // 16: virogg.hbasecop.hbase.v1.MutationProto.attribute:type_name -> virogg.hbasecop.hbase.v1.NameBytesPair
+	13, // 15: virogg.hbasecop.hbase.v1.MutationProto.column_value:type_name -> virogg.hbasecop.hbase.v1.MutationProto.ColumnValue
+	15, // 16: virogg.hbasecop.hbase.v1.MutationProto.attribute:type_name -> virogg.hbasecop.hbase.v1.NameBytesPair
 	2,  // 17: virogg.hbasecop.hbase.v1.MutationProto.durability:type_name -> virogg.hbasecop.hbase.v1.MutationProto.Durability
-	15, // 18: virogg.hbasecop.hbase.v1.MutationProto.time_range:type_name -> virogg.hbasecop.hbase.v1.TimeRange
-	13, // 19: virogg.hbasecop.hbase.v1.MutationProto.ColumnValue.qualifier_value:type_name -> virogg.hbasecop.hbase.v1.MutationProto.ColumnValue.QualifierValue
+	16, // 18: virogg.hbasecop.hbase.v1.MutationProto.time_range:type_name -> virogg.hbasecop.hbase.v1.TimeRange
+	14, // 19: virogg.hbasecop.hbase.v1.MutationProto.ColumnValue.qualifier_value:type_name -> virogg.hbasecop.hbase.v1.MutationProto.ColumnValue.QualifierValue
 	4,  // 20: virogg.hbasecop.hbase.v1.MutationProto.ColumnValue.QualifierValue.delete_type:type_name -> virogg.hbasecop.hbase.v1.MutationProto.DeleteType
 	21, // [21:21] is the sub-list for method output_type
 	21, // [21:21] is the sub-list for method input_type
@@ -1432,7 +1493,7 @@ func file_hbase_Client_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_hbase_Client_proto_rawDesc), len(file_hbase_Client_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   9,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

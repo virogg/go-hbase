@@ -464,14 +464,18 @@ public final class RegionObserverAdapter implements RegionObserver {
     applyHookResponse(c, resp);
   }
 
-  // --- Batch mutate + region operation envelope -------------------------
+  // --- Batch mutate + region operation envelope (T42 Wave 3) -----------
 
   @Override
   public void preBatchMutate(
       ObserverContext<RegionCoprocessorEnvironment> c,
       MiniBatchOperationInProgress<Mutation> miniBatch)
       throws IOException {
-    dispatchStub(c, HookId.PRE_BATCH_MUTATE, PreBatchMutateRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    PreBatchMutateRequest.Builder b = PreBatchMutateRequest.newBuilder().setCtx(hookCtx);
+    addMiniBatchOperations(b::addOperation, miniBatch);
+    HookResponse resp = dispatch(HookId.PRE_BATCH_MUTATE.value(), b.build().toByteArray());
+    applyHookResponse(c, resp);
   }
 
   @Override
@@ -479,7 +483,11 @@ public final class RegionObserverAdapter implements RegionObserver {
       ObserverContext<RegionCoprocessorEnvironment> c,
       MiniBatchOperationInProgress<Mutation> miniBatch)
       throws IOException {
-    dispatchStub(c, HookId.POST_BATCH_MUTATE, PostBatchMutateRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    PostBatchMutateRequest.Builder b = PostBatchMutateRequest.newBuilder().setCtx(hookCtx);
+    addMiniBatchOperations(b::addOperation, miniBatch);
+    HookResponse resp = dispatch(HookId.POST_BATCH_MUTATE.value(), b.build().toByteArray());
+    applyHookResponse(c, resp);
   }
 
   @Override
@@ -488,27 +496,44 @@ public final class RegionObserverAdapter implements RegionObserver {
       MiniBatchOperationInProgress<Mutation> miniBatch,
       boolean success)
       throws IOException {
-    dispatchStub(
-        c,
-        HookId.POST_BATCH_MUTATE_INDISPENSABLY,
-        PostBatchMutateIndispensablyRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    PostBatchMutateIndispensablyRequest.Builder b =
+        PostBatchMutateIndispensablyRequest.newBuilder().setCtx(hookCtx).setSuccess(success);
+    addMiniBatchOperations(b::addOperation, miniBatch);
+    HookResponse resp =
+        dispatch(HookId.POST_BATCH_MUTATE_INDISPENSABLY.value(), b.build().toByteArray());
+    applyHookResponse(c, resp);
   }
 
   @Override
   public void postStartRegionOperation(
       ObserverContext<RegionCoprocessorEnvironment> c, Region.Operation op) throws IOException {
-    dispatchStub(
-        c, HookId.POST_START_REGION_OPERATION, PostStartRegionOperationRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    byte[] reqBytes =
+        PostStartRegionOperationRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setOperation(op == null ? -1 : op.ordinal())
+            .build()
+            .toByteArray();
+    HookResponse resp = dispatch(HookId.POST_START_REGION_OPERATION.value(), reqBytes);
+    applyHookResponse(c, resp);
   }
 
   @Override
   public void postCloseRegionOperation(
       ObserverContext<RegionCoprocessorEnvironment> c, Region.Operation op) throws IOException {
-    dispatchStub(
-        c, HookId.POST_CLOSE_REGION_OPERATION, PostCloseRegionOperationRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    byte[] reqBytes =
+        PostCloseRegionOperationRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setOperation(op == null ? -1 : op.ordinal())
+            .build()
+            .toByteArray();
+    HookResponse resp = dispatch(HookId.POST_CLOSE_REGION_OPERATION.value(), reqBytes);
+    applyHookResponse(c, resp);
   }
 
-  // --- Check-and-Put -----------------------------------------------------
+  // --- Check-and-Put (T42 Wave 3) --------------------------------------
 
   @Override
   public boolean preCheckAndPut(
@@ -521,7 +546,19 @@ public final class RegionObserverAdapter implements RegionObserver {
       Put put,
       boolean result)
       throws IOException {
-    dispatchStub(c, HookId.PRE_CHECK_AND_PUT, PreCheckAndPutRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    PreCheckAndPutRequest.Builder b =
+        PreCheckAndPutRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setRow(ByteString.copyFrom(row))
+            .setFamily(ByteString.copyFrom(family))
+            .setQualifier(ByteString.copyFrom(qualifier))
+            .setCompareOp(compareOpOrdinal(op))
+            .setComparator(ComparatorConverter.toProto(comparator))
+            .setPut(MutationConverter.toProto(put))
+            .setInputResult(result);
+    HookResponse resp = dispatch(HookId.PRE_CHECK_AND_PUT.value(), b.build().toByteArray());
+    applyHookResponse(c, resp);
     return result;
   }
 
@@ -536,7 +573,19 @@ public final class RegionObserverAdapter implements RegionObserver {
       Put put,
       boolean result)
       throws IOException {
-    dispatchStub(c, HookId.POST_CHECK_AND_PUT, PostCheckAndPutRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    PostCheckAndPutRequest.Builder b =
+        PostCheckAndPutRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setRow(ByteString.copyFrom(row))
+            .setFamily(ByteString.copyFrom(family))
+            .setQualifier(ByteString.copyFrom(qualifier))
+            .setCompareOp(compareOpOrdinal(op))
+            .setComparator(ComparatorConverter.toProto(comparator))
+            .setPut(MutationConverter.toProto(put))
+            .setInputResult(result);
+    HookResponse resp = dispatch(HookId.POST_CHECK_AND_PUT.value(), b.build().toByteArray());
+    applyHookResponse(c, resp);
     return result;
   }
 
@@ -551,12 +600,24 @@ public final class RegionObserverAdapter implements RegionObserver {
       Put put,
       boolean result)
       throws IOException {
-    dispatchStub(
-        c, HookId.PRE_CHECK_AND_PUT_AFTER_ROW_LOCK, PreCheckAndPutAfterRowLockRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    PreCheckAndPutAfterRowLockRequest.Builder b =
+        PreCheckAndPutAfterRowLockRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setRow(ByteString.copyFrom(row))
+            .setFamily(ByteString.copyFrom(family))
+            .setQualifier(ByteString.copyFrom(qualifier))
+            .setCompareOp(compareOpOrdinal(op))
+            .setComparator(ComparatorConverter.toProto(comparator))
+            .setPut(MutationConverter.toProto(put))
+            .setInputResult(result);
+    HookResponse resp =
+        dispatch(HookId.PRE_CHECK_AND_PUT_AFTER_ROW_LOCK.value(), b.build().toByteArray());
+    applyHookResponse(c, resp);
     return result;
   }
 
-  // --- Check-and-Delete --------------------------------------------------
+  // --- Check-and-Delete (T42 Wave 3) -----------------------------------
 
   @Override
   public boolean preCheckAndDelete(
@@ -569,7 +630,19 @@ public final class RegionObserverAdapter implements RegionObserver {
       Delete delete,
       boolean result)
       throws IOException {
-    dispatchStub(c, HookId.PRE_CHECK_AND_DELETE, PreCheckAndDeleteRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    PreCheckAndDeleteRequest.Builder b =
+        PreCheckAndDeleteRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setRow(ByteString.copyFrom(row))
+            .setFamily(ByteString.copyFrom(family))
+            .setQualifier(ByteString.copyFrom(qualifier))
+            .setCompareOp(compareOpOrdinal(op))
+            .setComparator(ComparatorConverter.toProto(comparator))
+            .setDelete(MutationConverter.toProto(delete))
+            .setInputResult(result);
+    HookResponse resp = dispatch(HookId.PRE_CHECK_AND_DELETE.value(), b.build().toByteArray());
+    applyHookResponse(c, resp);
     return result;
   }
 
@@ -584,7 +657,19 @@ public final class RegionObserverAdapter implements RegionObserver {
       Delete delete,
       boolean result)
       throws IOException {
-    dispatchStub(c, HookId.POST_CHECK_AND_DELETE, PostCheckAndDeleteRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    PostCheckAndDeleteRequest.Builder b =
+        PostCheckAndDeleteRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setRow(ByteString.copyFrom(row))
+            .setFamily(ByteString.copyFrom(family))
+            .setQualifier(ByteString.copyFrom(qualifier))
+            .setCompareOp(compareOpOrdinal(op))
+            .setComparator(ComparatorConverter.toProto(comparator))
+            .setDelete(MutationConverter.toProto(delete))
+            .setInputResult(result);
+    HookResponse resp = dispatch(HookId.POST_CHECK_AND_DELETE.value(), b.build().toByteArray());
+    applyHookResponse(c, resp);
     return result;
   }
 
@@ -599,14 +684,24 @@ public final class RegionObserverAdapter implements RegionObserver {
       Delete delete,
       boolean result)
       throws IOException {
-    dispatchStub(
-        c,
-        HookId.PRE_CHECK_AND_DELETE_AFTER_ROW_LOCK,
-        PreCheckAndDeleteAfterRowLockRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    PreCheckAndDeleteAfterRowLockRequest.Builder b =
+        PreCheckAndDeleteAfterRowLockRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setRow(ByteString.copyFrom(row))
+            .setFamily(ByteString.copyFrom(family))
+            .setQualifier(ByteString.copyFrom(qualifier))
+            .setCompareOp(compareOpOrdinal(op))
+            .setComparator(ComparatorConverter.toProto(comparator))
+            .setDelete(MutationConverter.toProto(delete))
+            .setInputResult(result);
+    HookResponse resp =
+        dispatch(HookId.PRE_CHECK_AND_DELETE_AFTER_ROW_LOCK.value(), b.build().toByteArray());
+    applyHookResponse(c, resp);
     return result;
   }
 
-  // --- Check-and-Mutate --------------------------------------------------
+  // --- Check-and-Mutate (T42 Wave 3) -----------------------------------
 
   @Override
   public CheckAndMutateResult preCheckAndMutate(
@@ -614,7 +709,16 @@ public final class RegionObserverAdapter implements RegionObserver {
       CheckAndMutate checkAndMutate,
       CheckAndMutateResult result)
       throws IOException {
-    dispatchStub(c, HookId.PRE_CHECK_AND_MUTATE, PreCheckAndMutateRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    byte[] reqBytes =
+        PreCheckAndMutateRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setAction(buildCheckAndMutateAction(checkAndMutate))
+            .setInputResult(buildCheckAndMutateResult(result))
+            .build()
+            .toByteArray();
+    HookResponse resp = dispatch(HookId.PRE_CHECK_AND_MUTATE.value(), reqBytes);
+    applyHookResponse(c, resp);
     return result;
   }
 
@@ -624,7 +728,16 @@ public final class RegionObserverAdapter implements RegionObserver {
       CheckAndMutate checkAndMutate,
       CheckAndMutateResult result)
       throws IOException {
-    dispatchStub(c, HookId.POST_CHECK_AND_MUTATE, PostCheckAndMutateRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    byte[] reqBytes =
+        PostCheckAndMutateRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setAction(buildCheckAndMutateAction(checkAndMutate))
+            .setInputResult(buildCheckAndMutateResult(result))
+            .build()
+            .toByteArray();
+    HookResponse resp = dispatch(HookId.POST_CHECK_AND_MUTATE.value(), reqBytes);
+    applyHookResponse(c, resp);
     return result;
   }
 
@@ -634,11 +747,83 @@ public final class RegionObserverAdapter implements RegionObserver {
       CheckAndMutate checkAndMutate,
       CheckAndMutateResult result)
       throws IOException {
-    dispatchStub(
-        c,
-        HookId.PRE_CHECK_AND_MUTATE_AFTER_ROW_LOCK,
-        PreCheckAndMutateAfterRowLockRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    byte[] reqBytes =
+        PreCheckAndMutateAfterRowLockRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setAction(buildCheckAndMutateAction(checkAndMutate))
+            .setInputResult(buildCheckAndMutateResult(result))
+            .build()
+            .toByteArray();
+    HookResponse resp = dispatch(HookId.PRE_CHECK_AND_MUTATE_AFTER_ROW_LOCK.value(), reqBytes);
+    applyHookResponse(c, resp);
     return result;
+  }
+
+  private static int compareOpOrdinal(CompareOperator op) {
+    return op == null ? -1 : op.ordinal();
+  }
+
+  private static com.virogg.hbasecop.bridge.wire.pb.CheckAndMutateAction buildCheckAndMutateAction(
+      CheckAndMutate cam) throws IOException {
+    com.virogg.hbasecop.bridge.wire.pb.CheckAndMutateAction.Builder b =
+        com.virogg.hbasecop.bridge.wire.pb.CheckAndMutateAction.newBuilder();
+    if (cam.getRow() != null) {
+      b.setRow(ByteString.copyFrom(cam.getRow()));
+    }
+    if (cam.hasFilter()) {
+      b.setFilter(FilterConverter.toProto(cam.getFilter()));
+    } else {
+      if (cam.getFamily() != null) {
+        b.setFamily(ByteString.copyFrom(cam.getFamily()));
+      }
+      if (cam.getQualifier() != null) {
+        b.setQualifier(ByteString.copyFrom(cam.getQualifier()));
+      }
+      b.setCompareOp(compareOpOrdinal(cam.getCompareOp()));
+      if (cam.getValue() != null) {
+        b.setValue(ByteString.copyFrom(cam.getValue()));
+      }
+    }
+    if (cam.getAction() instanceof Mutation) {
+      b.setAction(MutationConverter.toProto((Mutation) cam.getAction()));
+    }
+    return b.build();
+  }
+
+  private static com.virogg.hbasecop.bridge.wire.pb.CheckAndMutateResultProto
+      buildCheckAndMutateResult(CheckAndMutateResult result) {
+    com.virogg.hbasecop.bridge.wire.pb.CheckAndMutateResultProto.Builder b =
+        com.virogg.hbasecop.bridge.wire.pb.CheckAndMutateResultProto.newBuilder();
+    if (result == null) {
+      return b.build();
+    }
+    b.setSuccess(result.isSuccess());
+    if (result.getResult() != null) {
+      b.setResult(ResultConverter.toProto(result.getResult()));
+    }
+    return b.build();
+  }
+
+  private static void addMiniBatchOperations(
+      java.util.function.Consumer<com.virogg.hbasecop.bridge.wire.pb.MutationOperation> add,
+      MiniBatchOperationInProgress<Mutation> miniBatch)
+      throws IOException {
+    if (miniBatch == null) {
+      return;
+    }
+    int size = miniBatch.size();
+    for (int i = 0; i < size; i++) {
+      Mutation m = miniBatch.getOperation(i);
+      com.virogg.hbasecop.bridge.wire.pb.MutationOperation.Builder ob =
+          com.virogg.hbasecop.bridge.wire.pb.MutationOperation.newBuilder()
+              .setMutation(MutationConverter.toProto(m));
+      org.apache.hadoop.hbase.regionserver.OperationStatus status = miniBatch.getOperationStatus(i);
+      if (status != null) {
+        ob.setOperationStatusCode(status.getOperationStatusCode().ordinal());
+      }
+      add.accept(ob.build());
+    }
   }
 
   // --- Append (T42 Wave 2: bodies populated) ----------------------------
