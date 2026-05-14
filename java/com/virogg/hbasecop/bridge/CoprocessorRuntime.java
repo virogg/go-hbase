@@ -13,6 +13,8 @@ import com.virogg.hbasecop.bridge.shmem.ShmemException;
 import com.virogg.hbasecop.bridge.supervisor.GoProcess;
 import com.virogg.hbasecop.bridge.supervisor.GoProcessConfig;
 import com.virogg.hbasecop.bridge.supervisor.HeartbeatWatchdog;
+import com.virogg.hbasecop.bridge.supervisor.RestartConfig;
+import com.virogg.hbasecop.bridge.supervisor.RestartController;
 import com.virogg.hbasecop.bridge.wire.Decoder;
 import com.virogg.hbasecop.bridge.wire.Encoder;
 import com.virogg.hbasecop.bridge.wire.Message;
@@ -29,8 +31,8 @@ import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 
@@ -63,6 +65,18 @@ public final class CoprocessorRuntime implements AutoCloseable {
   /** Default miss threshold for the watchdog. */
   public static final int DEFAULT_HEARTBEAT_MISS_THRESHOLD = 3;
 
+  /** Configuration key: max consecutive restart failures before declaring the runtime unhealthy. */
+  public static final String KEY_RESTART_MAX_FAILS = "hbasecop.restart.max-fails";
+
+  /** Configuration key: probe interval after the runtime is declared unhealthy. */
+  public static final String KEY_RESTART_PROBE_INTERVAL = "hbasecop.restart.probe-interval";
+
+  /** Configuration key: initial delay before the first restart attempt. */
+  public static final String KEY_RESTART_INITIAL_DELAY = "hbasecop.restart.initial-delay";
+
+  /** Configuration key: cap on the per-attempt restart delay. */
+  public static final String KEY_RESTART_MAX_DELAY = "hbasecop.restart.max-delay";
+
   private final Config cfg;
 
   private Channel javaToGo;
@@ -75,7 +89,8 @@ public final class CoprocessorRuntime implements AutoCloseable {
   private HeartbeatWatchdog watchdog;
   private ScheduledExecutorService watchdogScheduler;
   private ScheduledFuture<?> watchdogTask;
-  private final AtomicBoolean unhealthy = new AtomicBoolean(false);
+  private RestartController restartController;
+  private long effectiveHeartbeatMs;
   private boolean started;
 
   public CoprocessorRuntime(Config cfg) {
@@ -103,21 +118,12 @@ public final class CoprocessorRuntime implements AutoCloseable {
               shmemConfig(
                   cfg.goToJavaFile(), Role.CONSUMER, cfg.ringCapacity(), cfg.ringMaxObjectSize()));
 
-      long effectiveHeartbeatMs = resolveHeartbeatPeriodMs(cfg);
-      GoProcessConfig procCfg =
-          GoProcessConfig.builder()
-              .binaryResourcePath(cfg.binaryResourcePath())
-              .javaToGoFile(cfg.javaToGoFile())
-              .goToJavaFile(cfg.goToJavaFile())
-              .capacity(cfg.ringCapacity())
-              .maxObjectSize(cfg.ringMaxObjectSize())
-              .heartbeatPeriodMs(effectiveHeartbeatMs)
-              .gracefulShutdownTimeout(cfg.gracefulShutdownTimeout())
-              .build();
-      goProcess = new GoProcess(procCfg, javaToGo);
+      effectiveHeartbeatMs = resolveHeartbeatPeriodMs(cfg);
+      goProcess = buildGoProcess();
       goProcess.start();
 
       watchdog = maybeBuildWatchdog(cfg, effectiveHeartbeatMs);
+      restartController = buildRestartController(cfg);
       if (watchdog != null) {
         watchdogScheduler =
             Executors.newSingleThreadScheduledExecutor(
@@ -129,7 +135,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
         long tickMs = watchdog.period().toMillis();
         watchdogTask =
             watchdogScheduler.scheduleAtFixedRate(
-                this::tickWatchdog, tickMs, tickMs, TimeUnit.MILLISECONDS);
+                this::tickSchedulerTask, tickMs, tickMs, TimeUnit.MILLISECONDS);
       }
 
       Encoder enc = new Encoder();
@@ -164,11 +170,13 @@ public final class CoprocessorRuntime implements AutoCloseable {
   }
 
   /**
-   * True iff the watchdog has fired and the runtime is awaiting restart (T34). Callers (typically
-   * the supervisor loop) read this to decide whether further hook calls should short-circuit.
+   * True iff the restart controller has exhausted its consecutive-failure budget and the runtime is
+   * in the probing-only {@code UNHEALTHY} state. Hook dispatch can use this to short-circuit calls
+   * by policy without waiting on dead transport.
    */
   public boolean isUnhealthy() {
-    return unhealthy.get();
+    RestartController c = restartController;
+    return c != null && c.isUnhealthy();
   }
 
   /** The RegionObserver to expose to HBase; null until {@link #start()} succeeds. */
@@ -198,7 +206,32 @@ public final class CoprocessorRuntime implements AutoCloseable {
     return readerThread;
   }
 
+  /** Visible-for-testing: current Go pid, or {@code -1} if no process is running. */
+  synchronized long goProcessPidForTesting() {
+    return goProcess == null ? -1L : goProcess.pid();
+  }
+
+  /**
+   * Visible-for-testing: the active restart controller, or {@code null} before {@link #start()}.
+   */
+  RestartController restartControllerForTesting() {
+    return restartController;
+  }
+
+  /**
+   * Visible-for-testing: SIGKILLs the underlying Go process to simulate a crash. The watchdog
+   * scheduler will detect the dead process on its next tick and notify the restart controller.
+   */
+  synchronized void crashGoProcessForTesting() {
+    if (goProcess != null) {
+      goProcess.destroyForcibly();
+    }
+  }
+
   private void closeQuietly() {
+    if (restartController != null) {
+      restartController.stop();
+    }
     if (watchdogTask != null) {
       watchdogTask.cancel(false);
       watchdogTask = null;
@@ -248,6 +281,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
     javaToGo = null;
     observer = null;
     watchdog = null;
+    restartController = null;
   }
 
   private static void closeChannelQuietly(Channel ch) {
@@ -261,28 +295,50 @@ public final class CoprocessorRuntime implements AutoCloseable {
     }
   }
 
-  private void tickWatchdog() {
+  private void tickSchedulerTask() {
     HeartbeatWatchdog wd = watchdog;
-    if (wd == null) {
-      return;
+    if (wd != null) {
+      try {
+        wd.tick();
+      } catch (RuntimeException e) {
+        LOG.log(Level.WARNING, "CoprocessorRuntime: watchdog tick threw", e);
+      }
     }
-    try {
-      wd.tick();
-    } catch (RuntimeException e) {
-      LOG.log(Level.WARNING, "CoprocessorRuntime: watchdog tick threw", e);
+    // Detect process-exit independently of heartbeats so {@code exit 1} from the Go side
+    // also triggers a restart (the watchdog only catches "hung" — no heartbeats over the
+    // miss window — not an outright exit).
+    detectExitedGoProcess();
+    RestartController c = restartController;
+    if (c != null) {
+      try {
+        c.tick();
+      } catch (RuntimeException e) {
+        LOG.log(Level.WARNING, "CoprocessorRuntime: restart controller tick threw", e);
+      }
+    }
+  }
+
+  private void detectExitedGoProcess() {
+    GoProcess gp;
+    RestartController c;
+    synchronized (this) {
+      gp = goProcess;
+      c = restartController;
+    }
+    if (gp != null && !gp.isAlive() && c != null) {
+      c.notifyDead();
     }
   }
 
   /**
-   * Watchdog miss action: force-kill the Go process (SIGKILL via {@link Process#destroyForcibly()})
-   * and mark the runtime unhealthy. Auto-restart with backoff lands in T34; here we only ensure the
-   * hung process is reaped so the supervisor can react.
+   * Watchdog miss action: SIGKILL the hung Go process (so the OS reaps it) and notify the restart
+   * controller, which schedules the actual respawn through {@link #attemptRestart()}.
    */
   private void onHung(long elapsedMs) {
-    if (!unhealthy.compareAndSet(false, true)) {
-      return;
+    GoProcess gp;
+    synchronized (this) {
+      gp = goProcess;
     }
-    GoProcess gp = goProcess;
     long pid = gp == null ? -1L : gp.pid();
     LOG.log(
         Level.WARNING,
@@ -292,6 +348,108 @@ public final class CoprocessorRuntime implements AutoCloseable {
     if (gp != null) {
       gp.destroyForcibly();
     }
+    RestartController c = restartController;
+    if (c != null) {
+      c.notifyDead();
+    }
+  }
+
+  /**
+   * Attempt one restart cycle: clean up the old Go process and spawn a fresh one against the same
+   * shmem rings. Returns {@code true} on success. Called by {@link RestartController} from the
+   * watchdog scheduler thread.
+   *
+   * <p>Inflight requests waiting on the multiplexer are <em>not</em> cancelled here — T35 handles
+   * mux teardown on crash.
+   */
+  private boolean attemptRestart() {
+    synchronized (this) {
+      if (!started) {
+        return false;
+      }
+      long oldPid = goProcess == null ? -1L : goProcess.pid();
+      if (goProcess != null) {
+        try {
+          goProcess.stop();
+        } catch (IOException e) {
+          LOG.log(Level.WARNING, "CoprocessorRuntime: old GoProcess.stop failed", e);
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+        }
+      }
+      goProcess = null;
+      try {
+        GoProcess fresh = buildGoProcess();
+        fresh.start();
+        goProcess = fresh;
+        // Re-arm the watchdog: a fresh process has not sent any heartbeats yet, but we treat the
+        // successful spawn moment as a heartbeat so the watchdog does not immediately re-fire
+        // within the first miss-threshold window.
+        HeartbeatWatchdog wd = watchdog;
+        if (wd != null) {
+          wd.recordHeartbeat();
+        }
+        LOG.log(
+            Level.INFO,
+            "CoprocessorRuntime: restart succeeded (old pid={0}, new pid={1})",
+            oldPid,
+            fresh.pid());
+        return true;
+      } catch (IOException | RuntimeException e) {
+        LOG.log(Level.WARNING, "CoprocessorRuntime: restart attempt failed", e);
+        return false;
+      }
+    }
+  }
+
+  private GoProcess buildGoProcess() {
+    GoProcessConfig procCfg =
+        GoProcessConfig.builder()
+            .binaryResourcePath(cfg.binaryResourcePath())
+            .javaToGoFile(cfg.javaToGoFile())
+            .goToJavaFile(cfg.goToJavaFile())
+            .capacity(cfg.ringCapacity())
+            .maxObjectSize(cfg.ringMaxObjectSize())
+            .heartbeatPeriodMs(effectiveHeartbeatMs)
+            .gracefulShutdownTimeout(cfg.gracefulShutdownTimeout())
+            .build();
+    return new GoProcess(procCfg, javaToGo);
+  }
+
+  private RestartController buildRestartController(Config cfg) {
+    RestartConfig restartCfg = resolveRestartConfig(cfg);
+    return new RestartController(
+        restartCfg,
+        System::currentTimeMillis,
+        this::attemptRestart,
+        ThreadLocalRandom.current()::nextDouble);
+  }
+
+  private static RestartConfig resolveRestartConfig(Config cfg) {
+    if (cfg.restartConfig() != null) {
+      return cfg.restartConfig();
+    }
+    Configuration conf = cfg.configuration();
+    if (conf == null) {
+      return RestartConfig.defaults();
+    }
+    return RestartConfig.builder()
+        .initialDelayMs(
+            conf.getTimeDuration(
+                KEY_RESTART_INITIAL_DELAY,
+                RestartConfig.DEFAULT_INITIAL_DELAY_MS,
+                TimeUnit.MILLISECONDS))
+        .maxDelayMs(
+            conf.getTimeDuration(
+                KEY_RESTART_MAX_DELAY, RestartConfig.DEFAULT_MAX_DELAY_MS, TimeUnit.MILLISECONDS))
+        .maxConsecutiveFails(
+            conf.getInt(KEY_RESTART_MAX_FAILS, RestartConfig.DEFAULT_MAX_CONSECUTIVE_FAILS))
+        .probeIntervalMs(
+            conf.getTimeDuration(
+                KEY_RESTART_PROBE_INTERVAL,
+                RestartConfig.DEFAULT_PROBE_INTERVAL_MS,
+                TimeUnit.MILLISECONDS))
+        .build();
   }
 
   private static long resolveHeartbeatPeriodMs(Config cfg) {
@@ -441,6 +599,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
     private final Duration hookTimeout;
     private final Duration gracefulShutdownTimeout;
     private final Configuration configuration;
+    private final RestartConfig restartConfig;
 
     private Config(Builder b) {
       this.binaryResourcePath = b.binaryResourcePath;
@@ -459,6 +618,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
       this.gracefulShutdownTimeout =
           Objects.requireNonNull(b.gracefulShutdownTimeout, "gracefulShutdownTimeout");
       this.configuration = b.configuration;
+      this.restartConfig = b.restartConfig;
     }
 
     public String binaryResourcePath() {
@@ -503,6 +663,14 @@ public final class CoprocessorRuntime implements AutoCloseable {
       return configuration;
     }
 
+    /**
+     * Explicit {@link RestartConfig}; {@code null} → derive from {@link #configuration()} or fall
+     * back to {@link RestartConfig#defaults()}.
+     */
+    public RestartConfig restartConfig() {
+      return restartConfig;
+    }
+
     public static Builder builder() {
       return new Builder();
     }
@@ -518,6 +686,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
       private Duration hookTimeout = Duration.ofSeconds(5);
       private Duration gracefulShutdownTimeout = Duration.ofSeconds(2);
       private Configuration configuration;
+      private RestartConfig restartConfig;
 
       public Builder binaryResourcePath(String s) {
         this.binaryResourcePath = s;
@@ -566,6 +735,16 @@ public final class CoprocessorRuntime implements AutoCloseable {
        */
       public Builder configuration(Configuration c) {
         this.configuration = c;
+        return this;
+      }
+
+      /**
+       * Override the restart controller tunables. When omitted, the runtime derives them from the
+       * supplied {@link #configuration(Configuration)} via {@code hbasecop.restart.*} keys, or
+       * falls back to {@link RestartConfig#defaults()}.
+       */
+      public Builder restartConfig(RestartConfig rc) {
+        this.restartConfig = rc;
         return this;
       }
 
