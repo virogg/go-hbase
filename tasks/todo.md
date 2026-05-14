@@ -39,7 +39,7 @@
 - [x] T33 Heartbeat watchdog (kill -9 on miss)
 - [x] T34 Auto-restart with exponential backoff
 - [x] T35 Inflight handling on crash + restart-deadline
-- [ ] T36 Fault-injection test suite (≥10 matrix cases)
+- [x] T36 Fault-injection test suite (≥10 matrix cases)
 - [ ] **CP-δ:** strict/best-effort semantics validated; **gate:** decide Open Q #1 (multi-tenant)
 
 ## Phase 4 — Full RegionObserver
