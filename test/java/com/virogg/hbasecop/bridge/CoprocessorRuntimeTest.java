@@ -3,10 +3,14 @@
 
 package com.virogg.hbasecop.bridge;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.virogg.hbasecop.bridge.supervisor.RestartConfig;
+import com.virogg.hbasecop.bridge.supervisor.RestartController;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -116,6 +120,66 @@ final class CoprocessorRuntimeTest {
       Thread.sleep(600);
       assertFalse(rt.isUnhealthy(), "watchdog must not fire while heartbeats flow");
       assertTrue(rt.isAlive(), "Go process must still be alive");
+      rt.stop();
+    }
+  }
+
+  @Test
+  void restartsGoProcessAfterCrash(@TempDir Path tmp) throws Exception {
+    Path inFile = tmp.resolve("in.mmap");
+    Path outFile = tmp.resolve("out.mmap");
+
+    RestartConfig restart =
+        RestartConfig.builder()
+            .initialDelayMs(50L)
+            .maxDelayMs(200L)
+            .multiplier(2.0)
+            .jitterRatio(0.0)
+            .maxConsecutiveFails(3)
+            .probeIntervalMs(500L)
+            .build();
+
+    CoprocessorRuntime.Config cfg =
+        CoprocessorRuntime.Config.builder()
+            .javaToGoFile(inFile)
+            .goToJavaFile(outFile)
+            .ringCapacity(8)
+            .ringMaxObjectSize(64 * 1024)
+            .heartbeatPeriodMs(50)
+            .hookTimeout(Duration.ofSeconds(2))
+            .gracefulShutdownTimeout(Duration.ofSeconds(2))
+            .restartConfig(restart)
+            .build();
+
+    try (CoprocessorRuntime rt = new CoprocessorRuntime(cfg)) {
+      rt.start();
+      assertTrue(rt.isAlive(), "Go process must be alive after start");
+      long origPid = rt.goProcessPidForTesting();
+      assertNotEquals(-1L, origPid);
+
+      // Crash the Go process. The watchdog scheduler will detect the dead
+      // process (via the next liveness check), notify the controller, and the
+      // controller will fire a restart attempt after the configured initial
+      // backoff.
+      rt.crashGoProcessForTesting();
+
+      long deadline = System.currentTimeMillis() + 5_000L;
+      while (System.currentTimeMillis() < deadline) {
+        long pid = rt.goProcessPidForTesting();
+        if (rt.isAlive() && pid != origPid && pid != -1L) {
+          break;
+        }
+        Thread.sleep(20);
+      }
+
+      assertTrue(rt.isAlive(), "Go process must be restarted after crash");
+      assertNotEquals(origPid, rt.goProcessPidForTesting(), "pid must change after restart");
+      assertFalse(rt.isUnhealthy(), "after successful restart, runtime must be healthy");
+      assertEquals(
+          RestartController.State.HEALTHY,
+          rt.restartControllerForTesting().state(),
+          "controller must return to HEALTHY after a successful restart");
+
       rt.stop();
     }
   }
