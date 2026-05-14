@@ -239,6 +239,18 @@ External dep: `github.com/virogg/java-go-shmem` (Go pkg + Java jar). Lock вер
 
 > **Checkpoint δ:** production-grade семантика. SDK contract зафиксирован. Решение: open question
 > #1 (multi-tenant) — нужно ли в MVP? Это блокатор для P6.
+>
+> **Closed 2026-05-14:** Phase 3 (T31–T36) shipped. Strict/best-effort семантика
+> валидирована unit-тестами (`PolicyConfigTest`, `RegionObserverAdapterTest`,
+> `MultiplexerTest` pause/resume, `RestartControllerTest`) и matrix-IT
+> (`FaultMatrixIT`, 10 кейсов). SDK contract: `pkg/hbasecop.RegionObserver`
+> {`PrePut`, `PostPut`} + `hbasecop.Run(...)` frozen — расширяется только
+> аддитивно (T41 добавит no-op методы через `UnimplementedRegionObserver`).
+> **Open Q #1 decision:** multi-tenant out of scope для MVP — текущий
+> per-coproc-instance изоляция (свой tmpdir/shmem) считается достаточной;
+> formal multi-jar IT откладывается на post-v0.1.0. P6 (T61 multi-region) не
+> заблокирован: он про region-scoping в одном Go-процессе, что ортогонально
+> multi-tenant.
 
 ### Phase 4 — Full RegionObserver
 

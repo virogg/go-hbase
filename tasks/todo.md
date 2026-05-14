@@ -40,7 +40,7 @@
 - [x] T34 Auto-restart with exponential backoff
 - [x] T35 Inflight handling on crash + restart-deadline
 - [x] T36 Fault-injection test suite (≥10 matrix cases)
-- [ ] **CP-δ:** strict/best-effort semantics validated; **gate:** decide Open Q #1 (multi-tenant)
+- [x] **CP-δ:** strict/best-effort semantics validated; Open Q #1 (multi-tenant) → deferred post-MVP
 
 ## Phase 4 — Full RegionObserver
 - [ ] T41 Hook dispatch table generated from .proto (~30 hooks)
