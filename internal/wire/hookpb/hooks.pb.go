@@ -1298,9 +1298,13 @@ func (x *PostCompactRequest) GetCtx() *HookContext {
 	return nil
 }
 
+// Read path (T42 Wave 1). The Get/Scan envelopes are vendored under
+// proto/hbase/Client.proto; per-hook payload fields are appended below
+// without renumbering the shared ctx=1 slot.
 type PreGetOpRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	Get           *hbasepb.Get           `protobuf:"bytes,2,opt,name=get,proto3" json:"get,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1342,9 +1346,20 @@ func (x *PreGetOpRequest) GetCtx() *HookContext {
 	return nil
 }
 
+func (x *PreGetOpRequest) GetGet() *hbasepb.Get {
+	if x != nil {
+		return x.Get
+	}
+	return nil
+}
+
 type PostGetOpRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Ctx   *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	Get   *hbasepb.Get           `protobuf:"bytes,2,opt,name=get,proto3" json:"get,omitempty"`
+	// Cells the read produced (snapshot of the result list HBase passes to
+	// the post-hook). Observers may inspect but should not mutate.
+	Result        []*hbasepb.Cell `protobuf:"bytes,3,rep,name=result,proto3" json:"result,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1386,9 +1401,27 @@ func (x *PostGetOpRequest) GetCtx() *HookContext {
 	return nil
 }
 
+func (x *PostGetOpRequest) GetGet() *hbasepb.Get {
+	if x != nil {
+		return x.Get
+	}
+	return nil
+}
+
+func (x *PostGetOpRequest) GetResult() []*hbasepb.Cell {
+	if x != nil {
+		return x.Result
+	}
+	return nil
+}
+
 type PreExistsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Ctx   *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	Get   *hbasepb.Get           `protobuf:"bytes,2,opt,name=get,proto3" json:"get,omitempty"`
+	// Pre-existing existence flag (HBase's own input). Observer may
+	// override by returning bypass + a different value in HookResponse.
+	Exists        bool `protobuf:"varint,3,opt,name=exists,proto3" json:"exists,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1430,9 +1463,25 @@ func (x *PreExistsRequest) GetCtx() *HookContext {
 	return nil
 }
 
+func (x *PreExistsRequest) GetGet() *hbasepb.Get {
+	if x != nil {
+		return x.Get
+	}
+	return nil
+}
+
+func (x *PreExistsRequest) GetExists() bool {
+	if x != nil {
+		return x.Exists
+	}
+	return false
+}
+
 type PostExistsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	Get           *hbasepb.Get           `protobuf:"bytes,2,opt,name=get,proto3" json:"get,omitempty"`
+	Exists        bool                   `protobuf:"varint,3,opt,name=exists,proto3" json:"exists,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1472,6 +1521,20 @@ func (x *PostExistsRequest) GetCtx() *HookContext {
 		return x.Ctx
 	}
 	return nil
+}
+
+func (x *PostExistsRequest) GetGet() *hbasepb.Get {
+	if x != nil {
+		return x.Get
+	}
+	return nil
+}
+
+func (x *PostExistsRequest) GetExists() bool {
+	if x != nil {
+		return x.Exists
+	}
+	return false
 }
 
 type PreDeleteRequest struct {
@@ -2486,9 +2549,15 @@ func (x *PreIncrementAfterRowLockRequest) GetCtx() *HookContext {
 	return nil
 }
 
+// Scanner hooks (T42 Wave 1). The scanner state itself (InternalScanner,
+// RegionScanner) is runtime-only and not shippable; we send the Scan
+// shape, per-call limit/has_more, and the row-batch the post-hook
+// observes. Scanner identity across calls is carried via
+// HookContext.request_id on the bridge side.
 type PreScannerOpenRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	Scan          *hbasepb.Scan          `protobuf:"bytes,2,opt,name=scan,proto3" json:"scan,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2530,9 +2599,17 @@ func (x *PreScannerOpenRequest) GetCtx() *HookContext {
 	return nil
 }
 
+func (x *PreScannerOpenRequest) GetScan() *hbasepb.Scan {
+	if x != nil {
+		return x.Scan
+	}
+	return nil
+}
+
 type PostScannerOpenRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	Scan          *hbasepb.Scan          `protobuf:"bytes,2,opt,name=scan,proto3" json:"scan,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2574,9 +2651,18 @@ func (x *PostScannerOpenRequest) GetCtx() *HookContext {
 	return nil
 }
 
+func (x *PostScannerOpenRequest) GetScan() *hbasepb.Scan {
+	if x != nil {
+		return x.Scan
+	}
+	return nil
+}
+
 type PreScannerNextRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
+	HasMore       bool                   `protobuf:"varint,3,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2618,9 +2704,28 @@ func (x *PreScannerNextRequest) GetCtx() *HookContext {
 	return nil
 }
 
+func (x *PreScannerNextRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+func (x *PreScannerNextRequest) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
+}
+
 type PostScannerNextRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Ctx     *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	Limit   int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
+	HasMore bool                   `protobuf:"varint,3,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
+	// Rows accumulated for this batch (one Result per row); observers
+	// see the snapshot HBase is about to return to the client.
+	Result        []*hbasepb.Result `protobuf:"bytes,4,rep,name=result,proto3" json:"result,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2662,9 +2767,32 @@ func (x *PostScannerNextRequest) GetCtx() *HookContext {
 	return nil
 }
 
+func (x *PostScannerNextRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+func (x *PostScannerNextRequest) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
+}
+
+func (x *PostScannerNextRequest) GetResult() []*hbasepb.Result {
+	if x != nil {
+		return x.Result
+	}
+	return nil
+}
+
 type PostScannerFilterRowRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	CurrentRow    *hbasepb.Cell          `protobuf:"bytes,2,opt,name=current_row,json=currentRow,proto3" json:"current_row,omitempty"`
+	HasMore       bool                   `protobuf:"varint,3,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2704,6 +2832,20 @@ func (x *PostScannerFilterRowRequest) GetCtx() *HookContext {
 		return x.Ctx
 	}
 	return nil
+}
+
+func (x *PostScannerFilterRowRequest) GetCurrentRow() *hbasepb.Cell {
+	if x != nil {
+		return x.CurrentRow
+	}
+	return nil
+}
+
+func (x *PostScannerFilterRowRequest) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
 }
 
 type PreScannerCloseRequest struct {
@@ -2795,8 +2937,11 @@ func (x *PostScannerCloseRequest) GetCtx() *HookContext {
 }
 
 type PreStoreScannerOpenRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Ctx   *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	// Column-family byte-array identifies the Store the scanner opens for;
+	// the Store object itself is a runtime handle and stays off-wire.
+	ColumnFamily  []byte `protobuf:"bytes,2,opt,name=column_family,json=columnFamily,proto3" json:"column_family,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2834,6 +2979,13 @@ func (*PreStoreScannerOpenRequest) Descriptor() ([]byte, []int) {
 func (x *PreStoreScannerOpenRequest) GetCtx() *HookContext {
 	if x != nil {
 		return x.Ctx
+	}
+	return nil
+}
+
+func (x *PreStoreScannerOpenRequest) GetColumnFamily() []byte {
+	if x != nil {
+		return x.ColumnFamily
 	}
 	return nil
 }
@@ -3502,7 +3654,7 @@ var File_hooks_proto protoreflect.FileDescriptor
 
 const file_hooks_proto_rawDesc = "" +
 	"\n" +
-	"\vhooks.proto\x12\x12virogg.hbasecop.v1\x1a\x11hbase/HBase.proto\x1a\x12hbase/Client.proto\"\x91\x01\n" +
+	"\vhooks.proto\x12\x12virogg.hbasecop.v1\x1a\x10hbase/Cell.proto\x1a\x12hbase/Client.proto\x1a\x11hbase/HBase.proto\"\x91\x01\n" +
 	"\vHookContext\x12B\n" +
 	"\n" +
 	"table_name\x18\x01 \x01(\v2#.virogg.hbasecop.hbase.v1.TableNameR\ttableName\x12\x1f\n" +
@@ -3553,15 +3705,22 @@ const file_hooks_proto_rawDesc = "" +
 	"\x11PreCompactRequest\x121\n" +
 	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"G\n" +
 	"\x12PostCompactRequest\x121\n" +
-	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"D\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"u\n" +
 	"\x0fPreGetOpRequest\x121\n" +
-	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"E\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12/\n" +
+	"\x03get\x18\x02 \x01(\v2\x1d.virogg.hbasecop.hbase.v1.GetR\x03get\"\xae\x01\n" +
 	"\x10PostGetOpRequest\x121\n" +
-	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"E\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12/\n" +
+	"\x03get\x18\x02 \x01(\v2\x1d.virogg.hbasecop.hbase.v1.GetR\x03get\x126\n" +
+	"\x06result\x18\x03 \x03(\v2\x1e.virogg.hbasecop.hbase.v1.CellR\x06result\"\x8e\x01\n" +
 	"\x10PreExistsRequest\x121\n" +
-	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"F\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12/\n" +
+	"\x03get\x18\x02 \x01(\v2\x1d.virogg.hbasecop.hbase.v1.GetR\x03get\x12\x16\n" +
+	"\x06exists\x18\x03 \x01(\bR\x06exists\"\x8f\x01\n" +
 	"\x11PostExistsRequest\x121\n" +
-	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"E\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12/\n" +
+	"\x03get\x18\x02 \x01(\v2\x1d.virogg.hbasecop.hbase.v1.GetR\x03get\x12\x16\n" +
+	"\x06exists\x18\x03 \x01(\bR\x06exists\"E\n" +
 	"\x10PreDeleteRequest\x121\n" +
 	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"F\n" +
 	"\x11PostDeleteRequest\x121\n" +
@@ -3607,23 +3766,34 @@ const file_hooks_proto_rawDesc = "" +
 	"\x14PostIncrementRequest\x121\n" +
 	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"T\n" +
 	"\x1fPreIncrementAfterRowLockRequest\x121\n" +
-	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"J\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"~\n" +
 	"\x15PreScannerOpenRequest\x121\n" +
-	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"K\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x122\n" +
+	"\x04scan\x18\x02 \x01(\v2\x1e.virogg.hbasecop.hbase.v1.ScanR\x04scan\"\x7f\n" +
 	"\x16PostScannerOpenRequest\x121\n" +
-	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"J\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x122\n" +
+	"\x04scan\x18\x02 \x01(\v2\x1e.virogg.hbasecop.hbase.v1.ScanR\x04scan\"{\n" +
 	"\x15PreScannerNextRequest\x121\n" +
-	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"K\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12\x14\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x19\n" +
+	"\bhas_more\x18\x03 \x01(\bR\ahasMore\"\xb6\x01\n" +
 	"\x16PostScannerNextRequest\x121\n" +
-	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"P\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12\x14\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x19\n" +
+	"\bhas_more\x18\x03 \x01(\bR\ahasMore\x128\n" +
+	"\x06result\x18\x04 \x03(\v2 .virogg.hbasecop.hbase.v1.ResultR\x06result\"\xac\x01\n" +
 	"\x1bPostScannerFilterRowRequest\x121\n" +
-	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"K\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12?\n" +
+	"\vcurrent_row\x18\x02 \x01(\v2\x1e.virogg.hbasecop.hbase.v1.CellR\n" +
+	"currentRow\x12\x19\n" +
+	"\bhas_more\x18\x03 \x01(\bR\ahasMore\"K\n" +
 	"\x16PreScannerCloseRequest\x121\n" +
 	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"L\n" +
 	"\x17PostScannerCloseRequest\x121\n" +
-	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"O\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"t\n" +
 	"\x1aPreStoreScannerOpenRequest\x121\n" +
-	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"I\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12#\n" +
+	"\rcolumn_family\x18\x02 \x01(\fR\fcolumnFamily\"I\n" +
 	"\x14PreReplayWALsRequest\x121\n" +
 	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\"J\n" +
 	"\x15PostReplayWALsRequest\x121\n" +
@@ -3817,6 +3987,10 @@ var file_hooks_proto_goTypes = []any{
 	(*PreWALAppendRequest)(nil),                            // 71: virogg.hbasecop.v1.PreWALAppendRequest
 	(*hbasepb.TableName)(nil),                              // 72: virogg.hbasecop.hbase.v1.TableName
 	(*hbasepb.MutationProto)(nil),                          // 73: virogg.hbasecop.hbase.v1.MutationProto
+	(*hbasepb.Get)(nil),                                    // 74: virogg.hbasecop.hbase.v1.Get
+	(*hbasepb.Cell)(nil),                                   // 75: virogg.hbasecop.hbase.v1.Cell
+	(*hbasepb.Scan)(nil),                                   // 76: virogg.hbasecop.hbase.v1.Scan
+	(*hbasepb.Result)(nil),                                 // 77: virogg.hbasecop.hbase.v1.Result
 }
 var file_hooks_proto_depIdxs = []int32{
 	72, // 0: virogg.hbasecop.v1.HookContext.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
@@ -3842,60 +4016,69 @@ var file_hooks_proto_depIdxs = []int32{
 	1,  // 20: virogg.hbasecop.v1.PreCompactRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	1,  // 21: virogg.hbasecop.v1.PostCompactRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	1,  // 22: virogg.hbasecop.v1.PreGetOpRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 23: virogg.hbasecop.v1.PostGetOpRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 24: virogg.hbasecop.v1.PreExistsRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 25: virogg.hbasecop.v1.PostExistsRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 26: virogg.hbasecop.v1.PreDeleteRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 27: virogg.hbasecop.v1.PostDeleteRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 28: virogg.hbasecop.v1.PrePrepareTimeStampForDeleteVersionRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 29: virogg.hbasecop.v1.PreBatchMutateRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 30: virogg.hbasecop.v1.PostBatchMutateRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 31: virogg.hbasecop.v1.PostBatchMutateIndispensablyRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 32: virogg.hbasecop.v1.PostStartRegionOperationRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 33: virogg.hbasecop.v1.PostCloseRegionOperationRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 34: virogg.hbasecop.v1.PreCheckAndPutRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 35: virogg.hbasecop.v1.PostCheckAndPutRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 36: virogg.hbasecop.v1.PreCheckAndPutAfterRowLockRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 37: virogg.hbasecop.v1.PreCheckAndDeleteRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 38: virogg.hbasecop.v1.PostCheckAndDeleteRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 39: virogg.hbasecop.v1.PreCheckAndDeleteAfterRowLockRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 40: virogg.hbasecop.v1.PreCheckAndMutateRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 41: virogg.hbasecop.v1.PostCheckAndMutateRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 42: virogg.hbasecop.v1.PreCheckAndMutateAfterRowLockRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 43: virogg.hbasecop.v1.PreAppendRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 44: virogg.hbasecop.v1.PostAppendRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 45: virogg.hbasecop.v1.PreAppendAfterRowLockRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 46: virogg.hbasecop.v1.PreIncrementRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 47: virogg.hbasecop.v1.PostIncrementRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 48: virogg.hbasecop.v1.PreIncrementAfterRowLockRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 49: virogg.hbasecop.v1.PreScannerOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 50: virogg.hbasecop.v1.PostScannerOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 51: virogg.hbasecop.v1.PreScannerNextRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 52: virogg.hbasecop.v1.PostScannerNextRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 53: virogg.hbasecop.v1.PostScannerFilterRowRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 54: virogg.hbasecop.v1.PreScannerCloseRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 55: virogg.hbasecop.v1.PostScannerCloseRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 56: virogg.hbasecop.v1.PreStoreScannerOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 57: virogg.hbasecop.v1.PreReplayWALsRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 58: virogg.hbasecop.v1.PostReplayWALsRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 59: virogg.hbasecop.v1.PreWALRestoreRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 60: virogg.hbasecop.v1.PostWALRestoreRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 61: virogg.hbasecop.v1.PreBulkLoadHFileRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 62: virogg.hbasecop.v1.PostBulkLoadHFileRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 63: virogg.hbasecop.v1.PreCommitStoreFileRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 64: virogg.hbasecop.v1.PostCommitStoreFileRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 65: virogg.hbasecop.v1.PreStoreFileReaderOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 66: virogg.hbasecop.v1.PostStoreFileReaderOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 67: virogg.hbasecop.v1.PostMutationBeforeWALRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 68: virogg.hbasecop.v1.PostIncrementBeforeWALRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 69: virogg.hbasecop.v1.PostAppendBeforeWALRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 70: virogg.hbasecop.v1.PostInstantiateDeleteTrackerRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	1,  // 71: virogg.hbasecop.v1.PreWALAppendRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	72, // [72:72] is the sub-list for method output_type
-	72, // [72:72] is the sub-list for method input_type
-	72, // [72:72] is the sub-list for extension type_name
-	72, // [72:72] is the sub-list for extension extendee
-	0,  // [0:72] is the sub-list for field type_name
+	74, // 23: virogg.hbasecop.v1.PreGetOpRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
+	1,  // 24: virogg.hbasecop.v1.PostGetOpRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	74, // 25: virogg.hbasecop.v1.PostGetOpRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
+	75, // 26: virogg.hbasecop.v1.PostGetOpRequest.result:type_name -> virogg.hbasecop.hbase.v1.Cell
+	1,  // 27: virogg.hbasecop.v1.PreExistsRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	74, // 28: virogg.hbasecop.v1.PreExistsRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
+	1,  // 29: virogg.hbasecop.v1.PostExistsRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	74, // 30: virogg.hbasecop.v1.PostExistsRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
+	1,  // 31: virogg.hbasecop.v1.PreDeleteRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 32: virogg.hbasecop.v1.PostDeleteRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 33: virogg.hbasecop.v1.PrePrepareTimeStampForDeleteVersionRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 34: virogg.hbasecop.v1.PreBatchMutateRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 35: virogg.hbasecop.v1.PostBatchMutateRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 36: virogg.hbasecop.v1.PostBatchMutateIndispensablyRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 37: virogg.hbasecop.v1.PostStartRegionOperationRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 38: virogg.hbasecop.v1.PostCloseRegionOperationRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 39: virogg.hbasecop.v1.PreCheckAndPutRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 40: virogg.hbasecop.v1.PostCheckAndPutRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 41: virogg.hbasecop.v1.PreCheckAndPutAfterRowLockRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 42: virogg.hbasecop.v1.PreCheckAndDeleteRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 43: virogg.hbasecop.v1.PostCheckAndDeleteRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 44: virogg.hbasecop.v1.PreCheckAndDeleteAfterRowLockRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 45: virogg.hbasecop.v1.PreCheckAndMutateRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 46: virogg.hbasecop.v1.PostCheckAndMutateRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 47: virogg.hbasecop.v1.PreCheckAndMutateAfterRowLockRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 48: virogg.hbasecop.v1.PreAppendRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 49: virogg.hbasecop.v1.PostAppendRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 50: virogg.hbasecop.v1.PreAppendAfterRowLockRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 51: virogg.hbasecop.v1.PreIncrementRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 52: virogg.hbasecop.v1.PostIncrementRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 53: virogg.hbasecop.v1.PreIncrementAfterRowLockRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 54: virogg.hbasecop.v1.PreScannerOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	76, // 55: virogg.hbasecop.v1.PreScannerOpenRequest.scan:type_name -> virogg.hbasecop.hbase.v1.Scan
+	1,  // 56: virogg.hbasecop.v1.PostScannerOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	76, // 57: virogg.hbasecop.v1.PostScannerOpenRequest.scan:type_name -> virogg.hbasecop.hbase.v1.Scan
+	1,  // 58: virogg.hbasecop.v1.PreScannerNextRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 59: virogg.hbasecop.v1.PostScannerNextRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	77, // 60: virogg.hbasecop.v1.PostScannerNextRequest.result:type_name -> virogg.hbasecop.hbase.v1.Result
+	1,  // 61: virogg.hbasecop.v1.PostScannerFilterRowRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	75, // 62: virogg.hbasecop.v1.PostScannerFilterRowRequest.current_row:type_name -> virogg.hbasecop.hbase.v1.Cell
+	1,  // 63: virogg.hbasecop.v1.PreScannerCloseRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 64: virogg.hbasecop.v1.PostScannerCloseRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 65: virogg.hbasecop.v1.PreStoreScannerOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 66: virogg.hbasecop.v1.PreReplayWALsRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 67: virogg.hbasecop.v1.PostReplayWALsRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 68: virogg.hbasecop.v1.PreWALRestoreRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 69: virogg.hbasecop.v1.PostWALRestoreRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 70: virogg.hbasecop.v1.PreBulkLoadHFileRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 71: virogg.hbasecop.v1.PostBulkLoadHFileRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 72: virogg.hbasecop.v1.PreCommitStoreFileRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 73: virogg.hbasecop.v1.PostCommitStoreFileRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 74: virogg.hbasecop.v1.PreStoreFileReaderOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 75: virogg.hbasecop.v1.PostStoreFileReaderOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 76: virogg.hbasecop.v1.PostMutationBeforeWALRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 77: virogg.hbasecop.v1.PostIncrementBeforeWALRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 78: virogg.hbasecop.v1.PostAppendBeforeWALRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 79: virogg.hbasecop.v1.PostInstantiateDeleteTrackerRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,  // 80: virogg.hbasecop.v1.PreWALAppendRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	81, // [81:81] is the sub-list for method output_type
+	81, // [81:81] is the sub-list for method input_type
+	81, // [81:81] is the sub-list for extension type_name
+	81, // [81:81] is the sub-list for extension extendee
+	0,  // [0:81] is the sub-list for field type_name
 }
 
 func init() { file_hooks_proto_init() }

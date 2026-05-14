@@ -312,31 +312,66 @@ public final class RegionObserverAdapter implements RegionObserver {
     dispatchStub(c, HookId.POST_COMPACT, PostCompactRequest.newBuilder());
   }
 
-  // --- Read path ---------------------------------------------------------
+  // --- Read path (T42 Wave 1: bodies populated) -------------------------
 
   @Override
   public void preGetOp(ObserverContext<RegionCoprocessorEnvironment> c, Get get, List<Cell> result)
       throws IOException {
-    dispatchStub(c, HookId.PRE_GET_OP, PreGetOpRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    byte[] reqBytes =
+        PreGetOpRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setGet(GetConverter.toProto(get))
+            .build()
+            .toByteArray();
+    HookResponse resp = dispatch(HookId.PRE_GET_OP.value(), reqBytes);
+    applyHookResponse(c, resp);
   }
 
   @Override
   public void postGetOp(ObserverContext<RegionCoprocessorEnvironment> c, Get get, List<Cell> result)
       throws IOException {
-    dispatchStub(c, HookId.POST_GET_OP, PostGetOpRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    PostGetOpRequest.Builder b =
+        PostGetOpRequest.newBuilder().setCtx(hookCtx).setGet(GetConverter.toProto(get));
+    if (result != null) {
+      for (Cell cell : result) {
+        b.addResult(CellConverter.toProto(cell));
+      }
+    }
+    HookResponse resp = dispatch(HookId.POST_GET_OP.value(), b.build().toByteArray());
+    applyHookResponse(c, resp);
   }
 
   @Override
   public boolean preExists(ObserverContext<RegionCoprocessorEnvironment> c, Get get, boolean exists)
       throws IOException {
-    dispatchStub(c, HookId.PRE_EXISTS, PreExistsRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    byte[] reqBytes =
+        PreExistsRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setGet(GetConverter.toProto(get))
+            .setExists(exists)
+            .build()
+            .toByteArray();
+    HookResponse resp = dispatch(HookId.PRE_EXISTS.value(), reqBytes);
+    applyHookResponse(c, resp);
     return exists;
   }
 
   @Override
   public boolean postExists(
       ObserverContext<RegionCoprocessorEnvironment> c, Get get, boolean exists) throws IOException {
-    dispatchStub(c, HookId.POST_EXISTS, PostExistsRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    byte[] reqBytes =
+        PostExistsRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setGet(GetConverter.toProto(get))
+            .setExists(exists)
+            .build()
+            .toByteArray();
+    HookResponse resp = dispatch(HookId.POST_EXISTS.value(), reqBytes);
+    applyHookResponse(c, resp);
     return exists;
   }
 
@@ -628,19 +663,35 @@ public final class RegionObserverAdapter implements RegionObserver {
     return null;
   }
 
-  // --- Scanner -----------------------------------------------------------
+  // --- Scanner (T42 Wave 1: bodies populated) ---------------------------
 
   @Override
   public void preScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, Scan scan)
       throws IOException {
-    dispatchStub(c, HookId.PRE_SCANNER_OPEN, PreScannerOpenRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    byte[] reqBytes =
+        PreScannerOpenRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setScan(ScanConverter.toProto(scan))
+            .build()
+            .toByteArray();
+    HookResponse resp = dispatch(HookId.PRE_SCANNER_OPEN.value(), reqBytes);
+    applyHookResponse(c, resp);
   }
 
   @Override
   public RegionScanner postScannerOpen(
       ObserverContext<RegionCoprocessorEnvironment> c, Scan scan, RegionScanner scanner)
       throws IOException {
-    dispatchStub(c, HookId.POST_SCANNER_OPEN, PostScannerOpenRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    byte[] reqBytes =
+        PostScannerOpenRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setScan(ScanConverter.toProto(scan))
+            .build()
+            .toByteArray();
+    HookResponse resp = dispatch(HookId.POST_SCANNER_OPEN.value(), reqBytes);
+    applyHookResponse(c, resp);
     return scanner;
   }
 
@@ -652,7 +703,16 @@ public final class RegionObserverAdapter implements RegionObserver {
       int limit,
       boolean hasMore)
       throws IOException {
-    dispatchStub(c, HookId.PRE_SCANNER_NEXT, PreScannerNextRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    byte[] reqBytes =
+        PreScannerNextRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setLimit(limit)
+            .setHasMore(hasMore)
+            .build()
+            .toByteArray();
+    HookResponse resp = dispatch(HookId.PRE_SCANNER_NEXT.value(), reqBytes);
+    applyHookResponse(c, resp);
     return hasMore;
   }
 
@@ -664,7 +724,16 @@ public final class RegionObserverAdapter implements RegionObserver {
       int limit,
       boolean hasMore)
       throws IOException {
-    dispatchStub(c, HookId.POST_SCANNER_NEXT, PostScannerNextRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    PostScannerNextRequest.Builder b =
+        PostScannerNextRequest.newBuilder().setCtx(hookCtx).setLimit(limit).setHasMore(hasMore);
+    if (result != null) {
+      for (Result r : result) {
+        b.addResult(ResultConverter.toProto(r));
+      }
+    }
+    HookResponse resp = dispatch(HookId.POST_SCANNER_NEXT.value(), b.build().toByteArray());
+    applyHookResponse(c, resp);
     return hasMore;
   }
 
@@ -675,7 +744,16 @@ public final class RegionObserverAdapter implements RegionObserver {
       Cell currentRow,
       boolean hasMore)
       throws IOException {
-    dispatchStub(c, HookId.POST_SCANNER_FILTER_ROW, PostScannerFilterRowRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    byte[] reqBytes =
+        PostScannerFilterRowRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setCurrentRow(CellConverter.toProto(currentRow))
+            .setHasMore(hasMore)
+            .build()
+            .toByteArray();
+    HookResponse resp = dispatch(HookId.POST_SCANNER_FILTER_ROW.value(), reqBytes);
+    applyHookResponse(c, resp);
     return hasMore;
   }
 
@@ -695,7 +773,19 @@ public final class RegionObserverAdapter implements RegionObserver {
   public void preStoreScannerOpen(
       ObserverContext<RegionCoprocessorEnvironment> c, Store store, ScanOptions options)
       throws IOException {
-    dispatchStub(c, HookId.PRE_STORE_SCANNER_OPEN, PreStoreScannerOpenRequest.newBuilder());
+    HookContext hookCtx = buildHookContext(c);
+    byte[] reqBytes =
+        PreStoreScannerOpenRequest.newBuilder()
+            .setCtx(hookCtx)
+            .setColumnFamily(
+                store == null
+                    ? com.google.protobuf.ByteString.EMPTY
+                    : com.google.protobuf.ByteString.copyFrom(
+                        store.getColumnFamilyDescriptor().getName()))
+            .build()
+            .toByteArray();
+    HookResponse resp = dispatch(HookId.PRE_STORE_SCANNER_OPEN.value(), reqBytes);
+    applyHookResponse(c, resp);
   }
 
   // --- WAL replay/restore -----------------------------------------------

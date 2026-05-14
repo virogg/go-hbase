@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Vendored from apache/hbase rel/2.5.10 — see proto/hbase/UPSTREAM.md.
-// Slim subset: MutationProto only (with its nested Column/ColumnValue/
-// QualifierValue/Durability/MutationType/DeleteType). Get, Result, Scan
-// and the request/response envelopes will be added by T43+ when the
-// read-path hooks land.
+//
+// T22 (Phase 2): MutationProto only (Put/Delete/Append/Increment share
+// the same shape, discriminated by MutationType).
+// T42 Wave 1: Get, Scan, Column, Cursor, Filter, Result, Consistency
+// added for the read-path hook payloads (preGetOp, preScannerOpen, …).
+// Additional Client.proto messages — Condition, MultiRequest, etc. —
+// stay deferred; only what the bridge actually serializes is vendored.
 
 //*
 // Licensed to the Apache Software Foundation (ASF) under one
@@ -48,6 +51,122 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// * Read consistency level for Get/Scan.
+type Consistency int32
+
+const (
+	Consistency_STRONG   Consistency = 0
+	Consistency_TIMELINE Consistency = 1
+)
+
+// Enum value maps for Consistency.
+var (
+	Consistency_name = map[int32]string{
+		0: "STRONG",
+		1: "TIMELINE",
+	}
+	Consistency_value = map[string]int32{
+		"STRONG":   0,
+		"TIMELINE": 1,
+	}
+)
+
+func (x Consistency) Enum() *Consistency {
+	p := new(Consistency)
+	*p = x
+	return p
+}
+
+func (x Consistency) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Consistency) Descriptor() protoreflect.EnumDescriptor {
+	return file_hbase_Client_proto_enumTypes[0].Descriptor()
+}
+
+func (Consistency) Type() protoreflect.EnumType {
+	return &file_hbase_Client_proto_enumTypes[0]
+}
+
+func (x Consistency) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Do not use.
+func (x *Consistency) UnmarshalJSON(b []byte) error {
+	num, err := protoimpl.X.UnmarshalJSONEnum(x.Descriptor(), b)
+	if err != nil {
+		return err
+	}
+	*x = Consistency(num)
+	return nil
+}
+
+// Deprecated: Use Consistency.Descriptor instead.
+func (Consistency) EnumDescriptor() ([]byte, []int) {
+	return file_hbase_Client_proto_rawDescGZIP(), []int{0}
+}
+
+type Scan_ReadType int32
+
+const (
+	Scan_DEFAULT Scan_ReadType = 0
+	Scan_STREAM  Scan_ReadType = 1
+	Scan_PREAD   Scan_ReadType = 2
+)
+
+// Enum value maps for Scan_ReadType.
+var (
+	Scan_ReadType_name = map[int32]string{
+		0: "DEFAULT",
+		1: "STREAM",
+		2: "PREAD",
+	}
+	Scan_ReadType_value = map[string]int32{
+		"DEFAULT": 0,
+		"STREAM":  1,
+		"PREAD":   2,
+	}
+)
+
+func (x Scan_ReadType) Enum() *Scan_ReadType {
+	p := new(Scan_ReadType)
+	*p = x
+	return p
+}
+
+func (x Scan_ReadType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Scan_ReadType) Descriptor() protoreflect.EnumDescriptor {
+	return file_hbase_Client_proto_enumTypes[1].Descriptor()
+}
+
+func (Scan_ReadType) Type() protoreflect.EnumType {
+	return &file_hbase_Client_proto_enumTypes[1]
+}
+
+func (x Scan_ReadType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Do not use.
+func (x *Scan_ReadType) UnmarshalJSON(b []byte) error {
+	num, err := protoimpl.X.UnmarshalJSONEnum(x.Descriptor(), b)
+	if err != nil {
+		return err
+	}
+	*x = Scan_ReadType(num)
+	return nil
+}
+
+// Deprecated: Use Scan_ReadType.Descriptor instead.
+func (Scan_ReadType) EnumDescriptor() ([]byte, []int) {
+	return file_hbase_Client_proto_rawDescGZIP(), []int{5, 0}
+}
+
 type MutationProto_Durability int32
 
 const (
@@ -87,11 +206,11 @@ func (x MutationProto_Durability) String() string {
 }
 
 func (MutationProto_Durability) Descriptor() protoreflect.EnumDescriptor {
-	return file_hbase_Client_proto_enumTypes[0].Descriptor()
+	return file_hbase_Client_proto_enumTypes[2].Descriptor()
 }
 
 func (MutationProto_Durability) Type() protoreflect.EnumType {
-	return &file_hbase_Client_proto_enumTypes[0]
+	return &file_hbase_Client_proto_enumTypes[2]
 }
 
 func (x MutationProto_Durability) Number() protoreflect.EnumNumber {
@@ -110,7 +229,7 @@ func (x *MutationProto_Durability) UnmarshalJSON(b []byte) error {
 
 // Deprecated: Use MutationProto_Durability.Descriptor instead.
 func (MutationProto_Durability) EnumDescriptor() ([]byte, []int) {
-	return file_hbase_Client_proto_rawDescGZIP(), []int{0, 0}
+	return file_hbase_Client_proto_rawDescGZIP(), []int{6, 0}
 }
 
 type MutationProto_MutationType int32
@@ -149,11 +268,11 @@ func (x MutationProto_MutationType) String() string {
 }
 
 func (MutationProto_MutationType) Descriptor() protoreflect.EnumDescriptor {
-	return file_hbase_Client_proto_enumTypes[1].Descriptor()
+	return file_hbase_Client_proto_enumTypes[3].Descriptor()
 }
 
 func (MutationProto_MutationType) Type() protoreflect.EnumType {
-	return &file_hbase_Client_proto_enumTypes[1]
+	return &file_hbase_Client_proto_enumTypes[3]
 }
 
 func (x MutationProto_MutationType) Number() protoreflect.EnumNumber {
@@ -172,7 +291,7 @@ func (x *MutationProto_MutationType) UnmarshalJSON(b []byte) error {
 
 // Deprecated: Use MutationProto_MutationType.Descriptor instead.
 func (MutationProto_MutationType) EnumDescriptor() ([]byte, []int) {
-	return file_hbase_Client_proto_rawDescGZIP(), []int{0, 1}
+	return file_hbase_Client_proto_rawDescGZIP(), []int{6, 1}
 }
 
 type MutationProto_DeleteType int32
@@ -211,11 +330,11 @@ func (x MutationProto_DeleteType) String() string {
 }
 
 func (MutationProto_DeleteType) Descriptor() protoreflect.EnumDescriptor {
-	return file_hbase_Client_proto_enumTypes[2].Descriptor()
+	return file_hbase_Client_proto_enumTypes[4].Descriptor()
 }
 
 func (MutationProto_DeleteType) Type() protoreflect.EnumType {
-	return &file_hbase_Client_proto_enumTypes[2]
+	return &file_hbase_Client_proto_enumTypes[4]
 }
 
 func (x MutationProto_DeleteType) Number() protoreflect.EnumNumber {
@@ -234,7 +353,640 @@ func (x *MutationProto_DeleteType) UnmarshalJSON(b []byte) error {
 
 // Deprecated: Use MutationProto_DeleteType.Descriptor instead.
 func (MutationProto_DeleteType) EnumDescriptor() ([]byte, []int) {
-	return file_hbase_Client_proto_rawDescGZIP(), []int{0, 2}
+	return file_hbase_Client_proto_rawDescGZIP(), []int{6, 2}
+}
+
+// * Container for a list of column qualifier names of a family.
+type Column struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Family        []byte                 `protobuf:"bytes,1,req,name=family" json:"family,omitempty"`
+	Qualifier     [][]byte               `protobuf:"bytes,2,rep,name=qualifier" json:"qualifier,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Column) Reset() {
+	*x = Column{}
+	mi := &file_hbase_Client_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Column) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Column) ProtoMessage() {}
+
+func (x *Column) ProtoReflect() protoreflect.Message {
+	mi := &file_hbase_Client_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Column.ProtoReflect.Descriptor instead.
+func (*Column) Descriptor() ([]byte, []int) {
+	return file_hbase_Client_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *Column) GetFamily() []byte {
+	if x != nil {
+		return x.Family
+	}
+	return nil
+}
+
+func (x *Column) GetQualifier() [][]byte {
+	if x != nil {
+		return x.Qualifier
+	}
+	return nil
+}
+
+// *
+// Filter envelope. Carries the upstream-class name plus the filter's
+// own self-serialization (via Filter.toByteArray()); reconstruction on
+// the Go side is opaque until a per-filter mapper is added.
+type Filter struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Name             *string                `protobuf:"bytes,1,req,name=name" json:"name,omitempty"`
+	SerializedFilter []byte                 `protobuf:"bytes,2,opt,name=serialized_filter,json=serializedFilter" json:"serialized_filter,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *Filter) Reset() {
+	*x = Filter{}
+	mi := &file_hbase_Client_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Filter) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Filter) ProtoMessage() {}
+
+func (x *Filter) ProtoReflect() protoreflect.Message {
+	mi := &file_hbase_Client_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Filter.ProtoReflect.Descriptor instead.
+func (*Filter) Descriptor() ([]byte, []int) {
+	return file_hbase_Client_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Filter) GetName() string {
+	if x != nil && x.Name != nil {
+		return *x.Name
+	}
+	return ""
+}
+
+func (x *Filter) GetSerializedFilter() []byte {
+	if x != nil {
+		return x.SerializedFilter
+	}
+	return nil
+}
+
+// * Get operation.
+type Get struct {
+	state                      protoimpl.MessageState   `protogen:"open.v1"`
+	Row                        []byte                   `protobuf:"bytes,1,req,name=row" json:"row,omitempty"`
+	Column                     []*Column                `protobuf:"bytes,2,rep,name=column" json:"column,omitempty"`
+	Attribute                  []*NameBytesPair         `protobuf:"bytes,3,rep,name=attribute" json:"attribute,omitempty"`
+	Filter                     *Filter                  `protobuf:"bytes,4,opt,name=filter" json:"filter,omitempty"`
+	TimeRange                  *TimeRange               `protobuf:"bytes,5,opt,name=time_range,json=timeRange" json:"time_range,omitempty"`
+	MaxVersions                *uint32                  `protobuf:"varint,6,opt,name=max_versions,json=maxVersions,def=1" json:"max_versions,omitempty"`
+	CacheBlocks                *bool                    `protobuf:"varint,7,opt,name=cache_blocks,json=cacheBlocks,def=1" json:"cache_blocks,omitempty"`
+	StoreLimit                 *uint32                  `protobuf:"varint,8,opt,name=store_limit,json=storeLimit" json:"store_limit,omitempty"`
+	StoreOffset                *uint32                  `protobuf:"varint,9,opt,name=store_offset,json=storeOffset" json:"store_offset,omitempty"`
+	ExistenceOnly              *bool                    `protobuf:"varint,10,opt,name=existence_only,json=existenceOnly,def=0" json:"existence_only,omitempty"`
+	Consistency                *Consistency             `protobuf:"varint,12,opt,name=consistency,enum=virogg.hbasecop.hbase.v1.Consistency,def=0" json:"consistency,omitempty"`
+	CfTimeRange                []*ColumnFamilyTimeRange `protobuf:"bytes,13,rep,name=cf_time_range,json=cfTimeRange" json:"cf_time_range,omitempty"`
+	LoadColumnFamiliesOnDemand *bool                    `protobuf:"varint,14,opt,name=load_column_families_on_demand,json=loadColumnFamiliesOnDemand" json:"load_column_families_on_demand,omitempty"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
+}
+
+// Default values for Get fields.
+const (
+	Default_Get_MaxVersions   = uint32(1)
+	Default_Get_CacheBlocks   = bool(true)
+	Default_Get_ExistenceOnly = bool(false)
+	Default_Get_Consistency   = Consistency_STRONG
+)
+
+func (x *Get) Reset() {
+	*x = Get{}
+	mi := &file_hbase_Client_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Get) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Get) ProtoMessage() {}
+
+func (x *Get) ProtoReflect() protoreflect.Message {
+	mi := &file_hbase_Client_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Get.ProtoReflect.Descriptor instead.
+func (*Get) Descriptor() ([]byte, []int) {
+	return file_hbase_Client_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Get) GetRow() []byte {
+	if x != nil {
+		return x.Row
+	}
+	return nil
+}
+
+func (x *Get) GetColumn() []*Column {
+	if x != nil {
+		return x.Column
+	}
+	return nil
+}
+
+func (x *Get) GetAttribute() []*NameBytesPair {
+	if x != nil {
+		return x.Attribute
+	}
+	return nil
+}
+
+func (x *Get) GetFilter() *Filter {
+	if x != nil {
+		return x.Filter
+	}
+	return nil
+}
+
+func (x *Get) GetTimeRange() *TimeRange {
+	if x != nil {
+		return x.TimeRange
+	}
+	return nil
+}
+
+func (x *Get) GetMaxVersions() uint32 {
+	if x != nil && x.MaxVersions != nil {
+		return *x.MaxVersions
+	}
+	return Default_Get_MaxVersions
+}
+
+func (x *Get) GetCacheBlocks() bool {
+	if x != nil && x.CacheBlocks != nil {
+		return *x.CacheBlocks
+	}
+	return Default_Get_CacheBlocks
+}
+
+func (x *Get) GetStoreLimit() uint32 {
+	if x != nil && x.StoreLimit != nil {
+		return *x.StoreLimit
+	}
+	return 0
+}
+
+func (x *Get) GetStoreOffset() uint32 {
+	if x != nil && x.StoreOffset != nil {
+		return *x.StoreOffset
+	}
+	return 0
+}
+
+func (x *Get) GetExistenceOnly() bool {
+	if x != nil && x.ExistenceOnly != nil {
+		return *x.ExistenceOnly
+	}
+	return Default_Get_ExistenceOnly
+}
+
+func (x *Get) GetConsistency() Consistency {
+	if x != nil && x.Consistency != nil {
+		return *x.Consistency
+	}
+	return Default_Get_Consistency
+}
+
+func (x *Get) GetCfTimeRange() []*ColumnFamilyTimeRange {
+	if x != nil {
+		return x.CfTimeRange
+	}
+	return nil
+}
+
+func (x *Get) GetLoadColumnFamiliesOnDemand() bool {
+	if x != nil && x.LoadColumnFamiliesOnDemand != nil {
+		return *x.LoadColumnFamiliesOnDemand
+	}
+	return false
+}
+
+// *
+// Result of a read. Cells either land in `cell` directly or are
+// shipped out-of-band with `associated_cell_count`; we always inline
+// via `cell` because the shmem ring carries the whole frame anyway.
+type Result struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Cell                []*Cell                `protobuf:"bytes,1,rep,name=cell" json:"cell,omitempty"`
+	AssociatedCellCount *int32                 `protobuf:"varint,2,opt,name=associated_cell_count,json=associatedCellCount" json:"associated_cell_count,omitempty"`
+	Exists              *bool                  `protobuf:"varint,3,opt,name=exists" json:"exists,omitempty"`
+	Stale               *bool                  `protobuf:"varint,4,opt,name=stale,def=0" json:"stale,omitempty"`
+	Partial             *bool                  `protobuf:"varint,5,opt,name=partial,def=0" json:"partial,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+// Default values for Result fields.
+const (
+	Default_Result_Stale   = bool(false)
+	Default_Result_Partial = bool(false)
+)
+
+func (x *Result) Reset() {
+	*x = Result{}
+	mi := &file_hbase_Client_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Result) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Result) ProtoMessage() {}
+
+func (x *Result) ProtoReflect() protoreflect.Message {
+	mi := &file_hbase_Client_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Result.ProtoReflect.Descriptor instead.
+func (*Result) Descriptor() ([]byte, []int) {
+	return file_hbase_Client_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *Result) GetCell() []*Cell {
+	if x != nil {
+		return x.Cell
+	}
+	return nil
+}
+
+func (x *Result) GetAssociatedCellCount() int32 {
+	if x != nil && x.AssociatedCellCount != nil {
+		return *x.AssociatedCellCount
+	}
+	return 0
+}
+
+func (x *Result) GetExists() bool {
+	if x != nil && x.Exists != nil {
+		return *x.Exists
+	}
+	return false
+}
+
+func (x *Result) GetStale() bool {
+	if x != nil && x.Stale != nil {
+		return *x.Stale
+	}
+	return Default_Result_Stale
+}
+
+func (x *Result) GetPartial() bool {
+	if x != nil && x.Partial != nil {
+		return *x.Partial
+	}
+	return Default_Result_Partial
+}
+
+// * Cursor for resumable scans (see Scan.need_cursor_result).
+type Cursor struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Row           []byte                 `protobuf:"bytes,1,opt,name=row" json:"row,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Cursor) Reset() {
+	*x = Cursor{}
+	mi := &file_hbase_Client_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Cursor) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Cursor) ProtoMessage() {}
+
+func (x *Cursor) ProtoReflect() protoreflect.Message {
+	mi := &file_hbase_Client_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Cursor.ProtoReflect.Descriptor instead.
+func (*Cursor) Descriptor() ([]byte, []int) {
+	return file_hbase_Client_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *Cursor) GetRow() []byte {
+	if x != nil {
+		return x.Row
+	}
+	return nil
+}
+
+// * Scan operation.
+type Scan struct {
+	state                      protoimpl.MessageState `protogen:"open.v1"`
+	Column                     []*Column              `protobuf:"bytes,1,rep,name=column" json:"column,omitempty"`
+	Attribute                  []*NameBytesPair       `protobuf:"bytes,2,rep,name=attribute" json:"attribute,omitempty"`
+	StartRow                   []byte                 `protobuf:"bytes,3,opt,name=start_row,json=startRow" json:"start_row,omitempty"`
+	StopRow                    []byte                 `protobuf:"bytes,4,opt,name=stop_row,json=stopRow" json:"stop_row,omitempty"`
+	Filter                     *Filter                `protobuf:"bytes,5,opt,name=filter" json:"filter,omitempty"`
+	TimeRange                  *TimeRange             `protobuf:"bytes,6,opt,name=time_range,json=timeRange" json:"time_range,omitempty"`
+	MaxVersions                *uint32                `protobuf:"varint,7,opt,name=max_versions,json=maxVersions,def=1" json:"max_versions,omitempty"`
+	CacheBlocks                *bool                  `protobuf:"varint,8,opt,name=cache_blocks,json=cacheBlocks,def=1" json:"cache_blocks,omitempty"`
+	BatchSize                  *uint32                `protobuf:"varint,9,opt,name=batch_size,json=batchSize" json:"batch_size,omitempty"`
+	MaxResultSize              *uint64                `protobuf:"varint,10,opt,name=max_result_size,json=maxResultSize" json:"max_result_size,omitempty"`
+	StoreLimit                 *uint32                `protobuf:"varint,11,opt,name=store_limit,json=storeLimit" json:"store_limit,omitempty"`
+	StoreOffset                *uint32                `protobuf:"varint,12,opt,name=store_offset,json=storeOffset" json:"store_offset,omitempty"`
+	LoadColumnFamiliesOnDemand *bool                  `protobuf:"varint,13,opt,name=load_column_families_on_demand,json=loadColumnFamiliesOnDemand" json:"load_column_families_on_demand,omitempty"`
+	// Deprecated: Marked as deprecated in hbase/Client.proto.
+	Small               *bool                    `protobuf:"varint,14,opt,name=small" json:"small,omitempty"`
+	Reversed            *bool                    `protobuf:"varint,15,opt,name=reversed,def=0" json:"reversed,omitempty"`
+	Consistency         *Consistency             `protobuf:"varint,16,opt,name=consistency,enum=virogg.hbasecop.hbase.v1.Consistency,def=0" json:"consistency,omitempty"`
+	Caching             *uint32                  `protobuf:"varint,17,opt,name=caching" json:"caching,omitempty"`
+	AllowPartialResults *bool                    `protobuf:"varint,18,opt,name=allow_partial_results,json=allowPartialResults" json:"allow_partial_results,omitempty"`
+	CfTimeRange         []*ColumnFamilyTimeRange `protobuf:"bytes,19,rep,name=cf_time_range,json=cfTimeRange" json:"cf_time_range,omitempty"`
+	MvccReadPoint       *uint64                  `protobuf:"varint,20,opt,name=mvcc_read_point,json=mvccReadPoint,def=0" json:"mvcc_read_point,omitempty"`
+	IncludeStartRow     *bool                    `protobuf:"varint,21,opt,name=include_start_row,json=includeStartRow,def=1" json:"include_start_row,omitempty"`
+	IncludeStopRow      *bool                    `protobuf:"varint,22,opt,name=include_stop_row,json=includeStopRow,def=0" json:"include_stop_row,omitempty"`
+	ReadType            *Scan_ReadType           `protobuf:"varint,23,opt,name=read_type,json=readType,enum=virogg.hbasecop.hbase.v1.Scan_ReadType,def=0" json:"read_type,omitempty"`
+	NeedCursorResult    *bool                    `protobuf:"varint,24,opt,name=need_cursor_result,json=needCursorResult,def=0" json:"need_cursor_result,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+// Default values for Scan fields.
+const (
+	Default_Scan_MaxVersions      = uint32(1)
+	Default_Scan_CacheBlocks      = bool(true)
+	Default_Scan_Reversed         = bool(false)
+	Default_Scan_Consistency      = Consistency_STRONG
+	Default_Scan_MvccReadPoint    = uint64(0)
+	Default_Scan_IncludeStartRow  = bool(true)
+	Default_Scan_IncludeStopRow   = bool(false)
+	Default_Scan_ReadType         = Scan_DEFAULT
+	Default_Scan_NeedCursorResult = bool(false)
+)
+
+func (x *Scan) Reset() {
+	*x = Scan{}
+	mi := &file_hbase_Client_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Scan) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Scan) ProtoMessage() {}
+
+func (x *Scan) ProtoReflect() protoreflect.Message {
+	mi := &file_hbase_Client_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Scan.ProtoReflect.Descriptor instead.
+func (*Scan) Descriptor() ([]byte, []int) {
+	return file_hbase_Client_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *Scan) GetColumn() []*Column {
+	if x != nil {
+		return x.Column
+	}
+	return nil
+}
+
+func (x *Scan) GetAttribute() []*NameBytesPair {
+	if x != nil {
+		return x.Attribute
+	}
+	return nil
+}
+
+func (x *Scan) GetStartRow() []byte {
+	if x != nil {
+		return x.StartRow
+	}
+	return nil
+}
+
+func (x *Scan) GetStopRow() []byte {
+	if x != nil {
+		return x.StopRow
+	}
+	return nil
+}
+
+func (x *Scan) GetFilter() *Filter {
+	if x != nil {
+		return x.Filter
+	}
+	return nil
+}
+
+func (x *Scan) GetTimeRange() *TimeRange {
+	if x != nil {
+		return x.TimeRange
+	}
+	return nil
+}
+
+func (x *Scan) GetMaxVersions() uint32 {
+	if x != nil && x.MaxVersions != nil {
+		return *x.MaxVersions
+	}
+	return Default_Scan_MaxVersions
+}
+
+func (x *Scan) GetCacheBlocks() bool {
+	if x != nil && x.CacheBlocks != nil {
+		return *x.CacheBlocks
+	}
+	return Default_Scan_CacheBlocks
+}
+
+func (x *Scan) GetBatchSize() uint32 {
+	if x != nil && x.BatchSize != nil {
+		return *x.BatchSize
+	}
+	return 0
+}
+
+func (x *Scan) GetMaxResultSize() uint64 {
+	if x != nil && x.MaxResultSize != nil {
+		return *x.MaxResultSize
+	}
+	return 0
+}
+
+func (x *Scan) GetStoreLimit() uint32 {
+	if x != nil && x.StoreLimit != nil {
+		return *x.StoreLimit
+	}
+	return 0
+}
+
+func (x *Scan) GetStoreOffset() uint32 {
+	if x != nil && x.StoreOffset != nil {
+		return *x.StoreOffset
+	}
+	return 0
+}
+
+func (x *Scan) GetLoadColumnFamiliesOnDemand() bool {
+	if x != nil && x.LoadColumnFamiliesOnDemand != nil {
+		return *x.LoadColumnFamiliesOnDemand
+	}
+	return false
+}
+
+// Deprecated: Marked as deprecated in hbase/Client.proto.
+func (x *Scan) GetSmall() bool {
+	if x != nil && x.Small != nil {
+		return *x.Small
+	}
+	return false
+}
+
+func (x *Scan) GetReversed() bool {
+	if x != nil && x.Reversed != nil {
+		return *x.Reversed
+	}
+	return Default_Scan_Reversed
+}
+
+func (x *Scan) GetConsistency() Consistency {
+	if x != nil && x.Consistency != nil {
+		return *x.Consistency
+	}
+	return Default_Scan_Consistency
+}
+
+func (x *Scan) GetCaching() uint32 {
+	if x != nil && x.Caching != nil {
+		return *x.Caching
+	}
+	return 0
+}
+
+func (x *Scan) GetAllowPartialResults() bool {
+	if x != nil && x.AllowPartialResults != nil {
+		return *x.AllowPartialResults
+	}
+	return false
+}
+
+func (x *Scan) GetCfTimeRange() []*ColumnFamilyTimeRange {
+	if x != nil {
+		return x.CfTimeRange
+	}
+	return nil
+}
+
+func (x *Scan) GetMvccReadPoint() uint64 {
+	if x != nil && x.MvccReadPoint != nil {
+		return *x.MvccReadPoint
+	}
+	return Default_Scan_MvccReadPoint
+}
+
+func (x *Scan) GetIncludeStartRow() bool {
+	if x != nil && x.IncludeStartRow != nil {
+		return *x.IncludeStartRow
+	}
+	return Default_Scan_IncludeStartRow
+}
+
+func (x *Scan) GetIncludeStopRow() bool {
+	if x != nil && x.IncludeStopRow != nil {
+		return *x.IncludeStopRow
+	}
+	return Default_Scan_IncludeStopRow
+}
+
+func (x *Scan) GetReadType() Scan_ReadType {
+	if x != nil && x.ReadType != nil {
+		return *x.ReadType
+	}
+	return Default_Scan_ReadType
+}
+
+func (x *Scan) GetNeedCursorResult() bool {
+	if x != nil && x.NeedCursorResult != nil {
+		return *x.NeedCursorResult
+	}
+	return Default_Scan_NeedCursorResult
 }
 
 // *
@@ -244,24 +996,16 @@ func (MutationProto_DeleteType) EnumDescriptor() ([]byte, []int) {
 // passes Cells out-of-band when associated_cell_count > 0; the in-band
 // column_value path covers everything Phase 2 (T22+) needs.
 type MutationProto struct {
-	state       protoimpl.MessageState       `protogen:"open.v1"`
-	Row         []byte                       `protobuf:"bytes,1,opt,name=row" json:"row,omitempty"`
-	MutateType  *MutationProto_MutationType  `protobuf:"varint,2,opt,name=mutate_type,json=mutateType,enum=virogg.hbasecop.hbase.v1.MutationProto_MutationType" json:"mutate_type,omitempty"`
-	ColumnValue []*MutationProto_ColumnValue `protobuf:"bytes,3,rep,name=column_value,json=columnValue" json:"column_value,omitempty"`
-	Timestamp   *uint64                      `protobuf:"varint,4,opt,name=timestamp" json:"timestamp,omitempty"`
-	Attribute   []*NameBytesPair             `protobuf:"bytes,5,rep,name=attribute" json:"attribute,omitempty"`
-	Durability  *MutationProto_Durability    `protobuf:"varint,6,opt,name=durability,enum=virogg.hbasecop.hbase.v1.MutationProto_Durability,def=0" json:"durability,omitempty"`
-	// For some mutations, a result may be returned, in which case,
-	// time range can be specified for potential performance gain
-	TimeRange *TimeRange `protobuf:"bytes,7,opt,name=time_range,json=timeRange" json:"time_range,omitempty"`
-	// The below count is set when the associated cells are NOT
-	// part of this protobuf message; they are passed alongside
-	// and then this Message is a placeholder with metadata.  The
-	// count is needed to know how many to peel off the block of Cells as
-	// ours.  NOTE: This is different from the pb managed cell_count of the
-	// 'cell' field above which is non-null when the cells are pb'd.
-	AssociatedCellCount *int32  `protobuf:"varint,8,opt,name=associated_cell_count,json=associatedCellCount" json:"associated_cell_count,omitempty"`
-	Nonce               *uint64 `protobuf:"varint,9,opt,name=nonce" json:"nonce,omitempty"`
+	state               protoimpl.MessageState       `protogen:"open.v1"`
+	Row                 []byte                       `protobuf:"bytes,1,opt,name=row" json:"row,omitempty"`
+	MutateType          *MutationProto_MutationType  `protobuf:"varint,2,opt,name=mutate_type,json=mutateType,enum=virogg.hbasecop.hbase.v1.MutationProto_MutationType" json:"mutate_type,omitempty"`
+	ColumnValue         []*MutationProto_ColumnValue `protobuf:"bytes,3,rep,name=column_value,json=columnValue" json:"column_value,omitempty"`
+	Timestamp           *uint64                      `protobuf:"varint,4,opt,name=timestamp" json:"timestamp,omitempty"`
+	Attribute           []*NameBytesPair             `protobuf:"bytes,5,rep,name=attribute" json:"attribute,omitempty"`
+	Durability          *MutationProto_Durability    `protobuf:"varint,6,opt,name=durability,enum=virogg.hbasecop.hbase.v1.MutationProto_Durability,def=0" json:"durability,omitempty"`
+	TimeRange           *TimeRange                   `protobuf:"bytes,7,opt,name=time_range,json=timeRange" json:"time_range,omitempty"`
+	AssociatedCellCount *int32                       `protobuf:"varint,8,opt,name=associated_cell_count,json=associatedCellCount" json:"associated_cell_count,omitempty"`
+	Nonce               *uint64                      `protobuf:"varint,9,opt,name=nonce" json:"nonce,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -273,7 +1017,7 @@ const (
 
 func (x *MutationProto) Reset() {
 	*x = MutationProto{}
-	mi := &file_hbase_Client_proto_msgTypes[0]
+	mi := &file_hbase_Client_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -285,7 +1029,7 @@ func (x *MutationProto) String() string {
 func (*MutationProto) ProtoMessage() {}
 
 func (x *MutationProto) ProtoReflect() protoreflect.Message {
-	mi := &file_hbase_Client_proto_msgTypes[0]
+	mi := &file_hbase_Client_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -298,7 +1042,7 @@ func (x *MutationProto) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MutationProto.ProtoReflect.Descriptor instead.
 func (*MutationProto) Descriptor() ([]byte, []int) {
-	return file_hbase_Client_proto_rawDescGZIP(), []int{0}
+	return file_hbase_Client_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *MutationProto) GetRow() []byte {
@@ -374,7 +1118,7 @@ type MutationProto_ColumnValue struct {
 
 func (x *MutationProto_ColumnValue) Reset() {
 	*x = MutationProto_ColumnValue{}
-	mi := &file_hbase_Client_proto_msgTypes[1]
+	mi := &file_hbase_Client_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -386,7 +1130,7 @@ func (x *MutationProto_ColumnValue) String() string {
 func (*MutationProto_ColumnValue) ProtoMessage() {}
 
 func (x *MutationProto_ColumnValue) ProtoReflect() protoreflect.Message {
-	mi := &file_hbase_Client_proto_msgTypes[1]
+	mi := &file_hbase_Client_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -399,7 +1143,7 @@ func (x *MutationProto_ColumnValue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MutationProto_ColumnValue.ProtoReflect.Descriptor instead.
 func (*MutationProto_ColumnValue) Descriptor() ([]byte, []int) {
-	return file_hbase_Client_proto_rawDescGZIP(), []int{0, 0}
+	return file_hbase_Client_proto_rawDescGZIP(), []int{6, 0}
 }
 
 func (x *MutationProto_ColumnValue) GetFamily() []byte {
@@ -429,7 +1173,7 @@ type MutationProto_ColumnValue_QualifierValue struct {
 
 func (x *MutationProto_ColumnValue_QualifierValue) Reset() {
 	*x = MutationProto_ColumnValue_QualifierValue{}
-	mi := &file_hbase_Client_proto_msgTypes[2]
+	mi := &file_hbase_Client_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -441,7 +1185,7 @@ func (x *MutationProto_ColumnValue_QualifierValue) String() string {
 func (*MutationProto_ColumnValue_QualifierValue) ProtoMessage() {}
 
 func (x *MutationProto_ColumnValue_QualifierValue) ProtoReflect() protoreflect.Message {
-	mi := &file_hbase_Client_proto_msgTypes[2]
+	mi := &file_hbase_Client_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -454,7 +1198,7 @@ func (x *MutationProto_ColumnValue_QualifierValue) ProtoReflect() protoreflect.M
 
 // Deprecated: Use MutationProto_ColumnValue_QualifierValue.ProtoReflect.Descriptor instead.
 func (*MutationProto_ColumnValue_QualifierValue) Descriptor() ([]byte, []int) {
-	return file_hbase_Client_proto_rawDescGZIP(), []int{0, 0, 0}
+	return file_hbase_Client_proto_rawDescGZIP(), []int{6, 0, 0}
 }
 
 func (x *MutationProto_ColumnValue_QualifierValue) GetQualifier() []byte {
@@ -496,7 +1240,72 @@ var File_hbase_Client_proto protoreflect.FileDescriptor
 
 const file_hbase_Client_proto_rawDesc = "" +
 	"\n" +
-	"\x12hbase/Client.proto\x12\x18virogg.hbasecop.hbase.v1\x1a\x11hbase/HBase.proto\"\x92\t\n" +
+	"\x12hbase/Client.proto\x12\x18virogg.hbasecop.hbase.v1\x1a\x10hbase/Cell.proto\x1a\x11hbase/HBase.proto\">\n" +
+	"\x06Column\x12\x16\n" +
+	"\x06family\x18\x01 \x02(\fR\x06family\x12\x1c\n" +
+	"\tqualifier\x18\x02 \x03(\fR\tqualifier\"I\n" +
+	"\x06Filter\x12\x12\n" +
+	"\x04name\x18\x01 \x02(\tR\x04name\x12+\n" +
+	"\x11serialized_filter\x18\x02 \x01(\fR\x10serializedFilter\"\xc1\x05\n" +
+	"\x03Get\x12\x10\n" +
+	"\x03row\x18\x01 \x02(\fR\x03row\x128\n" +
+	"\x06column\x18\x02 \x03(\v2 .virogg.hbasecop.hbase.v1.ColumnR\x06column\x12E\n" +
+	"\tattribute\x18\x03 \x03(\v2'.virogg.hbasecop.hbase.v1.NameBytesPairR\tattribute\x128\n" +
+	"\x06filter\x18\x04 \x01(\v2 .virogg.hbasecop.hbase.v1.FilterR\x06filter\x12B\n" +
+	"\n" +
+	"time_range\x18\x05 \x01(\v2#.virogg.hbasecop.hbase.v1.TimeRangeR\ttimeRange\x12$\n" +
+	"\fmax_versions\x18\x06 \x01(\r:\x011R\vmaxVersions\x12'\n" +
+	"\fcache_blocks\x18\a \x01(\b:\x04trueR\vcacheBlocks\x12\x1f\n" +
+	"\vstore_limit\x18\b \x01(\rR\n" +
+	"storeLimit\x12!\n" +
+	"\fstore_offset\x18\t \x01(\rR\vstoreOffset\x12,\n" +
+	"\x0eexistence_only\x18\n" +
+	" \x01(\b:\x05falseR\rexistenceOnly\x12O\n" +
+	"\vconsistency\x18\f \x01(\x0e2%.virogg.hbasecop.hbase.v1.Consistency:\x06STRONGR\vconsistency\x12S\n" +
+	"\rcf_time_range\x18\r \x03(\v2/.virogg.hbasecop.hbase.v1.ColumnFamilyTimeRangeR\vcfTimeRange\x12B\n" +
+	"\x1eload_column_families_on_demand\x18\x0e \x01(\bR\x1aloadColumnFamiliesOnDemand\"\xc6\x01\n" +
+	"\x06Result\x122\n" +
+	"\x04cell\x18\x01 \x03(\v2\x1e.virogg.hbasecop.hbase.v1.CellR\x04cell\x122\n" +
+	"\x15associated_cell_count\x18\x02 \x01(\x05R\x13associatedCellCount\x12\x16\n" +
+	"\x06exists\x18\x03 \x01(\bR\x06exists\x12\x1b\n" +
+	"\x05stale\x18\x04 \x01(\b:\x05falseR\x05stale\x12\x1f\n" +
+	"\apartial\x18\x05 \x01(\b:\x05falseR\apartial\"\x1a\n" +
+	"\x06Cursor\x12\x10\n" +
+	"\x03row\x18\x01 \x01(\fR\x03row\"\xce\t\n" +
+	"\x04Scan\x128\n" +
+	"\x06column\x18\x01 \x03(\v2 .virogg.hbasecop.hbase.v1.ColumnR\x06column\x12E\n" +
+	"\tattribute\x18\x02 \x03(\v2'.virogg.hbasecop.hbase.v1.NameBytesPairR\tattribute\x12\x1b\n" +
+	"\tstart_row\x18\x03 \x01(\fR\bstartRow\x12\x19\n" +
+	"\bstop_row\x18\x04 \x01(\fR\astopRow\x128\n" +
+	"\x06filter\x18\x05 \x01(\v2 .virogg.hbasecop.hbase.v1.FilterR\x06filter\x12B\n" +
+	"\n" +
+	"time_range\x18\x06 \x01(\v2#.virogg.hbasecop.hbase.v1.TimeRangeR\ttimeRange\x12$\n" +
+	"\fmax_versions\x18\a \x01(\r:\x011R\vmaxVersions\x12'\n" +
+	"\fcache_blocks\x18\b \x01(\b:\x04trueR\vcacheBlocks\x12\x1d\n" +
+	"\n" +
+	"batch_size\x18\t \x01(\rR\tbatchSize\x12&\n" +
+	"\x0fmax_result_size\x18\n" +
+	" \x01(\x04R\rmaxResultSize\x12\x1f\n" +
+	"\vstore_limit\x18\v \x01(\rR\n" +
+	"storeLimit\x12!\n" +
+	"\fstore_offset\x18\f \x01(\rR\vstoreOffset\x12B\n" +
+	"\x1eload_column_families_on_demand\x18\r \x01(\bR\x1aloadColumnFamiliesOnDemand\x12\x18\n" +
+	"\x05small\x18\x0e \x01(\bB\x02\x18\x01R\x05small\x12!\n" +
+	"\breversed\x18\x0f \x01(\b:\x05falseR\breversed\x12O\n" +
+	"\vconsistency\x18\x10 \x01(\x0e2%.virogg.hbasecop.hbase.v1.Consistency:\x06STRONGR\vconsistency\x12\x18\n" +
+	"\acaching\x18\x11 \x01(\rR\acaching\x122\n" +
+	"\x15allow_partial_results\x18\x12 \x01(\bR\x13allowPartialResults\x12S\n" +
+	"\rcf_time_range\x18\x13 \x03(\v2/.virogg.hbasecop.hbase.v1.ColumnFamilyTimeRangeR\vcfTimeRange\x12)\n" +
+	"\x0fmvcc_read_point\x18\x14 \x01(\x04:\x010R\rmvccReadPoint\x120\n" +
+	"\x11include_start_row\x18\x15 \x01(\b:\x04trueR\x0fincludeStartRow\x12/\n" +
+	"\x10include_stop_row\x18\x16 \x01(\b:\x05falseR\x0eincludeStopRow\x12M\n" +
+	"\tread_type\x18\x17 \x01(\x0e2'.virogg.hbasecop.hbase.v1.Scan.ReadType:\aDEFAULTR\breadType\x123\n" +
+	"\x12need_cursor_result\x18\x18 \x01(\b:\x05falseR\x10needCursorResult\".\n" +
+	"\bReadType\x12\v\n" +
+	"\aDEFAULT\x10\x00\x12\n" +
+	"\n" +
+	"\x06STREAM\x10\x01\x12\t\n" +
+	"\x05PREAD\x10\x02\"\x92\t\n" +
 	"\rMutationProto\x12\x10\n" +
 	"\x03row\x18\x01 \x01(\fR\x03row\x12U\n" +
 	"\vmutate_type\x18\x02 \x01(\x0e24.virogg.hbasecop.hbase.v1.MutationProto.MutationTypeR\n" +
@@ -540,7 +1349,11 @@ const file_hbase_Client_proto_rawDesc = "" +
 	"\x12DELETE_ONE_VERSION\x10\x00\x12\x1c\n" +
 	"\x18DELETE_MULTIPLE_VERSIONS\x10\x01\x12\x11\n" +
 	"\rDELETE_FAMILY\x10\x02\x12\x19\n" +
-	"\x15DELETE_FAMILY_VERSION\x10\x03Bc\n" +
+	"\x15DELETE_FAMILY_VERSION\x10\x03*'\n" +
+	"\vConsistency\x12\n" +
+	"\n" +
+	"\x06STRONG\x10\x00\x12\f\n" +
+	"\bTIMELINE\x10\x01Bc\n" +
 	"\x1ccom.virogg.hbasecop.hbase.v1B\fClientProtosH\x01Z0github.com/virogg/go-hbase/internal/wire/hbasepb\xa0\x01\x01"
 
 var (
@@ -555,31 +1368,55 @@ func file_hbase_Client_proto_rawDescGZIP() []byte {
 	return file_hbase_Client_proto_rawDescData
 }
 
-var file_hbase_Client_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_hbase_Client_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_hbase_Client_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_hbase_Client_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_hbase_Client_proto_goTypes = []any{
-	(MutationProto_Durability)(0),                    // 0: virogg.hbasecop.hbase.v1.MutationProto.Durability
-	(MutationProto_MutationType)(0),                  // 1: virogg.hbasecop.hbase.v1.MutationProto.MutationType
-	(MutationProto_DeleteType)(0),                    // 2: virogg.hbasecop.hbase.v1.MutationProto.DeleteType
-	(*MutationProto)(nil),                            // 3: virogg.hbasecop.hbase.v1.MutationProto
-	(*MutationProto_ColumnValue)(nil),                // 4: virogg.hbasecop.hbase.v1.MutationProto.ColumnValue
-	(*MutationProto_ColumnValue_QualifierValue)(nil), // 5: virogg.hbasecop.hbase.v1.MutationProto.ColumnValue.QualifierValue
-	(*NameBytesPair)(nil),                            // 6: virogg.hbasecop.hbase.v1.NameBytesPair
-	(*TimeRange)(nil),                                // 7: virogg.hbasecop.hbase.v1.TimeRange
+	(Consistency)(0),                  // 0: virogg.hbasecop.hbase.v1.Consistency
+	(Scan_ReadType)(0),                // 1: virogg.hbasecop.hbase.v1.Scan.ReadType
+	(MutationProto_Durability)(0),     // 2: virogg.hbasecop.hbase.v1.MutationProto.Durability
+	(MutationProto_MutationType)(0),   // 3: virogg.hbasecop.hbase.v1.MutationProto.MutationType
+	(MutationProto_DeleteType)(0),     // 4: virogg.hbasecop.hbase.v1.MutationProto.DeleteType
+	(*Column)(nil),                    // 5: virogg.hbasecop.hbase.v1.Column
+	(*Filter)(nil),                    // 6: virogg.hbasecop.hbase.v1.Filter
+	(*Get)(nil),                       // 7: virogg.hbasecop.hbase.v1.Get
+	(*Result)(nil),                    // 8: virogg.hbasecop.hbase.v1.Result
+	(*Cursor)(nil),                    // 9: virogg.hbasecop.hbase.v1.Cursor
+	(*Scan)(nil),                      // 10: virogg.hbasecop.hbase.v1.Scan
+	(*MutationProto)(nil),             // 11: virogg.hbasecop.hbase.v1.MutationProto
+	(*MutationProto_ColumnValue)(nil), // 12: virogg.hbasecop.hbase.v1.MutationProto.ColumnValue
+	(*MutationProto_ColumnValue_QualifierValue)(nil), // 13: virogg.hbasecop.hbase.v1.MutationProto.ColumnValue.QualifierValue
+	(*NameBytesPair)(nil),                            // 14: virogg.hbasecop.hbase.v1.NameBytesPair
+	(*TimeRange)(nil),                                // 15: virogg.hbasecop.hbase.v1.TimeRange
+	(*ColumnFamilyTimeRange)(nil),                    // 16: virogg.hbasecop.hbase.v1.ColumnFamilyTimeRange
+	(*Cell)(nil),                                     // 17: virogg.hbasecop.hbase.v1.Cell
 }
 var file_hbase_Client_proto_depIdxs = []int32{
-	1, // 0: virogg.hbasecop.hbase.v1.MutationProto.mutate_type:type_name -> virogg.hbasecop.hbase.v1.MutationProto.MutationType
-	4, // 1: virogg.hbasecop.hbase.v1.MutationProto.column_value:type_name -> virogg.hbasecop.hbase.v1.MutationProto.ColumnValue
-	6, // 2: virogg.hbasecop.hbase.v1.MutationProto.attribute:type_name -> virogg.hbasecop.hbase.v1.NameBytesPair
-	0, // 3: virogg.hbasecop.hbase.v1.MutationProto.durability:type_name -> virogg.hbasecop.hbase.v1.MutationProto.Durability
-	7, // 4: virogg.hbasecop.hbase.v1.MutationProto.time_range:type_name -> virogg.hbasecop.hbase.v1.TimeRange
-	5, // 5: virogg.hbasecop.hbase.v1.MutationProto.ColumnValue.qualifier_value:type_name -> virogg.hbasecop.hbase.v1.MutationProto.ColumnValue.QualifierValue
-	2, // 6: virogg.hbasecop.hbase.v1.MutationProto.ColumnValue.QualifierValue.delete_type:type_name -> virogg.hbasecop.hbase.v1.MutationProto.DeleteType
-	7, // [7:7] is the sub-list for method output_type
-	7, // [7:7] is the sub-list for method input_type
-	7, // [7:7] is the sub-list for extension type_name
-	7, // [7:7] is the sub-list for extension extendee
-	0, // [0:7] is the sub-list for field type_name
+	5,  // 0: virogg.hbasecop.hbase.v1.Get.column:type_name -> virogg.hbasecop.hbase.v1.Column
+	14, // 1: virogg.hbasecop.hbase.v1.Get.attribute:type_name -> virogg.hbasecop.hbase.v1.NameBytesPair
+	6,  // 2: virogg.hbasecop.hbase.v1.Get.filter:type_name -> virogg.hbasecop.hbase.v1.Filter
+	15, // 3: virogg.hbasecop.hbase.v1.Get.time_range:type_name -> virogg.hbasecop.hbase.v1.TimeRange
+	0,  // 4: virogg.hbasecop.hbase.v1.Get.consistency:type_name -> virogg.hbasecop.hbase.v1.Consistency
+	16, // 5: virogg.hbasecop.hbase.v1.Get.cf_time_range:type_name -> virogg.hbasecop.hbase.v1.ColumnFamilyTimeRange
+	17, // 6: virogg.hbasecop.hbase.v1.Result.cell:type_name -> virogg.hbasecop.hbase.v1.Cell
+	5,  // 7: virogg.hbasecop.hbase.v1.Scan.column:type_name -> virogg.hbasecop.hbase.v1.Column
+	14, // 8: virogg.hbasecop.hbase.v1.Scan.attribute:type_name -> virogg.hbasecop.hbase.v1.NameBytesPair
+	6,  // 9: virogg.hbasecop.hbase.v1.Scan.filter:type_name -> virogg.hbasecop.hbase.v1.Filter
+	15, // 10: virogg.hbasecop.hbase.v1.Scan.time_range:type_name -> virogg.hbasecop.hbase.v1.TimeRange
+	0,  // 11: virogg.hbasecop.hbase.v1.Scan.consistency:type_name -> virogg.hbasecop.hbase.v1.Consistency
+	16, // 12: virogg.hbasecop.hbase.v1.Scan.cf_time_range:type_name -> virogg.hbasecop.hbase.v1.ColumnFamilyTimeRange
+	1,  // 13: virogg.hbasecop.hbase.v1.Scan.read_type:type_name -> virogg.hbasecop.hbase.v1.Scan.ReadType
+	3,  // 14: virogg.hbasecop.hbase.v1.MutationProto.mutate_type:type_name -> virogg.hbasecop.hbase.v1.MutationProto.MutationType
+	12, // 15: virogg.hbasecop.hbase.v1.MutationProto.column_value:type_name -> virogg.hbasecop.hbase.v1.MutationProto.ColumnValue
+	14, // 16: virogg.hbasecop.hbase.v1.MutationProto.attribute:type_name -> virogg.hbasecop.hbase.v1.NameBytesPair
+	2,  // 17: virogg.hbasecop.hbase.v1.MutationProto.durability:type_name -> virogg.hbasecop.hbase.v1.MutationProto.Durability
+	15, // 18: virogg.hbasecop.hbase.v1.MutationProto.time_range:type_name -> virogg.hbasecop.hbase.v1.TimeRange
+	13, // 19: virogg.hbasecop.hbase.v1.MutationProto.ColumnValue.qualifier_value:type_name -> virogg.hbasecop.hbase.v1.MutationProto.ColumnValue.QualifierValue
+	4,  // 20: virogg.hbasecop.hbase.v1.MutationProto.ColumnValue.QualifierValue.delete_type:type_name -> virogg.hbasecop.hbase.v1.MutationProto.DeleteType
+	21, // [21:21] is the sub-list for method output_type
+	21, // [21:21] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_hbase_Client_proto_init() }
@@ -587,14 +1424,15 @@ func file_hbase_Client_proto_init() {
 	if File_hbase_Client_proto != nil {
 		return
 	}
+	file_hbase_Cell_proto_init()
 	file_hbase_HBase_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_hbase_Client_proto_rawDesc), len(file_hbase_Client_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   3,
+			NumEnums:      5,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
