@@ -10,8 +10,11 @@ import java.lang.System.Logger.Level;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Stream;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
@@ -31,8 +34,32 @@ public final class FaultRegionObserver implements RegionCoprocessor {
 
   private static final Logger LOG = System.getLogger(FaultRegionObserver.class.getName());
 
+  /**
+   * Configuration key (per-table or per-coprocessor) selecting the fault mode. The value is
+   * forwarded verbatim to the spawned Go process via the {@code HBASECOP_FAULT_MODE} environment
+   * variable, where the {@code fault.ParseMode} parser validates it. Valid tokens: {@code none},
+   * {@code kill-9}, {@code hang}, {@code exit-1}, {@code protocol-error}, {@code oom}.
+   */
+  public static final String KEY_FAULT_MODE = "hbasecop.fault.mode";
+
   private CoprocessorRuntime runtime;
   private Path tmpDir;
+
+  /**
+   * Maps the {@link #KEY_FAULT_MODE} value in {@code conf} to the env-var map consumed by {@link
+   * CoprocessorRuntime.Config#extraEnv()}. A missing or blank value returns the empty map.
+   *
+   * <p>Visible-for-testing as a pure helper so the mapping can be exercised without driving a
+   * RegionCoprocessor lifecycle.
+   */
+  public static Map<String, String> envFromConfig(Configuration conf) {
+    Objects.requireNonNull(conf, "conf");
+    String mode = conf.get(KEY_FAULT_MODE);
+    if (mode == null || mode.trim().isEmpty()) {
+      return Map.of();
+    }
+    return Map.of("HBASECOP_FAULT_MODE", mode);
+  }
 
   public FaultRegionObserver() {}
 
@@ -53,6 +80,7 @@ public final class FaultRegionObserver implements RegionCoprocessor {
             .gracefulShutdownTimeout(Duration.ofSeconds(2))
             .restartDeadline(Duration.ofSeconds(3))
             .configuration(env.getConfiguration())
+            .extraEnv(envFromConfig(env.getConfiguration()))
             .build();
 
     runtime = new CoprocessorRuntime(cfg);

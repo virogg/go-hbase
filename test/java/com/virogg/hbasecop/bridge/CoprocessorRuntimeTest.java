@@ -21,6 +21,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -271,6 +272,44 @@ final class CoprocessorRuntimeTest {
 
       rt.stop();
     }
+  }
+
+  @Test
+  void extraEnvDefaultsToEmpty() {
+    CoprocessorRuntime.Config cfg =
+        CoprocessorRuntime.Config.builder()
+            .javaToGoFile(Path.of("/tmp/in"))
+            .goToJavaFile(Path.of("/tmp/out"))
+            .build();
+    assertTrue(cfg.extraEnv().isEmpty(), "default extraEnv must be empty");
+  }
+
+  @Test
+  void extraEnvRoundTripsAndIsDefensivelyCopied() {
+    Map<String, String> env = new java.util.HashMap<>();
+    env.put("HBASECOP_FAULT_MODE", "exit-1");
+
+    CoprocessorRuntime.Config cfg =
+        CoprocessorRuntime.Config.builder()
+            .javaToGoFile(Path.of("/tmp/in"))
+            .goToJavaFile(Path.of("/tmp/out"))
+            .extraEnv(env)
+            .build();
+
+    assertEquals(Map.of("HBASECOP_FAULT_MODE", "exit-1"), cfg.extraEnv());
+
+    env.put("HBASECOP_FAULT_MODE", "kill-9");
+    env.put("HBASECOP_OBSERVER_TAG", "after-build");
+    assertEquals(
+        "exit-1",
+        cfg.extraEnv().get("HBASECOP_FAULT_MODE"),
+        "post-build mutations of source map must not leak in");
+    assertEquals(1, cfg.extraEnv().size());
+
+    assertThrows(
+        UnsupportedOperationException.class,
+        () -> cfg.extraEnv().put("HBASECOP_OBSERVER_TAG", "x"),
+        "extraEnv() must return an unmodifiable view");
   }
 
   private static boolean hasReaderThreadAlive(CoprocessorRuntime rt) {
