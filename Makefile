@@ -214,6 +214,7 @@ hbase-status: ## T26: curl the master-status page (smoke check post-up).
 # ---------------------------------------------------------------------------
 
 COPROC_JAR_STAGED := test/integration/coproc-jars/counter-observer.jar
+FAULT_COPROC_JAR_STAGED := test/integration/coproc-jars/fault-observer.jar
 
 .PHONY: demo-counter
 demo-counter: ## CP-γ: public demo — Put on HBase triggers Go observer counter; leaves cluster up.
@@ -229,6 +230,23 @@ test-integration: counter-observer-jar ## T27: full IT — bring up HBase, run P
 	  $(MVN) $(MVN_FLAGS) test -Dtest=PrePutCounterIT -DfailIfNoTests=false; \
 	  status=$$?; \
 	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
+
+# ---------------------------------------------------------------------------
+# Integration (T36): fault-injection matrix on real HBase.
+# ---------------------------------------------------------------------------
+
+.PHONY: test-fault
+test-fault: fault-observer-jar ## T36: full IT — bring up HBase, run FaultMatrixIT (10 cases), tear down.
+	@mkdir -p test/integration/coproc-jars
+	cp $(FAULT_OBSERVER_DIR)/target/fault-observer.jar $(FAULT_COPROC_JAR_STAGED)
+	$(HBASE_COMPOSE_CMD) up -d --build
+	./test/integration/scripts/wait-master-status.sh
+	@set +e; \
+	  $(MVN) $(MVN_FLAGS) test -Dtest=FaultMatrixIT -DfailIfNoTests=false; \
+	  status=$$?; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-fault.log 2>&1 || true; \
 	  $(HBASE_COMPOSE_CMD) down; \
 	  exit $$status
 
