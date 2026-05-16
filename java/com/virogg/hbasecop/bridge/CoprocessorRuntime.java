@@ -5,6 +5,7 @@ package com.virogg.hbasecop.bridge;
 
 import com.virogg.hbasecop.bridge.config.PolicyConfig;
 import com.virogg.hbasecop.bridge.observer.HookDispatcher;
+import com.virogg.hbasecop.bridge.observer.MasterObserverAdapter;
 import com.virogg.hbasecop.bridge.observer.MuxHookDispatcher;
 import com.virogg.hbasecop.bridge.observer.RegionObserverAdapter;
 import com.virogg.hbasecop.bridge.shmem.Channel;
@@ -96,6 +97,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
   private ChannelReader reader;
   private Thread readerThread;
   private RegionObserver observer;
+  private org.apache.hadoop.hbase.coprocessor.MasterObserver masterObserver;
   private HeartbeatWatchdog watchdog;
   private ScheduledExecutorService watchdogScheduler;
   private ScheduledFuture<?> watchdogTask;
@@ -162,7 +164,9 @@ public final class CoprocessorRuntime implements AutoCloseable {
       readerThread.start();
 
       HookDispatcher dispatcher = new MuxHookDispatcher(mux);
-      observer = new RegionObserverAdapter(dispatcher, buildPolicyConfig(cfg));
+      com.virogg.hbasecop.bridge.config.PolicyConfig policy = buildPolicyConfig(cfg);
+      observer = new RegionObserverAdapter(dispatcher, policy);
+      masterObserver = new MasterObserverAdapter(dispatcher, policy);
 
       started = true;
       ok = true;
@@ -197,6 +201,11 @@ public final class CoprocessorRuntime implements AutoCloseable {
   /** The RegionObserver to expose to HBase; null until {@link #start()} succeeds. */
   public RegionObserver getRegionObserver() {
     return observer;
+  }
+
+  /** The MasterObserver to expose to HBase (T51); null until {@link #start()} succeeds. */
+  public org.apache.hadoop.hbase.coprocessor.MasterObserver getMasterObserver() {
+    return masterObserver;
   }
 
   /**
