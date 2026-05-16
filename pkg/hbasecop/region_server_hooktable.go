@@ -51,9 +51,6 @@ var regionServerHookTable = []regionServerHookEntry{
 
 	{HookIDPreExecuteProcedures, "PreExecuteProcedures", newReq[hookpb.PreExecuteProceduresRequest], preRegionServerHook(RegionServerObserver.PreExecuteProcedures)},
 	{HookIDPostExecuteProcedures, "PostExecuteProcedures", newReq[hookpb.PostExecuteProceduresRequest], postRegionServerHook(RegionServerObserver.PostExecuteProcedures)},
-
-	{HookIDPreUpdateRegionServerConfiguration, "PreUpdateRegionServerConfiguration", newReq[hookpb.PreUpdateRegionServerConfigurationRequest], preRegionServerHook(RegionServerObserver.PreUpdateRegionServerConfiguration)},
-	{HookIDPostUpdateRegionServerConfiguration, "PostUpdateRegionServerConfiguration", newReq[hookpb.PostUpdateRegionServerConfigurationRequest], postRegionServerHook(RegionServerObserver.PostUpdateRegionServerConfiguration)},
 }
 
 // regionServerHooksByID indexes the region-server dispatch table for

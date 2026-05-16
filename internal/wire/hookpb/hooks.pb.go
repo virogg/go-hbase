@@ -175,9 +175,6 @@ const (
 	// Procedure execution.
 	HookId_HOOK_ID_PRE_EXECUTE_PROCEDURES  HookId = 207
 	HookId_HOOK_ID_POST_EXECUTE_PROCEDURES HookId = 208
-	// Online configuration reload.
-	HookId_HOOK_ID_PRE_UPDATE_REGION_SERVER_CONFIGURATION  HookId = 209
-	HookId_HOOK_ID_POST_UPDATE_REGION_SERVER_CONFIGURATION HookId = 210
 )
 
 // Enum value maps for HookId.
@@ -281,8 +278,6 @@ var (
 		206: "HOOK_ID_POST_CLEAR_COMPACTION_QUEUES",
 		207: "HOOK_ID_PRE_EXECUTE_PROCEDURES",
 		208: "HOOK_ID_POST_EXECUTE_PROCEDURES",
-		209: "HOOK_ID_PRE_UPDATE_REGION_SERVER_CONFIGURATION",
-		210: "HOOK_ID_POST_UPDATE_REGION_SERVER_CONFIGURATION",
 	}
 	HookId_value = map[string]int32{
 		"HOOK_ID_UNSPECIFIED":              0,
@@ -383,8 +378,6 @@ var (
 		"HOOK_ID_POST_CLEAR_COMPACTION_QUEUES":                  206,
 		"HOOK_ID_PRE_EXECUTE_PROCEDURES":                        207,
 		"HOOK_ID_POST_EXECUTE_PROCEDURES":                       208,
-		"HOOK_ID_PRE_UPDATE_REGION_SERVER_CONFIGURATION":        209,
-		"HOOK_ID_POST_UPDATE_REGION_SERVER_CONFIGURATION":       210,
 	}
 )
 
@@ -7078,110 +7071,6 @@ func (x *PostExecuteProceduresRequest) GetServer() *ServerNameProto {
 	return nil
 }
 
-type PreUpdateRegionServerConfigurationRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
-	Server        *ServerNameProto       `protobuf:"bytes,2,opt,name=server,proto3" json:"server,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PreUpdateRegionServerConfigurationRequest) Reset() {
-	*x = PreUpdateRegionServerConfigurationRequest{}
-	mi := &file_hooks_proto_msgTypes[112]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PreUpdateRegionServerConfigurationRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PreUpdateRegionServerConfigurationRequest) ProtoMessage() {}
-
-func (x *PreUpdateRegionServerConfigurationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[112]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PreUpdateRegionServerConfigurationRequest.ProtoReflect.Descriptor instead.
-func (*PreUpdateRegionServerConfigurationRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{112}
-}
-
-func (x *PreUpdateRegionServerConfigurationRequest) GetCtx() *HookContext {
-	if x != nil {
-		return x.Ctx
-	}
-	return nil
-}
-
-func (x *PreUpdateRegionServerConfigurationRequest) GetServer() *ServerNameProto {
-	if x != nil {
-		return x.Server
-	}
-	return nil
-}
-
-type PostUpdateRegionServerConfigurationRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
-	Server        *ServerNameProto       `protobuf:"bytes,2,opt,name=server,proto3" json:"server,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PostUpdateRegionServerConfigurationRequest) Reset() {
-	*x = PostUpdateRegionServerConfigurationRequest{}
-	mi := &file_hooks_proto_msgTypes[113]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PostUpdateRegionServerConfigurationRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PostUpdateRegionServerConfigurationRequest) ProtoMessage() {}
-
-func (x *PostUpdateRegionServerConfigurationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hooks_proto_msgTypes[113]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PostUpdateRegionServerConfigurationRequest.ProtoReflect.Descriptor instead.
-func (*PostUpdateRegionServerConfigurationRequest) Descriptor() ([]byte, []int) {
-	return file_hooks_proto_rawDescGZIP(), []int{113}
-}
-
-func (x *PostUpdateRegionServerConfigurationRequest) GetCtx() *HookContext {
-	if x != nil {
-		return x.Ctx
-	}
-	return nil
-}
-
-func (x *PostUpdateRegionServerConfigurationRequest) GetServer() *ServerNameProto {
-	if x != nil {
-		return x.Server
-	}
-	return nil
-}
-
 var File_hooks_proto protoreflect.FileDescriptor
 
 const file_hooks_proto_rawDesc = "" +
@@ -7676,13 +7565,7 @@ const file_hooks_proto_rawDesc = "" +
 	"\x06server\x18\x02 \x01(\v2#.virogg.hbasecop.v1.ServerNameProtoR\x06server\"\x8e\x01\n" +
 	"\x1cPostExecuteProceduresRequest\x121\n" +
 	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12;\n" +
-	"\x06server\x18\x02 \x01(\v2#.virogg.hbasecop.v1.ServerNameProtoR\x06server\"\x9b\x01\n" +
-	")PreUpdateRegionServerConfigurationRequest\x121\n" +
-	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12;\n" +
-	"\x06server\x18\x02 \x01(\v2#.virogg.hbasecop.v1.ServerNameProtoR\x06server\"\x9c\x01\n" +
-	"*PostUpdateRegionServerConfigurationRequest\x121\n" +
-	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12;\n" +
-	"\x06server\x18\x02 \x01(\v2#.virogg.hbasecop.v1.ServerNameProtoR\x06server*\x8a\x1a\n" +
+	"\x06server\x18\x02 \x01(\v2#.virogg.hbasecop.v1.ServerNameProtoR\x06server*\x9f\x19\n" +
 	"\x06HookId\x12\x17\n" +
 	"\x13HOOK_ID_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10HOOK_ID_PRE_OPEN\x10\x01\x12\x15\n" +
@@ -7782,9 +7665,7 @@ const file_hooks_proto_rawDesc = "" +
 	"#HOOK_ID_PRE_CLEAR_COMPACTION_QUEUES\x10\xcd\x01\x12)\n" +
 	"$HOOK_ID_POST_CLEAR_COMPACTION_QUEUES\x10\xce\x01\x12#\n" +
 	"\x1eHOOK_ID_PRE_EXECUTE_PROCEDURES\x10\xcf\x01\x12$\n" +
-	"\x1fHOOK_ID_POST_EXECUTE_PROCEDURES\x10\xd0\x01\x123\n" +
-	".HOOK_ID_PRE_UPDATE_REGION_SERVER_CONFIGURATION\x10\xd1\x01\x124\n" +
-	"/HOOK_ID_POST_UPDATE_REGION_SERVER_CONFIGURATION\x10\xd2\x01Bc\n" +
+	"\x1fHOOK_ID_POST_EXECUTE_PROCEDURES\x10\xd0\x01Bc\n" +
 	"\"com.virogg.hbasecop.bridge.wire.pbB\n" +
 	"HooksProtoP\x01Z/github.com/virogg/go-hbase/internal/wire/hookpbb\x06proto3"
 
@@ -7801,7 +7682,7 @@ func file_hooks_proto_rawDescGZIP() []byte {
 }
 
 var file_hooks_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_hooks_proto_msgTypes = make([]protoimpl.MessageInfo, 114)
+var file_hooks_proto_msgTypes = make([]protoimpl.MessageInfo, 112)
 var file_hooks_proto_goTypes = []any{
 	(HookId)(0),                                            // 0: virogg.hbasecop.v1.HookId
 	(*HookContext)(nil),                                    // 1: virogg.hbasecop.v1.HookContext
@@ -7916,25 +7797,23 @@ var file_hooks_proto_goTypes = []any{
 	(*PostClearCompactionQueuesRequest)(nil),               // 110: virogg.hbasecop.v1.PostClearCompactionQueuesRequest
 	(*PreExecuteProceduresRequest)(nil),                    // 111: virogg.hbasecop.v1.PreExecuteProceduresRequest
 	(*PostExecuteProceduresRequest)(nil),                   // 112: virogg.hbasecop.v1.PostExecuteProceduresRequest
-	(*PreUpdateRegionServerConfigurationRequest)(nil),      // 113: virogg.hbasecop.v1.PreUpdateRegionServerConfigurationRequest
-	(*PostUpdateRegionServerConfigurationRequest)(nil),     // 114: virogg.hbasecop.v1.PostUpdateRegionServerConfigurationRequest
-	(*hbasepb.TableName)(nil),                              // 115: virogg.hbasecop.hbase.v1.TableName
-	(*hbasepb.MutationProto)(nil),                          // 116: virogg.hbasecop.hbase.v1.MutationProto
-	(*hbasepb.Get)(nil),                                    // 117: virogg.hbasecop.hbase.v1.Get
-	(*hbasepb.Cell)(nil),                                   // 118: virogg.hbasecop.hbase.v1.Cell
-	(*hbasepb.Comparator)(nil),                             // 119: virogg.hbasecop.hbase.v1.Comparator
-	(*hbasepb.Filter)(nil),                                 // 120: virogg.hbasecop.hbase.v1.Filter
-	(*hbasepb.Result)(nil),                                 // 121: virogg.hbasecop.hbase.v1.Result
-	(*hbasepb.Scan)(nil),                                   // 122: virogg.hbasecop.hbase.v1.Scan
-	(*hbasepb.RegionInfo)(nil),                             // 123: virogg.hbasecop.hbase.v1.RegionInfo
+	(*hbasepb.TableName)(nil),                              // 113: virogg.hbasecop.hbase.v1.TableName
+	(*hbasepb.MutationProto)(nil),                          // 114: virogg.hbasecop.hbase.v1.MutationProto
+	(*hbasepb.Get)(nil),                                    // 115: virogg.hbasecop.hbase.v1.Get
+	(*hbasepb.Cell)(nil),                                   // 116: virogg.hbasecop.hbase.v1.Cell
+	(*hbasepb.Comparator)(nil),                             // 117: virogg.hbasecop.hbase.v1.Comparator
+	(*hbasepb.Filter)(nil),                                 // 118: virogg.hbasecop.hbase.v1.Filter
+	(*hbasepb.Result)(nil),                                 // 119: virogg.hbasecop.hbase.v1.Result
+	(*hbasepb.Scan)(nil),                                   // 120: virogg.hbasecop.hbase.v1.Scan
+	(*hbasepb.RegionInfo)(nil),                             // 121: virogg.hbasecop.hbase.v1.RegionInfo
 }
 var file_hooks_proto_depIdxs = []int32{
-	115, // 0: virogg.hbasecop.v1.HookContext.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
+	113, // 0: virogg.hbasecop.v1.HookContext.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
 	2,   // 1: virogg.hbasecop.v1.HookResponse.error:type_name -> virogg.hbasecop.v1.HookError
 	1,   // 2: virogg.hbasecop.v1.PrePutRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	116, // 3: virogg.hbasecop.v1.PrePutRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	114, // 3: virogg.hbasecop.v1.PrePutRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 4: virogg.hbasecop.v1.PostPutRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	116, // 5: virogg.hbasecop.v1.PostPutRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	114, // 5: virogg.hbasecop.v1.PostPutRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 6: virogg.hbasecop.v1.PreOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	1,   // 7: virogg.hbasecop.v1.PostOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	1,   // 8: virogg.hbasecop.v1.PreCloseRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
@@ -7959,23 +7838,23 @@ var file_hooks_proto_depIdxs = []int32{
 	17,  // 27: virogg.hbasecop.v1.PostCompactRequest.result_file:type_name -> virogg.hbasecop.v1.StoreFilePathProto
 	18,  // 28: virogg.hbasecop.v1.PostCompactRequest.request:type_name -> virogg.hbasecop.v1.CompactionRequestSummary
 	1,   // 29: virogg.hbasecop.v1.PreGetOpRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	117, // 30: virogg.hbasecop.v1.PreGetOpRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
+	115, // 30: virogg.hbasecop.v1.PreGetOpRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
 	1,   // 31: virogg.hbasecop.v1.PostGetOpRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	117, // 32: virogg.hbasecop.v1.PostGetOpRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
-	118, // 33: virogg.hbasecop.v1.PostGetOpRequest.result:type_name -> virogg.hbasecop.hbase.v1.Cell
+	115, // 32: virogg.hbasecop.v1.PostGetOpRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
+	116, // 33: virogg.hbasecop.v1.PostGetOpRequest.result:type_name -> virogg.hbasecop.hbase.v1.Cell
 	1,   // 34: virogg.hbasecop.v1.PreExistsRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	117, // 35: virogg.hbasecop.v1.PreExistsRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
+	115, // 35: virogg.hbasecop.v1.PreExistsRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
 	1,   // 36: virogg.hbasecop.v1.PostExistsRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	117, // 37: virogg.hbasecop.v1.PostExistsRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
+	115, // 37: virogg.hbasecop.v1.PostExistsRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
 	1,   // 38: virogg.hbasecop.v1.PreDeleteRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	116, // 39: virogg.hbasecop.v1.PreDeleteRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	114, // 39: virogg.hbasecop.v1.PreDeleteRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 40: virogg.hbasecop.v1.PostDeleteRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	116, // 41: virogg.hbasecop.v1.PostDeleteRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	114, // 41: virogg.hbasecop.v1.PostDeleteRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 42: virogg.hbasecop.v1.PrePrepareTimeStampForDeleteVersionRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	116, // 43: virogg.hbasecop.v1.PrePrepareTimeStampForDeleteVersionRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
-	118, // 44: virogg.hbasecop.v1.PrePrepareTimeStampForDeleteVersionRequest.cell:type_name -> virogg.hbasecop.hbase.v1.Cell
-	117, // 45: virogg.hbasecop.v1.PrePrepareTimeStampForDeleteVersionRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
-	116, // 46: virogg.hbasecop.v1.MutationOperation.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	114, // 43: virogg.hbasecop.v1.PrePrepareTimeStampForDeleteVersionRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	116, // 44: virogg.hbasecop.v1.PrePrepareTimeStampForDeleteVersionRequest.cell:type_name -> virogg.hbasecop.hbase.v1.Cell
+	115, // 45: virogg.hbasecop.v1.PrePrepareTimeStampForDeleteVersionRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
+	114, // 46: virogg.hbasecop.v1.MutationOperation.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 47: virogg.hbasecop.v1.PreBatchMutateRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	31,  // 48: virogg.hbasecop.v1.PreBatchMutateRequest.operation:type_name -> virogg.hbasecop.v1.MutationOperation
 	1,   // 49: virogg.hbasecop.v1.PostBatchMutateRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
@@ -7985,26 +7864,26 @@ var file_hooks_proto_depIdxs = []int32{
 	1,   // 53: virogg.hbasecop.v1.PostStartRegionOperationRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	1,   // 54: virogg.hbasecop.v1.PostCloseRegionOperationRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	1,   // 55: virogg.hbasecop.v1.PreCheckAndPutRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	119, // 56: virogg.hbasecop.v1.PreCheckAndPutRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
-	116, // 57: virogg.hbasecop.v1.PreCheckAndPutRequest.put:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	117, // 56: virogg.hbasecop.v1.PreCheckAndPutRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
+	114, // 57: virogg.hbasecop.v1.PreCheckAndPutRequest.put:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 58: virogg.hbasecop.v1.PostCheckAndPutRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	119, // 59: virogg.hbasecop.v1.PostCheckAndPutRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
-	116, // 60: virogg.hbasecop.v1.PostCheckAndPutRequest.put:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	117, // 59: virogg.hbasecop.v1.PostCheckAndPutRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
+	114, // 60: virogg.hbasecop.v1.PostCheckAndPutRequest.put:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 61: virogg.hbasecop.v1.PreCheckAndPutAfterRowLockRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	119, // 62: virogg.hbasecop.v1.PreCheckAndPutAfterRowLockRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
-	116, // 63: virogg.hbasecop.v1.PreCheckAndPutAfterRowLockRequest.put:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	117, // 62: virogg.hbasecop.v1.PreCheckAndPutAfterRowLockRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
+	114, // 63: virogg.hbasecop.v1.PreCheckAndPutAfterRowLockRequest.put:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 64: virogg.hbasecop.v1.PreCheckAndDeleteRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	119, // 65: virogg.hbasecop.v1.PreCheckAndDeleteRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
-	116, // 66: virogg.hbasecop.v1.PreCheckAndDeleteRequest.delete:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	117, // 65: virogg.hbasecop.v1.PreCheckAndDeleteRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
+	114, // 66: virogg.hbasecop.v1.PreCheckAndDeleteRequest.delete:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 67: virogg.hbasecop.v1.PostCheckAndDeleteRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	119, // 68: virogg.hbasecop.v1.PostCheckAndDeleteRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
-	116, // 69: virogg.hbasecop.v1.PostCheckAndDeleteRequest.delete:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	117, // 68: virogg.hbasecop.v1.PostCheckAndDeleteRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
+	114, // 69: virogg.hbasecop.v1.PostCheckAndDeleteRequest.delete:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 70: virogg.hbasecop.v1.PreCheckAndDeleteAfterRowLockRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	119, // 71: virogg.hbasecop.v1.PreCheckAndDeleteAfterRowLockRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
-	116, // 72: virogg.hbasecop.v1.PreCheckAndDeleteAfterRowLockRequest.delete:type_name -> virogg.hbasecop.hbase.v1.MutationProto
-	120, // 73: virogg.hbasecop.v1.CheckAndMutateAction.filter:type_name -> virogg.hbasecop.hbase.v1.Filter
-	116, // 74: virogg.hbasecop.v1.CheckAndMutateAction.action:type_name -> virogg.hbasecop.hbase.v1.MutationProto
-	121, // 75: virogg.hbasecop.v1.CheckAndMutateResultProto.result:type_name -> virogg.hbasecop.hbase.v1.Result
+	117, // 71: virogg.hbasecop.v1.PreCheckAndDeleteAfterRowLockRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
+	114, // 72: virogg.hbasecop.v1.PreCheckAndDeleteAfterRowLockRequest.delete:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	118, // 73: virogg.hbasecop.v1.CheckAndMutateAction.filter:type_name -> virogg.hbasecop.hbase.v1.Filter
+	114, // 74: virogg.hbasecop.v1.CheckAndMutateAction.action:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	119, // 75: virogg.hbasecop.v1.CheckAndMutateResultProto.result:type_name -> virogg.hbasecop.hbase.v1.Result
 	1,   // 76: virogg.hbasecop.v1.PreCheckAndMutateRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	43,  // 77: virogg.hbasecop.v1.PreCheckAndMutateRequest.action:type_name -> virogg.hbasecop.v1.CheckAndMutateAction
 	44,  // 78: virogg.hbasecop.v1.PreCheckAndMutateRequest.input_result:type_name -> virogg.hbasecop.v1.CheckAndMutateResultProto
@@ -8015,42 +7894,42 @@ var file_hooks_proto_depIdxs = []int32{
 	43,  // 83: virogg.hbasecop.v1.PreCheckAndMutateAfterRowLockRequest.action:type_name -> virogg.hbasecop.v1.CheckAndMutateAction
 	44,  // 84: virogg.hbasecop.v1.PreCheckAndMutateAfterRowLockRequest.input_result:type_name -> virogg.hbasecop.v1.CheckAndMutateResultProto
 	1,   // 85: virogg.hbasecop.v1.PreAppendRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	116, // 86: virogg.hbasecop.v1.PreAppendRequest.append:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	114, // 86: virogg.hbasecop.v1.PreAppendRequest.append:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 87: virogg.hbasecop.v1.PostAppendRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	116, // 88: virogg.hbasecop.v1.PostAppendRequest.append:type_name -> virogg.hbasecop.hbase.v1.MutationProto
-	121, // 89: virogg.hbasecop.v1.PostAppendRequest.result:type_name -> virogg.hbasecop.hbase.v1.Result
+	114, // 88: virogg.hbasecop.v1.PostAppendRequest.append:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	119, // 89: virogg.hbasecop.v1.PostAppendRequest.result:type_name -> virogg.hbasecop.hbase.v1.Result
 	1,   // 90: virogg.hbasecop.v1.PreAppendAfterRowLockRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	116, // 91: virogg.hbasecop.v1.PreAppendAfterRowLockRequest.append:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	114, // 91: virogg.hbasecop.v1.PreAppendAfterRowLockRequest.append:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 92: virogg.hbasecop.v1.PreIncrementRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	116, // 93: virogg.hbasecop.v1.PreIncrementRequest.increment:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	114, // 93: virogg.hbasecop.v1.PreIncrementRequest.increment:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 94: virogg.hbasecop.v1.PostIncrementRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	116, // 95: virogg.hbasecop.v1.PostIncrementRequest.increment:type_name -> virogg.hbasecop.hbase.v1.MutationProto
-	121, // 96: virogg.hbasecop.v1.PostIncrementRequest.result:type_name -> virogg.hbasecop.hbase.v1.Result
+	114, // 95: virogg.hbasecop.v1.PostIncrementRequest.increment:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	119, // 96: virogg.hbasecop.v1.PostIncrementRequest.result:type_name -> virogg.hbasecop.hbase.v1.Result
 	1,   // 97: virogg.hbasecop.v1.PreIncrementAfterRowLockRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	116, // 98: virogg.hbasecop.v1.PreIncrementAfterRowLockRequest.increment:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	114, // 98: virogg.hbasecop.v1.PreIncrementAfterRowLockRequest.increment:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 99: virogg.hbasecop.v1.PreScannerOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	122, // 100: virogg.hbasecop.v1.PreScannerOpenRequest.scan:type_name -> virogg.hbasecop.hbase.v1.Scan
+	120, // 100: virogg.hbasecop.v1.PreScannerOpenRequest.scan:type_name -> virogg.hbasecop.hbase.v1.Scan
 	1,   // 101: virogg.hbasecop.v1.PostScannerOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	122, // 102: virogg.hbasecop.v1.PostScannerOpenRequest.scan:type_name -> virogg.hbasecop.hbase.v1.Scan
+	120, // 102: virogg.hbasecop.v1.PostScannerOpenRequest.scan:type_name -> virogg.hbasecop.hbase.v1.Scan
 	1,   // 103: virogg.hbasecop.v1.PreScannerNextRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	1,   // 104: virogg.hbasecop.v1.PostScannerNextRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	121, // 105: virogg.hbasecop.v1.PostScannerNextRequest.result:type_name -> virogg.hbasecop.hbase.v1.Result
+	119, // 105: virogg.hbasecop.v1.PostScannerNextRequest.result:type_name -> virogg.hbasecop.hbase.v1.Result
 	1,   // 106: virogg.hbasecop.v1.PostScannerFilterRowRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	118, // 107: virogg.hbasecop.v1.PostScannerFilterRowRequest.current_row:type_name -> virogg.hbasecop.hbase.v1.Cell
+	116, // 107: virogg.hbasecop.v1.PostScannerFilterRowRequest.current_row:type_name -> virogg.hbasecop.hbase.v1.Cell
 	1,   // 108: virogg.hbasecop.v1.PreScannerCloseRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	1,   // 109: virogg.hbasecop.v1.PostScannerCloseRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	1,   // 110: virogg.hbasecop.v1.PreStoreScannerOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	118, // 111: virogg.hbasecop.v1.WalEditProto.cell:type_name -> virogg.hbasecop.hbase.v1.Cell
+	116, // 111: virogg.hbasecop.v1.WalEditProto.cell:type_name -> virogg.hbasecop.hbase.v1.Cell
 	1,   // 112: virogg.hbasecop.v1.PreReplayWALsRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	123, // 113: virogg.hbasecop.v1.PreReplayWALsRequest.region_info:type_name -> virogg.hbasecop.hbase.v1.RegionInfo
+	121, // 113: virogg.hbasecop.v1.PreReplayWALsRequest.region_info:type_name -> virogg.hbasecop.hbase.v1.RegionInfo
 	1,   // 114: virogg.hbasecop.v1.PostReplayWALsRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	123, // 115: virogg.hbasecop.v1.PostReplayWALsRequest.region_info:type_name -> virogg.hbasecop.hbase.v1.RegionInfo
+	121, // 115: virogg.hbasecop.v1.PostReplayWALsRequest.region_info:type_name -> virogg.hbasecop.hbase.v1.RegionInfo
 	1,   // 116: virogg.hbasecop.v1.PreWALRestoreRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	123, // 117: virogg.hbasecop.v1.PreWALRestoreRequest.region_info:type_name -> virogg.hbasecop.hbase.v1.RegionInfo
+	121, // 117: virogg.hbasecop.v1.PreWALRestoreRequest.region_info:type_name -> virogg.hbasecop.hbase.v1.RegionInfo
 	62,  // 118: virogg.hbasecop.v1.PreWALRestoreRequest.log_key:type_name -> virogg.hbasecop.v1.WalKeyProto
 	63,  // 119: virogg.hbasecop.v1.PreWALRestoreRequest.log_edit:type_name -> virogg.hbasecop.v1.WalEditProto
 	1,   // 120: virogg.hbasecop.v1.PostWALRestoreRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	123, // 121: virogg.hbasecop.v1.PostWALRestoreRequest.region_info:type_name -> virogg.hbasecop.hbase.v1.RegionInfo
+	121, // 121: virogg.hbasecop.v1.PostWALRestoreRequest.region_info:type_name -> virogg.hbasecop.hbase.v1.RegionInfo
 	62,  // 122: virogg.hbasecop.v1.PostWALRestoreRequest.log_key:type_name -> virogg.hbasecop.v1.WalKeyProto
 	63,  // 123: virogg.hbasecop.v1.PostWALRestoreRequest.log_edit:type_name -> virogg.hbasecop.v1.WalEditProto
 	1,   // 124: virogg.hbasecop.v1.PreBulkLoadHFileRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
@@ -8063,46 +7942,46 @@ var file_hooks_proto_depIdxs = []int32{
 	1,   // 131: virogg.hbasecop.v1.PostCommitStoreFileRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	1,   // 132: virogg.hbasecop.v1.PreStoreFileReaderOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	1,   // 133: virogg.hbasecop.v1.PostStoreFileReaderOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	118, // 134: virogg.hbasecop.v1.CellPair.first:type_name -> virogg.hbasecop.hbase.v1.Cell
-	118, // 135: virogg.hbasecop.v1.CellPair.second:type_name -> virogg.hbasecop.hbase.v1.Cell
+	116, // 134: virogg.hbasecop.v1.CellPair.first:type_name -> virogg.hbasecop.hbase.v1.Cell
+	116, // 135: virogg.hbasecop.v1.CellPair.second:type_name -> virogg.hbasecop.hbase.v1.Cell
 	1,   // 136: virogg.hbasecop.v1.PostMutationBeforeWALRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	116, // 137: virogg.hbasecop.v1.PostMutationBeforeWALRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
-	118, // 138: virogg.hbasecop.v1.PostMutationBeforeWALRequest.old_cell:type_name -> virogg.hbasecop.hbase.v1.Cell
-	118, // 139: virogg.hbasecop.v1.PostMutationBeforeWALRequest.new_cell:type_name -> virogg.hbasecop.hbase.v1.Cell
+	114, // 137: virogg.hbasecop.v1.PostMutationBeforeWALRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	116, // 138: virogg.hbasecop.v1.PostMutationBeforeWALRequest.old_cell:type_name -> virogg.hbasecop.hbase.v1.Cell
+	116, // 139: virogg.hbasecop.v1.PostMutationBeforeWALRequest.new_cell:type_name -> virogg.hbasecop.hbase.v1.Cell
 	1,   // 140: virogg.hbasecop.v1.PostIncrementBeforeWALRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	116, // 141: virogg.hbasecop.v1.PostIncrementBeforeWALRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	114, // 141: virogg.hbasecop.v1.PostIncrementBeforeWALRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	77,  // 142: virogg.hbasecop.v1.PostIncrementBeforeWALRequest.cell_pair:type_name -> virogg.hbasecop.v1.CellPair
 	1,   // 143: virogg.hbasecop.v1.PostAppendBeforeWALRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	116, // 144: virogg.hbasecop.v1.PostAppendBeforeWALRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	114, // 144: virogg.hbasecop.v1.PostAppendBeforeWALRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	77,  // 145: virogg.hbasecop.v1.PostAppendBeforeWALRequest.cell_pair:type_name -> virogg.hbasecop.v1.CellPair
 	1,   // 146: virogg.hbasecop.v1.PostInstantiateDeleteTrackerRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	1,   // 147: virogg.hbasecop.v1.PreWALAppendRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	62,  // 148: virogg.hbasecop.v1.PreWALAppendRequest.log_key:type_name -> virogg.hbasecop.v1.WalKeyProto
 	63,  // 149: virogg.hbasecop.v1.PreWALAppendRequest.log_edit:type_name -> virogg.hbasecop.v1.WalEditProto
 	1,   // 150: virogg.hbasecop.v1.PreCreateTableRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	115, // 151: virogg.hbasecop.v1.PreCreateTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
+	113, // 151: virogg.hbasecop.v1.PreCreateTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
 	1,   // 152: virogg.hbasecop.v1.PostCreateTableRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	115, // 153: virogg.hbasecop.v1.PostCreateTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
+	113, // 153: virogg.hbasecop.v1.PostCreateTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
 	1,   // 154: virogg.hbasecop.v1.PreDeleteTableRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	115, // 155: virogg.hbasecop.v1.PreDeleteTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
+	113, // 155: virogg.hbasecop.v1.PreDeleteTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
 	1,   // 156: virogg.hbasecop.v1.PostDeleteTableRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	115, // 157: virogg.hbasecop.v1.PostDeleteTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
+	113, // 157: virogg.hbasecop.v1.PostDeleteTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
 	1,   // 158: virogg.hbasecop.v1.PreModifyTableRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	115, // 159: virogg.hbasecop.v1.PreModifyTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
+	113, // 159: virogg.hbasecop.v1.PreModifyTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
 	1,   // 160: virogg.hbasecop.v1.PostModifyTableRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	115, // 161: virogg.hbasecop.v1.PostModifyTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
+	113, // 161: virogg.hbasecop.v1.PostModifyTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
 	1,   // 162: virogg.hbasecop.v1.PreTruncateTableRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	115, // 163: virogg.hbasecop.v1.PreTruncateTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
+	113, // 163: virogg.hbasecop.v1.PreTruncateTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
 	1,   // 164: virogg.hbasecop.v1.PostTruncateTableRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	115, // 165: virogg.hbasecop.v1.PostTruncateTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
+	113, // 165: virogg.hbasecop.v1.PostTruncateTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
 	1,   // 166: virogg.hbasecop.v1.PreEnableTableRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	115, // 167: virogg.hbasecop.v1.PreEnableTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
+	113, // 167: virogg.hbasecop.v1.PreEnableTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
 	1,   // 168: virogg.hbasecop.v1.PostEnableTableRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	115, // 169: virogg.hbasecop.v1.PostEnableTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
+	113, // 169: virogg.hbasecop.v1.PostEnableTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
 	1,   // 170: virogg.hbasecop.v1.PreDisableTableRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	115, // 171: virogg.hbasecop.v1.PreDisableTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
+	113, // 171: virogg.hbasecop.v1.PreDisableTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
 	1,   // 172: virogg.hbasecop.v1.PostDisableTableRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	115, // 173: virogg.hbasecop.v1.PostDisableTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
+	113, // 173: virogg.hbasecop.v1.PostDisableTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
 	1,   // 174: virogg.hbasecop.v1.PreMoveRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	95,  // 175: virogg.hbasecop.v1.PreMoveRequest.source:type_name -> virogg.hbasecop.v1.ServerNameProto
 	95,  // 176: virogg.hbasecop.v1.PreMoveRequest.destination:type_name -> virogg.hbasecop.v1.ServerNameProto
@@ -8133,15 +8012,11 @@ var file_hooks_proto_depIdxs = []int32{
 	95,  // 201: virogg.hbasecop.v1.PreExecuteProceduresRequest.server:type_name -> virogg.hbasecop.v1.ServerNameProto
 	1,   // 202: virogg.hbasecop.v1.PostExecuteProceduresRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	95,  // 203: virogg.hbasecop.v1.PostExecuteProceduresRequest.server:type_name -> virogg.hbasecop.v1.ServerNameProto
-	1,   // 204: virogg.hbasecop.v1.PreUpdateRegionServerConfigurationRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	95,  // 205: virogg.hbasecop.v1.PreUpdateRegionServerConfigurationRequest.server:type_name -> virogg.hbasecop.v1.ServerNameProto
-	1,   // 206: virogg.hbasecop.v1.PostUpdateRegionServerConfigurationRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	95,  // 207: virogg.hbasecop.v1.PostUpdateRegionServerConfigurationRequest.server:type_name -> virogg.hbasecop.v1.ServerNameProto
-	208, // [208:208] is the sub-list for method output_type
-	208, // [208:208] is the sub-list for method input_type
-	208, // [208:208] is the sub-list for extension type_name
-	208, // [208:208] is the sub-list for extension extendee
-	0,   // [0:208] is the sub-list for field type_name
+	204, // [204:204] is the sub-list for method output_type
+	204, // [204:204] is the sub-list for method input_type
+	204, // [204:204] is the sub-list for extension type_name
+	204, // [204:204] is the sub-list for extension extendee
+	0,   // [0:204] is the sub-list for field type_name
 }
 
 func init() { file_hooks_proto_init() }
@@ -8155,7 +8030,7 @@ func file_hooks_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_hooks_proto_rawDesc), len(file_hooks_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   114,
+			NumMessages:   112,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
