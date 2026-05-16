@@ -125,4 +125,18 @@ const (
 	HookIDPostUnassign      HookID = 117
 	HookIDPreBalance        HookID = 118
 	HookIDPostBalance       HookID = 119
+
+	// --- RegionServerObserver hooks (T52). IDs 200-255 reserved for the
+	// region-server surface. ---
+	HookIDPreStopRegionServer                 HookID = 200
+	HookIDPreRollWALWriterRequest             HookID = 201
+	HookIDPostRollWALWriterRequest            HookID = 202
+	HookIDPreReplicateLogEntries              HookID = 203
+	HookIDPostReplicateLogEntries             HookID = 204
+	HookIDPreClearCompactionQueues            HookID = 205
+	HookIDPostClearCompactionQueues           HookID = 206
+	HookIDPreExecuteProcedures                HookID = 207
+	HookIDPostExecuteProcedures               HookID = 208
+	HookIDPreUpdateRegionServerConfiguration  HookID = 209
+	HookIDPostUpdateRegionServerConfiguration HookID = 210
 )
