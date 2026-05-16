@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Copyright 2026 The go-hbase Authors
+  SPDX-License-Identifier: Apache-2.0
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.virogg.hbasecop.examples</groupId>
+  <artifactId>rs-policy-observer</artifactId>
+  <version>0.0.1-SNAPSHOT</version>
+  <packaging>jar</packaging>
+
+  <name>rs-policy-observer (go-hbase example)</name>
+  <description>T52 region-server coproc-jar: shades the bridge and embeds a WAL-roll-policy Go ELF at bin/linux-amd64/.</description>
+
+  <!--
+    Standalone example project (not in the bridge reactor). To produce the
+    deployable coproc-jar:
+      1. `mvn install -DskipTests` at repo root  (publishes hbasecop-bridge into ~/.m2)
+      2. `make go-build-rs-policy`               (builds the Go ELF into this module's resources)
+      3. `mvn -f examples/rs-policy-observer/pom.xml package`
+    `make rs-policy-observer-jar` runs all three.
+  -->
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.source>11</maven.compiler.source>
+    <maven.compiler.target>11</maven.compiler.target>
+    <maven.compiler.release>11</maven.compiler.release>
+
+    <bridge.version>0.0.1-SNAPSHOT</bridge.version>
+    <hbase.version>2.5.10</hbase.version>
+    <protobuf.version>3.25.5</protobuf.version>
+    <junit.version>5.10.2</junit.version>
+
+    <plugin.compiler.version>3.13.0</plugin.compiler.version>
+    <plugin.surefire.version>3.2.5</plugin.surefire.version>
+    <plugin.shade.version>3.5.3</plugin.shade.version>
+    <plugin.resources.version>3.3.1</plugin.resources.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.virogg</groupId>
+      <artifactId>hbasecop-bridge</artifactId>
+      <version>${bridge.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-server</artifactId>
+      <version>${hbase.version}</version>
+      <scope>provided</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java</artifactId>
+      <version>${protobuf.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-api</artifactId>
+      <version>${junit.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-engine</artifactId>
+      <version>${junit.version}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <finalName>rs-policy-observer</finalName>
+
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+      </resource>
+    </resources>
+
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>${plugin.compiler.version}</version>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-resources-plugin</artifactId>
+        <version>${plugin.resources.version}</version>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>${plugin.surefire.version}</version>
+        <configuration>
+          <useModulePath>false</useModulePath>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>${plugin.shade.version}</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals><goal>shade</goal></goals>
+            <configuration>
+              <createDependencyReducedPom>false</createDependencyReducedPom>
+              <shadedArtifactAttached>false</shadedArtifactAttached>
+              <minimizeJar>false</minimizeJar>
+              <filters>
+                <filter>
+                  <artifact>*:*</artifact>
+                  <excludes>
+                    <exclude>META-INF/*.SF</exclude>
+                    <exclude>META-INF/*.DSA</exclude>
+                    <exclude>META-INF/*.RSA</exclude>
+                    <exclude>module-info.class</exclude>
+                  </excludes>
+                </filter>
+                <!--
+                  The bridge artifact carries its own generic Go runtime ELF
+                  (for E2E ping/pong tests). Drop it so the rs-policy-observer
+                  ELF wins in the final coproc-jar.
+                -->
+                <filter>
+                  <artifact>com.virogg:hbasecop-bridge</artifact>
+                  <excludes>
+                    <exclude>bin/**</exclude>
+                  </excludes>
+                </filter>
+              </filters>
+              <!--
+                Region-server coprocessors registered via
+                hbase.coprocessor.regionserver.classes load on the RegionServer's
+                *system* classloader. HBase 2.5 bundles protobuf-java 2.5.0
+                there, whose AbstractMessage has a private memoizedSize field —
+                our generated proto classes are built against protobuf 3.25.5 and
+                access that field directly, so the 2.5.0 class on the shared
+                classloader triggers IllegalAccessError. Relocating
+                com.google.protobuf into a private package gives the coproc-jar
+                its own protobuf runtime, isolated from HBase's.
+              -->
+              <relocations>
+                <relocation>
+                  <pattern>com.google.protobuf</pattern>
+                  <shadedPattern>com.virogg.hbasecop.shaded.protobuf</shadedPattern>
+                </relocation>
+              </relocations>
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+              </transformers>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

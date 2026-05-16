@@ -37,6 +37,11 @@ services:
       HBASECOP_MASTER_COPROC_CLASS: "${HBASECOP_MASTER_COPROC_CLASS:-}"
       HBASECOP_MASTER_COPROC_JAR: "${HBASECOP_MASTER_COPROC_JAR:-}"
       HBASECOP_POLICY_BLOCKED_PREFIX: "${HBASECOP_POLICY_BLOCKED_PREFIX:-}"
+      # T52: region-server coprocessor registration; `make test-integration-rs`
+      # exports these, empty (no-op) for every other IT.
+      HBASECOP_RS_COPROC_CLASS: "${HBASECOP_RS_COPROC_CLASS:-}"
+      HBASECOP_RS_COPROC_JAR: "${HBASECOP_RS_COPROC_JAR:-}"
+      HBASECOP_RS_POLICY_VETO_WAL_ROLL: "${HBASECOP_RS_POLICY_VETO_WAL_ROLL:-}"
     healthcheck:
       test:
         - "CMD-SHELL"

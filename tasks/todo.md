@@ -53,7 +53,7 @@
 
 ## Phase 5 — Other Observer types
 - [x] T51 MasterObserver adapter + tests
-- [ ] T52 RegionServerObserver adapter
+- [x] T52 RegionServerObserver adapter
 - [ ] T53 WALObserver adapter (+ WAL throughput bench)
 - [ ] T54 BulkLoadObserver adapter
 - [ ] **CP-ε2:** all SPEC §2 observer types covered

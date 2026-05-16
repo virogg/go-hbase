@@ -37,5 +37,25 @@ if [ -n "${HBASECOP_MASTER_COPROC_CLASS:-}" ]; then
   echo "entrypoint: registered master coprocessor ${HBASECOP_MASTER_COPROC_CLASS} (jar ${jar})" >&2
 fi
 
+# T52: region-server coprocessors are registered cluster-wide via
+# `hbase.coprocessor.regionserver.classes`. When HBASECOP_RS_COPROC_CLASS is
+# set, this entrypoint patches hbase-site.xml + HBASE_CLASSPATH before launch;
+# when unset it is a no-op, so the shared image stays generic.
+if [ -n "${HBASECOP_RS_COPROC_CLASS:-}" ]; then
+  jar="${HBASECOP_RS_COPROC_JAR:-/coproc-jars/rs-policy-observer.jar}"
+  if [ ! -r "${jar}" ]; then
+    echo "entrypoint: region-server coproc jar not readable: ${jar}" >&2
+    exit 1
+  fi
+  export HBASE_CLASSPATH="${jar}${HBASE_CLASSPATH:+:${HBASE_CLASSPATH}}"
+
+  inject="  <property><name>hbase.coprocessor.regionserver.classes</name><value>${HBASECOP_RS_COPROC_CLASS}</value></property>"
+  if [ -n "${HBASECOP_RS_POLICY_VETO_WAL_ROLL:-}" ]; then
+    inject="${inject}\n  <property><name>hbasecop.policy.veto_wal_roll</name><value>${HBASECOP_RS_POLICY_VETO_WAL_ROLL}</value></property>"
+  fi
+  sed -i "s#</configuration>#${inject}\n</configuration>#" "${SITE}"
+  echo "entrypoint: registered region-server coprocessor ${HBASECOP_RS_COPROC_CLASS} (jar ${jar})" >&2
+fi
+
 # Standalone mode: master process spawns RS + embedded ZK in the same JVM.
 exec "${HBASE_HOME}/bin/hbase" master start
