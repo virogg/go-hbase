@@ -103,4 +103,26 @@ const (
 
 	HookIDPostInstantiateDeleteTracker HookID = 67
 	HookIDPreWALAppend                 HookID = 68
+
+	// --- MasterObserver hooks (T51). IDs 100-199 reserved for master surface. ---
+	HookIDPreCreateTable    HookID = 100
+	HookIDPostCreateTable   HookID = 101
+	HookIDPreDeleteTable    HookID = 102
+	HookIDPostDeleteTable   HookID = 103
+	HookIDPreModifyTable    HookID = 104
+	HookIDPostModifyTable   HookID = 105
+	HookIDPreTruncateTable  HookID = 106
+	HookIDPostTruncateTable HookID = 107
+	HookIDPreEnableTable    HookID = 108
+	HookIDPostEnableTable   HookID = 109
+	HookIDPreDisableTable   HookID = 110
+	HookIDPostDisableTable  HookID = 111
+	HookIDPreMove           HookID = 112
+	HookIDPostMove          HookID = 113
+	HookIDPreAssign         HookID = 114
+	HookIDPostAssign        HookID = 115
+	HookIDPreUnassign       HookID = 116
+	HookIDPostUnassign      HookID = 117
+	HookIDPreBalance        HookID = 118
+	HookIDPostBalance       HookID = 119
 )

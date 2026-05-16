@@ -137,80 +137,124 @@ const (
 	// Delete tracker, WAL append.
 	HookId_HOOK_ID_POST_INSTANTIATE_DELETE_TRACKER HookId = 67
 	HookId_HOOK_ID_PRE_WAL_APPEND                  HookId = 68
+	// Table lifecycle.
+	HookId_HOOK_ID_PRE_CREATE_TABLE    HookId = 100
+	HookId_HOOK_ID_POST_CREATE_TABLE   HookId = 101
+	HookId_HOOK_ID_PRE_DELETE_TABLE    HookId = 102
+	HookId_HOOK_ID_POST_DELETE_TABLE   HookId = 103
+	HookId_HOOK_ID_PRE_MODIFY_TABLE    HookId = 104
+	HookId_HOOK_ID_POST_MODIFY_TABLE   HookId = 105
+	HookId_HOOK_ID_PRE_TRUNCATE_TABLE  HookId = 106
+	HookId_HOOK_ID_POST_TRUNCATE_TABLE HookId = 107
+	// Enable / disable.
+	HookId_HOOK_ID_PRE_ENABLE_TABLE   HookId = 108
+	HookId_HOOK_ID_POST_ENABLE_TABLE  HookId = 109
+	HookId_HOOK_ID_PRE_DISABLE_TABLE  HookId = 110
+	HookId_HOOK_ID_POST_DISABLE_TABLE HookId = 111
+	// Region placement.
+	HookId_HOOK_ID_PRE_MOVE      HookId = 112
+	HookId_HOOK_ID_POST_MOVE     HookId = 113
+	HookId_HOOK_ID_PRE_ASSIGN    HookId = 114
+	HookId_HOOK_ID_POST_ASSIGN   HookId = 115
+	HookId_HOOK_ID_PRE_UNASSIGN  HookId = 116
+	HookId_HOOK_ID_POST_UNASSIGN HookId = 117
+	// Cluster balance.
+	HookId_HOOK_ID_PRE_BALANCE  HookId = 118
+	HookId_HOOK_ID_POST_BALANCE HookId = 119
 )
 
 // Enum value maps for HookId.
 var (
 	HookId_name = map[int32]string{
-		0:  "HOOK_ID_UNSPECIFIED",
-		1:  "HOOK_ID_PRE_OPEN",
-		2:  "HOOK_ID_POST_OPEN",
-		3:  "HOOK_ID_PRE_CLOSE",
-		4:  "HOOK_ID_POST_CLOSE",
-		5:  "HOOK_ID_PRE_FLUSH",
-		6:  "HOOK_ID_PRE_FLUSH_SCANNER_OPEN",
-		7:  "HOOK_ID_POST_FLUSH",
-		8:  "HOOK_ID_PRE_MEM_STORE_COMPACTION",
-		9:  "HOOK_ID_PRE_MEM_STORE_COMPACTION_COMPACT_SCANNER_OPEN",
-		10: "HOOK_ID_PRE_MEM_STORE_COMPACTION_COMPACT",
-		11: "HOOK_ID_POST_MEM_STORE_COMPACTION",
-		12: "HOOK_ID_PRE_COMPACT_SELECTION",
-		13: "HOOK_ID_POST_COMPACT_SELECTION",
-		14: "HOOK_ID_PRE_COMPACT_SCANNER_OPEN",
-		15: "HOOK_ID_PRE_COMPACT",
-		16: "HOOK_ID_POST_COMPACT",
-		17: "HOOK_ID_PRE_GET_OP",
-		18: "HOOK_ID_POST_GET_OP",
-		19: "HOOK_ID_PRE_EXISTS",
-		20: "HOOK_ID_POST_EXISTS",
-		21: "HOOK_ID_PRE_PUT",
-		22: "HOOK_ID_POST_PUT",
-		23: "HOOK_ID_PRE_DELETE",
-		24: "HOOK_ID_POST_DELETE",
-		25: "HOOK_ID_PRE_PREPARE_TIME_STAMP_FOR_DELETE_VERSION",
-		26: "HOOK_ID_PRE_BATCH_MUTATE",
-		27: "HOOK_ID_POST_BATCH_MUTATE",
-		28: "HOOK_ID_POST_BATCH_MUTATE_INDISPENSABLY",
-		29: "HOOK_ID_POST_START_REGION_OPERATION",
-		30: "HOOK_ID_POST_CLOSE_REGION_OPERATION",
-		31: "HOOK_ID_PRE_CHECK_AND_PUT",
-		32: "HOOK_ID_POST_CHECK_AND_PUT",
-		33: "HOOK_ID_PRE_CHECK_AND_PUT_AFTER_ROW_LOCK",
-		34: "HOOK_ID_PRE_CHECK_AND_DELETE",
-		35: "HOOK_ID_POST_CHECK_AND_DELETE",
-		36: "HOOK_ID_PRE_CHECK_AND_DELETE_AFTER_ROW_LOCK",
-		37: "HOOK_ID_PRE_CHECK_AND_MUTATE",
-		38: "HOOK_ID_POST_CHECK_AND_MUTATE",
-		39: "HOOK_ID_PRE_CHECK_AND_MUTATE_AFTER_ROW_LOCK",
-		40: "HOOK_ID_PRE_APPEND",
-		41: "HOOK_ID_POST_APPEND",
-		42: "HOOK_ID_PRE_APPEND_AFTER_ROW_LOCK",
-		43: "HOOK_ID_PRE_INCREMENT",
-		44: "HOOK_ID_POST_INCREMENT",
-		45: "HOOK_ID_PRE_INCREMENT_AFTER_ROW_LOCK",
-		46: "HOOK_ID_PRE_SCANNER_OPEN",
-		47: "HOOK_ID_POST_SCANNER_OPEN",
-		48: "HOOK_ID_PRE_SCANNER_NEXT",
-		49: "HOOK_ID_POST_SCANNER_NEXT",
-		50: "HOOK_ID_POST_SCANNER_FILTER_ROW",
-		51: "HOOK_ID_PRE_SCANNER_CLOSE",
-		52: "HOOK_ID_POST_SCANNER_CLOSE",
-		53: "HOOK_ID_PRE_STORE_SCANNER_OPEN",
-		54: "HOOK_ID_PRE_REPLAY_WA_LS",
-		55: "HOOK_ID_POST_REPLAY_WA_LS",
-		56: "HOOK_ID_PRE_WAL_RESTORE",
-		57: "HOOK_ID_POST_WAL_RESTORE",
-		58: "HOOK_ID_PRE_BULK_LOAD_H_FILE",
-		59: "HOOK_ID_POST_BULK_LOAD_H_FILE",
-		60: "HOOK_ID_PRE_COMMIT_STORE_FILE",
-		61: "HOOK_ID_POST_COMMIT_STORE_FILE",
-		62: "HOOK_ID_PRE_STORE_FILE_READER_OPEN",
-		63: "HOOK_ID_POST_STORE_FILE_READER_OPEN",
-		64: "HOOK_ID_POST_MUTATION_BEFORE_WAL",
-		65: "HOOK_ID_POST_INCREMENT_BEFORE_WAL",
-		66: "HOOK_ID_POST_APPEND_BEFORE_WAL",
-		67: "HOOK_ID_POST_INSTANTIATE_DELETE_TRACKER",
-		68: "HOOK_ID_PRE_WAL_APPEND",
+		0:   "HOOK_ID_UNSPECIFIED",
+		1:   "HOOK_ID_PRE_OPEN",
+		2:   "HOOK_ID_POST_OPEN",
+		3:   "HOOK_ID_PRE_CLOSE",
+		4:   "HOOK_ID_POST_CLOSE",
+		5:   "HOOK_ID_PRE_FLUSH",
+		6:   "HOOK_ID_PRE_FLUSH_SCANNER_OPEN",
+		7:   "HOOK_ID_POST_FLUSH",
+		8:   "HOOK_ID_PRE_MEM_STORE_COMPACTION",
+		9:   "HOOK_ID_PRE_MEM_STORE_COMPACTION_COMPACT_SCANNER_OPEN",
+		10:  "HOOK_ID_PRE_MEM_STORE_COMPACTION_COMPACT",
+		11:  "HOOK_ID_POST_MEM_STORE_COMPACTION",
+		12:  "HOOK_ID_PRE_COMPACT_SELECTION",
+		13:  "HOOK_ID_POST_COMPACT_SELECTION",
+		14:  "HOOK_ID_PRE_COMPACT_SCANNER_OPEN",
+		15:  "HOOK_ID_PRE_COMPACT",
+		16:  "HOOK_ID_POST_COMPACT",
+		17:  "HOOK_ID_PRE_GET_OP",
+		18:  "HOOK_ID_POST_GET_OP",
+		19:  "HOOK_ID_PRE_EXISTS",
+		20:  "HOOK_ID_POST_EXISTS",
+		21:  "HOOK_ID_PRE_PUT",
+		22:  "HOOK_ID_POST_PUT",
+		23:  "HOOK_ID_PRE_DELETE",
+		24:  "HOOK_ID_POST_DELETE",
+		25:  "HOOK_ID_PRE_PREPARE_TIME_STAMP_FOR_DELETE_VERSION",
+		26:  "HOOK_ID_PRE_BATCH_MUTATE",
+		27:  "HOOK_ID_POST_BATCH_MUTATE",
+		28:  "HOOK_ID_POST_BATCH_MUTATE_INDISPENSABLY",
+		29:  "HOOK_ID_POST_START_REGION_OPERATION",
+		30:  "HOOK_ID_POST_CLOSE_REGION_OPERATION",
+		31:  "HOOK_ID_PRE_CHECK_AND_PUT",
+		32:  "HOOK_ID_POST_CHECK_AND_PUT",
+		33:  "HOOK_ID_PRE_CHECK_AND_PUT_AFTER_ROW_LOCK",
+		34:  "HOOK_ID_PRE_CHECK_AND_DELETE",
+		35:  "HOOK_ID_POST_CHECK_AND_DELETE",
+		36:  "HOOK_ID_PRE_CHECK_AND_DELETE_AFTER_ROW_LOCK",
+		37:  "HOOK_ID_PRE_CHECK_AND_MUTATE",
+		38:  "HOOK_ID_POST_CHECK_AND_MUTATE",
+		39:  "HOOK_ID_PRE_CHECK_AND_MUTATE_AFTER_ROW_LOCK",
+		40:  "HOOK_ID_PRE_APPEND",
+		41:  "HOOK_ID_POST_APPEND",
+		42:  "HOOK_ID_PRE_APPEND_AFTER_ROW_LOCK",
+		43:  "HOOK_ID_PRE_INCREMENT",
+		44:  "HOOK_ID_POST_INCREMENT",
+		45:  "HOOK_ID_PRE_INCREMENT_AFTER_ROW_LOCK",
+		46:  "HOOK_ID_PRE_SCANNER_OPEN",
+		47:  "HOOK_ID_POST_SCANNER_OPEN",
+		48:  "HOOK_ID_PRE_SCANNER_NEXT",
+		49:  "HOOK_ID_POST_SCANNER_NEXT",
+		50:  "HOOK_ID_POST_SCANNER_FILTER_ROW",
+		51:  "HOOK_ID_PRE_SCANNER_CLOSE",
+		52:  "HOOK_ID_POST_SCANNER_CLOSE",
+		53:  "HOOK_ID_PRE_STORE_SCANNER_OPEN",
+		54:  "HOOK_ID_PRE_REPLAY_WA_LS",
+		55:  "HOOK_ID_POST_REPLAY_WA_LS",
+		56:  "HOOK_ID_PRE_WAL_RESTORE",
+		57:  "HOOK_ID_POST_WAL_RESTORE",
+		58:  "HOOK_ID_PRE_BULK_LOAD_H_FILE",
+		59:  "HOOK_ID_POST_BULK_LOAD_H_FILE",
+		60:  "HOOK_ID_PRE_COMMIT_STORE_FILE",
+		61:  "HOOK_ID_POST_COMMIT_STORE_FILE",
+		62:  "HOOK_ID_PRE_STORE_FILE_READER_OPEN",
+		63:  "HOOK_ID_POST_STORE_FILE_READER_OPEN",
+		64:  "HOOK_ID_POST_MUTATION_BEFORE_WAL",
+		65:  "HOOK_ID_POST_INCREMENT_BEFORE_WAL",
+		66:  "HOOK_ID_POST_APPEND_BEFORE_WAL",
+		67:  "HOOK_ID_POST_INSTANTIATE_DELETE_TRACKER",
+		68:  "HOOK_ID_PRE_WAL_APPEND",
+		100: "HOOK_ID_PRE_CREATE_TABLE",
+		101: "HOOK_ID_POST_CREATE_TABLE",
+		102: "HOOK_ID_PRE_DELETE_TABLE",
+		103: "HOOK_ID_POST_DELETE_TABLE",
+		104: "HOOK_ID_PRE_MODIFY_TABLE",
+		105: "HOOK_ID_POST_MODIFY_TABLE",
+		106: "HOOK_ID_PRE_TRUNCATE_TABLE",
+		107: "HOOK_ID_POST_TRUNCATE_TABLE",
+		108: "HOOK_ID_PRE_ENABLE_TABLE",
+		109: "HOOK_ID_POST_ENABLE_TABLE",
+		110: "HOOK_ID_PRE_DISABLE_TABLE",
+		111: "HOOK_ID_POST_DISABLE_TABLE",
+		112: "HOOK_ID_PRE_MOVE",
+		113: "HOOK_ID_POST_MOVE",
+		114: "HOOK_ID_PRE_ASSIGN",
+		115: "HOOK_ID_POST_ASSIGN",
+		116: "HOOK_ID_PRE_UNASSIGN",
+		117: "HOOK_ID_POST_UNASSIGN",
+		118: "HOOK_ID_PRE_BALANCE",
+		119: "HOOK_ID_POST_BALANCE",
 	}
 	HookId_value = map[string]int32{
 		"HOOK_ID_UNSPECIFIED":              0,
@@ -282,6 +326,26 @@ var (
 		"HOOK_ID_POST_APPEND_BEFORE_WAL":                        66,
 		"HOOK_ID_POST_INSTANTIATE_DELETE_TRACKER":               67,
 		"HOOK_ID_PRE_WAL_APPEND":                                68,
+		"HOOK_ID_PRE_CREATE_TABLE":                              100,
+		"HOOK_ID_POST_CREATE_TABLE":                             101,
+		"HOOK_ID_PRE_DELETE_TABLE":                              102,
+		"HOOK_ID_POST_DELETE_TABLE":                             103,
+		"HOOK_ID_PRE_MODIFY_TABLE":                              104,
+		"HOOK_ID_POST_MODIFY_TABLE":                             105,
+		"HOOK_ID_PRE_TRUNCATE_TABLE":                            106,
+		"HOOK_ID_POST_TRUNCATE_TABLE":                           107,
+		"HOOK_ID_PRE_ENABLE_TABLE":                              108,
+		"HOOK_ID_POST_ENABLE_TABLE":                             109,
+		"HOOK_ID_PRE_DISABLE_TABLE":                             110,
+		"HOOK_ID_POST_DISABLE_TABLE":                            111,
+		"HOOK_ID_PRE_MOVE":                                      112,
+		"HOOK_ID_POST_MOVE":                                     113,
+		"HOOK_ID_PRE_ASSIGN":                                    114,
+		"HOOK_ID_POST_ASSIGN":                                   115,
+		"HOOK_ID_PRE_UNASSIGN":                                  116,
+		"HOOK_ID_POST_UNASSIGN":                                 117,
+		"HOOK_ID_PRE_BALANCE":                                   118,
+		"HOOK_ID_POST_BALANCE":                                  119,
 	}
 )
 
@@ -5294,6 +5358,1219 @@ func (x *PreWALAppendRequest) GetLogEdit() *WalEditProto {
 	return nil
 }
 
+type PreCreateTableRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Ctx             *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	TableName       *hbasepb.TableName     `protobuf:"bytes,2,opt,name=table_name,json=tableName,proto3" json:"table_name,omitempty"`
+	TableDescriptor []byte                 `protobuf:"bytes,3,opt,name=table_descriptor,json=tableDescriptor,proto3" json:"table_descriptor,omitempty"`
+	SplitKey        [][]byte               `protobuf:"bytes,4,rep,name=split_key,json=splitKey,proto3" json:"split_key,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *PreCreateTableRequest) Reset() {
+	*x = PreCreateTableRequest{}
+	mi := &file_hooks_proto_msgTypes[82]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PreCreateTableRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PreCreateTableRequest) ProtoMessage() {}
+
+func (x *PreCreateTableRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hooks_proto_msgTypes[82]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PreCreateTableRequest.ProtoReflect.Descriptor instead.
+func (*PreCreateTableRequest) Descriptor() ([]byte, []int) {
+	return file_hooks_proto_rawDescGZIP(), []int{82}
+}
+
+func (x *PreCreateTableRequest) GetCtx() *HookContext {
+	if x != nil {
+		return x.Ctx
+	}
+	return nil
+}
+
+func (x *PreCreateTableRequest) GetTableName() *hbasepb.TableName {
+	if x != nil {
+		return x.TableName
+	}
+	return nil
+}
+
+func (x *PreCreateTableRequest) GetTableDescriptor() []byte {
+	if x != nil {
+		return x.TableDescriptor
+	}
+	return nil
+}
+
+func (x *PreCreateTableRequest) GetSplitKey() [][]byte {
+	if x != nil {
+		return x.SplitKey
+	}
+	return nil
+}
+
+type PostCreateTableRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Ctx             *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	TableName       *hbasepb.TableName     `protobuf:"bytes,2,opt,name=table_name,json=tableName,proto3" json:"table_name,omitempty"`
+	TableDescriptor []byte                 `protobuf:"bytes,3,opt,name=table_descriptor,json=tableDescriptor,proto3" json:"table_descriptor,omitempty"`
+	SplitKey        [][]byte               `protobuf:"bytes,4,rep,name=split_key,json=splitKey,proto3" json:"split_key,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *PostCreateTableRequest) Reset() {
+	*x = PostCreateTableRequest{}
+	mi := &file_hooks_proto_msgTypes[83]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PostCreateTableRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PostCreateTableRequest) ProtoMessage() {}
+
+func (x *PostCreateTableRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hooks_proto_msgTypes[83]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PostCreateTableRequest.ProtoReflect.Descriptor instead.
+func (*PostCreateTableRequest) Descriptor() ([]byte, []int) {
+	return file_hooks_proto_rawDescGZIP(), []int{83}
+}
+
+func (x *PostCreateTableRequest) GetCtx() *HookContext {
+	if x != nil {
+		return x.Ctx
+	}
+	return nil
+}
+
+func (x *PostCreateTableRequest) GetTableName() *hbasepb.TableName {
+	if x != nil {
+		return x.TableName
+	}
+	return nil
+}
+
+func (x *PostCreateTableRequest) GetTableDescriptor() []byte {
+	if x != nil {
+		return x.TableDescriptor
+	}
+	return nil
+}
+
+func (x *PostCreateTableRequest) GetSplitKey() [][]byte {
+	if x != nil {
+		return x.SplitKey
+	}
+	return nil
+}
+
+type PreDeleteTableRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	TableName     *hbasepb.TableName     `protobuf:"bytes,2,opt,name=table_name,json=tableName,proto3" json:"table_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PreDeleteTableRequest) Reset() {
+	*x = PreDeleteTableRequest{}
+	mi := &file_hooks_proto_msgTypes[84]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PreDeleteTableRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PreDeleteTableRequest) ProtoMessage() {}
+
+func (x *PreDeleteTableRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hooks_proto_msgTypes[84]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PreDeleteTableRequest.ProtoReflect.Descriptor instead.
+func (*PreDeleteTableRequest) Descriptor() ([]byte, []int) {
+	return file_hooks_proto_rawDescGZIP(), []int{84}
+}
+
+func (x *PreDeleteTableRequest) GetCtx() *HookContext {
+	if x != nil {
+		return x.Ctx
+	}
+	return nil
+}
+
+func (x *PreDeleteTableRequest) GetTableName() *hbasepb.TableName {
+	if x != nil {
+		return x.TableName
+	}
+	return nil
+}
+
+type PostDeleteTableRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	TableName     *hbasepb.TableName     `protobuf:"bytes,2,opt,name=table_name,json=tableName,proto3" json:"table_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PostDeleteTableRequest) Reset() {
+	*x = PostDeleteTableRequest{}
+	mi := &file_hooks_proto_msgTypes[85]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PostDeleteTableRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PostDeleteTableRequest) ProtoMessage() {}
+
+func (x *PostDeleteTableRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hooks_proto_msgTypes[85]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PostDeleteTableRequest.ProtoReflect.Descriptor instead.
+func (*PostDeleteTableRequest) Descriptor() ([]byte, []int) {
+	return file_hooks_proto_rawDescGZIP(), []int{85}
+}
+
+func (x *PostDeleteTableRequest) GetCtx() *HookContext {
+	if x != nil {
+		return x.Ctx
+	}
+	return nil
+}
+
+func (x *PostDeleteTableRequest) GetTableName() *hbasepb.TableName {
+	if x != nil {
+		return x.TableName
+	}
+	return nil
+}
+
+type PreModifyTableRequest struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	Ctx                *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	TableName          *hbasepb.TableName     `protobuf:"bytes,2,opt,name=table_name,json=tableName,proto3" json:"table_name,omitempty"`
+	NewTableDescriptor []byte                 `protobuf:"bytes,3,opt,name=new_table_descriptor,json=newTableDescriptor,proto3" json:"new_table_descriptor,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *PreModifyTableRequest) Reset() {
+	*x = PreModifyTableRequest{}
+	mi := &file_hooks_proto_msgTypes[86]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PreModifyTableRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PreModifyTableRequest) ProtoMessage() {}
+
+func (x *PreModifyTableRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hooks_proto_msgTypes[86]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PreModifyTableRequest.ProtoReflect.Descriptor instead.
+func (*PreModifyTableRequest) Descriptor() ([]byte, []int) {
+	return file_hooks_proto_rawDescGZIP(), []int{86}
+}
+
+func (x *PreModifyTableRequest) GetCtx() *HookContext {
+	if x != nil {
+		return x.Ctx
+	}
+	return nil
+}
+
+func (x *PreModifyTableRequest) GetTableName() *hbasepb.TableName {
+	if x != nil {
+		return x.TableName
+	}
+	return nil
+}
+
+func (x *PreModifyTableRequest) GetNewTableDescriptor() []byte {
+	if x != nil {
+		return x.NewTableDescriptor
+	}
+	return nil
+}
+
+type PostModifyTableRequest struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	Ctx                *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	TableName          *hbasepb.TableName     `protobuf:"bytes,2,opt,name=table_name,json=tableName,proto3" json:"table_name,omitempty"`
+	NewTableDescriptor []byte                 `protobuf:"bytes,3,opt,name=new_table_descriptor,json=newTableDescriptor,proto3" json:"new_table_descriptor,omitempty"`
+	OldTableDescriptor []byte                 `protobuf:"bytes,4,opt,name=old_table_descriptor,json=oldTableDescriptor,proto3" json:"old_table_descriptor,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *PostModifyTableRequest) Reset() {
+	*x = PostModifyTableRequest{}
+	mi := &file_hooks_proto_msgTypes[87]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PostModifyTableRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PostModifyTableRequest) ProtoMessage() {}
+
+func (x *PostModifyTableRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hooks_proto_msgTypes[87]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PostModifyTableRequest.ProtoReflect.Descriptor instead.
+func (*PostModifyTableRequest) Descriptor() ([]byte, []int) {
+	return file_hooks_proto_rawDescGZIP(), []int{87}
+}
+
+func (x *PostModifyTableRequest) GetCtx() *HookContext {
+	if x != nil {
+		return x.Ctx
+	}
+	return nil
+}
+
+func (x *PostModifyTableRequest) GetTableName() *hbasepb.TableName {
+	if x != nil {
+		return x.TableName
+	}
+	return nil
+}
+
+func (x *PostModifyTableRequest) GetNewTableDescriptor() []byte {
+	if x != nil {
+		return x.NewTableDescriptor
+	}
+	return nil
+}
+
+func (x *PostModifyTableRequest) GetOldTableDescriptor() []byte {
+	if x != nil {
+		return x.OldTableDescriptor
+	}
+	return nil
+}
+
+type PreTruncateTableRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Ctx            *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	TableName      *hbasepb.TableName     `protobuf:"bytes,2,opt,name=table_name,json=tableName,proto3" json:"table_name,omitempty"`
+	PreserveSplits bool                   `protobuf:"varint,3,opt,name=preserve_splits,json=preserveSplits,proto3" json:"preserve_splits,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *PreTruncateTableRequest) Reset() {
+	*x = PreTruncateTableRequest{}
+	mi := &file_hooks_proto_msgTypes[88]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PreTruncateTableRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PreTruncateTableRequest) ProtoMessage() {}
+
+func (x *PreTruncateTableRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hooks_proto_msgTypes[88]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PreTruncateTableRequest.ProtoReflect.Descriptor instead.
+func (*PreTruncateTableRequest) Descriptor() ([]byte, []int) {
+	return file_hooks_proto_rawDescGZIP(), []int{88}
+}
+
+func (x *PreTruncateTableRequest) GetCtx() *HookContext {
+	if x != nil {
+		return x.Ctx
+	}
+	return nil
+}
+
+func (x *PreTruncateTableRequest) GetTableName() *hbasepb.TableName {
+	if x != nil {
+		return x.TableName
+	}
+	return nil
+}
+
+func (x *PreTruncateTableRequest) GetPreserveSplits() bool {
+	if x != nil {
+		return x.PreserveSplits
+	}
+	return false
+}
+
+type PostTruncateTableRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Ctx            *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	TableName      *hbasepb.TableName     `protobuf:"bytes,2,opt,name=table_name,json=tableName,proto3" json:"table_name,omitempty"`
+	PreserveSplits bool                   `protobuf:"varint,3,opt,name=preserve_splits,json=preserveSplits,proto3" json:"preserve_splits,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *PostTruncateTableRequest) Reset() {
+	*x = PostTruncateTableRequest{}
+	mi := &file_hooks_proto_msgTypes[89]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PostTruncateTableRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PostTruncateTableRequest) ProtoMessage() {}
+
+func (x *PostTruncateTableRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hooks_proto_msgTypes[89]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PostTruncateTableRequest.ProtoReflect.Descriptor instead.
+func (*PostTruncateTableRequest) Descriptor() ([]byte, []int) {
+	return file_hooks_proto_rawDescGZIP(), []int{89}
+}
+
+func (x *PostTruncateTableRequest) GetCtx() *HookContext {
+	if x != nil {
+		return x.Ctx
+	}
+	return nil
+}
+
+func (x *PostTruncateTableRequest) GetTableName() *hbasepb.TableName {
+	if x != nil {
+		return x.TableName
+	}
+	return nil
+}
+
+func (x *PostTruncateTableRequest) GetPreserveSplits() bool {
+	if x != nil {
+		return x.PreserveSplits
+	}
+	return false
+}
+
+type PreEnableTableRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	TableName     *hbasepb.TableName     `protobuf:"bytes,2,opt,name=table_name,json=tableName,proto3" json:"table_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PreEnableTableRequest) Reset() {
+	*x = PreEnableTableRequest{}
+	mi := &file_hooks_proto_msgTypes[90]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PreEnableTableRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PreEnableTableRequest) ProtoMessage() {}
+
+func (x *PreEnableTableRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hooks_proto_msgTypes[90]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PreEnableTableRequest.ProtoReflect.Descriptor instead.
+func (*PreEnableTableRequest) Descriptor() ([]byte, []int) {
+	return file_hooks_proto_rawDescGZIP(), []int{90}
+}
+
+func (x *PreEnableTableRequest) GetCtx() *HookContext {
+	if x != nil {
+		return x.Ctx
+	}
+	return nil
+}
+
+func (x *PreEnableTableRequest) GetTableName() *hbasepb.TableName {
+	if x != nil {
+		return x.TableName
+	}
+	return nil
+}
+
+type PostEnableTableRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	TableName     *hbasepb.TableName     `protobuf:"bytes,2,opt,name=table_name,json=tableName,proto3" json:"table_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PostEnableTableRequest) Reset() {
+	*x = PostEnableTableRequest{}
+	mi := &file_hooks_proto_msgTypes[91]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PostEnableTableRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PostEnableTableRequest) ProtoMessage() {}
+
+func (x *PostEnableTableRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hooks_proto_msgTypes[91]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PostEnableTableRequest.ProtoReflect.Descriptor instead.
+func (*PostEnableTableRequest) Descriptor() ([]byte, []int) {
+	return file_hooks_proto_rawDescGZIP(), []int{91}
+}
+
+func (x *PostEnableTableRequest) GetCtx() *HookContext {
+	if x != nil {
+		return x.Ctx
+	}
+	return nil
+}
+
+func (x *PostEnableTableRequest) GetTableName() *hbasepb.TableName {
+	if x != nil {
+		return x.TableName
+	}
+	return nil
+}
+
+type PreDisableTableRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	TableName     *hbasepb.TableName     `protobuf:"bytes,2,opt,name=table_name,json=tableName,proto3" json:"table_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PreDisableTableRequest) Reset() {
+	*x = PreDisableTableRequest{}
+	mi := &file_hooks_proto_msgTypes[92]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PreDisableTableRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PreDisableTableRequest) ProtoMessage() {}
+
+func (x *PreDisableTableRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hooks_proto_msgTypes[92]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PreDisableTableRequest.ProtoReflect.Descriptor instead.
+func (*PreDisableTableRequest) Descriptor() ([]byte, []int) {
+	return file_hooks_proto_rawDescGZIP(), []int{92}
+}
+
+func (x *PreDisableTableRequest) GetCtx() *HookContext {
+	if x != nil {
+		return x.Ctx
+	}
+	return nil
+}
+
+func (x *PreDisableTableRequest) GetTableName() *hbasepb.TableName {
+	if x != nil {
+		return x.TableName
+	}
+	return nil
+}
+
+type PostDisableTableRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	TableName     *hbasepb.TableName     `protobuf:"bytes,2,opt,name=table_name,json=tableName,proto3" json:"table_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PostDisableTableRequest) Reset() {
+	*x = PostDisableTableRequest{}
+	mi := &file_hooks_proto_msgTypes[93]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PostDisableTableRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PostDisableTableRequest) ProtoMessage() {}
+
+func (x *PostDisableTableRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hooks_proto_msgTypes[93]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PostDisableTableRequest.ProtoReflect.Descriptor instead.
+func (*PostDisableTableRequest) Descriptor() ([]byte, []int) {
+	return file_hooks_proto_rawDescGZIP(), []int{93}
+}
+
+func (x *PostDisableTableRequest) GetCtx() *HookContext {
+	if x != nil {
+		return x.Ctx
+	}
+	return nil
+}
+
+func (x *PostDisableTableRequest) GetTableName() *hbasepb.TableName {
+	if x != nil {
+		return x.TableName
+	}
+	return nil
+}
+
+type ServerNameProto struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Host          string                 `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
+	Port          uint32                 `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
+	StartCode     uint64                 `protobuf:"varint,3,opt,name=start_code,json=startCode,proto3" json:"start_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ServerNameProto) Reset() {
+	*x = ServerNameProto{}
+	mi := &file_hooks_proto_msgTypes[94]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ServerNameProto) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ServerNameProto) ProtoMessage() {}
+
+func (x *ServerNameProto) ProtoReflect() protoreflect.Message {
+	mi := &file_hooks_proto_msgTypes[94]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ServerNameProto.ProtoReflect.Descriptor instead.
+func (*ServerNameProto) Descriptor() ([]byte, []int) {
+	return file_hooks_proto_rawDescGZIP(), []int{94}
+}
+
+func (x *ServerNameProto) GetHost() string {
+	if x != nil {
+		return x.Host
+	}
+	return ""
+}
+
+func (x *ServerNameProto) GetPort() uint32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+func (x *ServerNameProto) GetStartCode() uint64 {
+	if x != nil {
+		return x.StartCode
+	}
+	return 0
+}
+
+type PreMoveRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	RegionInfo    []byte                 `protobuf:"bytes,2,opt,name=region_info,json=regionInfo,proto3" json:"region_info,omitempty"` // RegionInfo.toByteArray
+	Source        *ServerNameProto       `protobuf:"bytes,3,opt,name=source,proto3" json:"source,omitempty"`
+	Destination   *ServerNameProto       `protobuf:"bytes,4,opt,name=destination,proto3" json:"destination,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PreMoveRequest) Reset() {
+	*x = PreMoveRequest{}
+	mi := &file_hooks_proto_msgTypes[95]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PreMoveRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PreMoveRequest) ProtoMessage() {}
+
+func (x *PreMoveRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hooks_proto_msgTypes[95]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PreMoveRequest.ProtoReflect.Descriptor instead.
+func (*PreMoveRequest) Descriptor() ([]byte, []int) {
+	return file_hooks_proto_rawDescGZIP(), []int{95}
+}
+
+func (x *PreMoveRequest) GetCtx() *HookContext {
+	if x != nil {
+		return x.Ctx
+	}
+	return nil
+}
+
+func (x *PreMoveRequest) GetRegionInfo() []byte {
+	if x != nil {
+		return x.RegionInfo
+	}
+	return nil
+}
+
+func (x *PreMoveRequest) GetSource() *ServerNameProto {
+	if x != nil {
+		return x.Source
+	}
+	return nil
+}
+
+func (x *PreMoveRequest) GetDestination() *ServerNameProto {
+	if x != nil {
+		return x.Destination
+	}
+	return nil
+}
+
+type PostMoveRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	RegionInfo    []byte                 `protobuf:"bytes,2,opt,name=region_info,json=regionInfo,proto3" json:"region_info,omitempty"`
+	Source        *ServerNameProto       `protobuf:"bytes,3,opt,name=source,proto3" json:"source,omitempty"`
+	Destination   *ServerNameProto       `protobuf:"bytes,4,opt,name=destination,proto3" json:"destination,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PostMoveRequest) Reset() {
+	*x = PostMoveRequest{}
+	mi := &file_hooks_proto_msgTypes[96]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PostMoveRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PostMoveRequest) ProtoMessage() {}
+
+func (x *PostMoveRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hooks_proto_msgTypes[96]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PostMoveRequest.ProtoReflect.Descriptor instead.
+func (*PostMoveRequest) Descriptor() ([]byte, []int) {
+	return file_hooks_proto_rawDescGZIP(), []int{96}
+}
+
+func (x *PostMoveRequest) GetCtx() *HookContext {
+	if x != nil {
+		return x.Ctx
+	}
+	return nil
+}
+
+func (x *PostMoveRequest) GetRegionInfo() []byte {
+	if x != nil {
+		return x.RegionInfo
+	}
+	return nil
+}
+
+func (x *PostMoveRequest) GetSource() *ServerNameProto {
+	if x != nil {
+		return x.Source
+	}
+	return nil
+}
+
+func (x *PostMoveRequest) GetDestination() *ServerNameProto {
+	if x != nil {
+		return x.Destination
+	}
+	return nil
+}
+
+type PreAssignRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	RegionInfo    []byte                 `protobuf:"bytes,2,opt,name=region_info,json=regionInfo,proto3" json:"region_info,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PreAssignRequest) Reset() {
+	*x = PreAssignRequest{}
+	mi := &file_hooks_proto_msgTypes[97]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PreAssignRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PreAssignRequest) ProtoMessage() {}
+
+func (x *PreAssignRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hooks_proto_msgTypes[97]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PreAssignRequest.ProtoReflect.Descriptor instead.
+func (*PreAssignRequest) Descriptor() ([]byte, []int) {
+	return file_hooks_proto_rawDescGZIP(), []int{97}
+}
+
+func (x *PreAssignRequest) GetCtx() *HookContext {
+	if x != nil {
+		return x.Ctx
+	}
+	return nil
+}
+
+func (x *PreAssignRequest) GetRegionInfo() []byte {
+	if x != nil {
+		return x.RegionInfo
+	}
+	return nil
+}
+
+type PostAssignRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	RegionInfo    []byte                 `protobuf:"bytes,2,opt,name=region_info,json=regionInfo,proto3" json:"region_info,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PostAssignRequest) Reset() {
+	*x = PostAssignRequest{}
+	mi := &file_hooks_proto_msgTypes[98]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PostAssignRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PostAssignRequest) ProtoMessage() {}
+
+func (x *PostAssignRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hooks_proto_msgTypes[98]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PostAssignRequest.ProtoReflect.Descriptor instead.
+func (*PostAssignRequest) Descriptor() ([]byte, []int) {
+	return file_hooks_proto_rawDescGZIP(), []int{98}
+}
+
+func (x *PostAssignRequest) GetCtx() *HookContext {
+	if x != nil {
+		return x.Ctx
+	}
+	return nil
+}
+
+func (x *PostAssignRequest) GetRegionInfo() []byte {
+	if x != nil {
+		return x.RegionInfo
+	}
+	return nil
+}
+
+type PreUnassignRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	RegionInfo    []byte                 `protobuf:"bytes,2,opt,name=region_info,json=regionInfo,proto3" json:"region_info,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PreUnassignRequest) Reset() {
+	*x = PreUnassignRequest{}
+	mi := &file_hooks_proto_msgTypes[99]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PreUnassignRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PreUnassignRequest) ProtoMessage() {}
+
+func (x *PreUnassignRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hooks_proto_msgTypes[99]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PreUnassignRequest.ProtoReflect.Descriptor instead.
+func (*PreUnassignRequest) Descriptor() ([]byte, []int) {
+	return file_hooks_proto_rawDescGZIP(), []int{99}
+}
+
+func (x *PreUnassignRequest) GetCtx() *HookContext {
+	if x != nil {
+		return x.Ctx
+	}
+	return nil
+}
+
+func (x *PreUnassignRequest) GetRegionInfo() []byte {
+	if x != nil {
+		return x.RegionInfo
+	}
+	return nil
+}
+
+type PostUnassignRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	RegionInfo    []byte                 `protobuf:"bytes,2,opt,name=region_info,json=regionInfo,proto3" json:"region_info,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PostUnassignRequest) Reset() {
+	*x = PostUnassignRequest{}
+	mi := &file_hooks_proto_msgTypes[100]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PostUnassignRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PostUnassignRequest) ProtoMessage() {}
+
+func (x *PostUnassignRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hooks_proto_msgTypes[100]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PostUnassignRequest.ProtoReflect.Descriptor instead.
+func (*PostUnassignRequest) Descriptor() ([]byte, []int) {
+	return file_hooks_proto_rawDescGZIP(), []int{100}
+}
+
+func (x *PostUnassignRequest) GetCtx() *HookContext {
+	if x != nil {
+		return x.Ctx
+	}
+	return nil
+}
+
+func (x *PostUnassignRequest) GetRegionInfo() []byte {
+	if x != nil {
+		return x.RegionInfo
+	}
+	return nil
+}
+
+type PreBalanceRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Ctx   *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	// 0=NONE, 1=NORMAL, 2=FORCE — mirrors HBase BalanceRequest.BalanceMode.
+	BalanceMode   int32 `protobuf:"varint,2,opt,name=balance_mode,json=balanceMode,proto3" json:"balance_mode,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PreBalanceRequest) Reset() {
+	*x = PreBalanceRequest{}
+	mi := &file_hooks_proto_msgTypes[101]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PreBalanceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PreBalanceRequest) ProtoMessage() {}
+
+func (x *PreBalanceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hooks_proto_msgTypes[101]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PreBalanceRequest.ProtoReflect.Descriptor instead.
+func (*PreBalanceRequest) Descriptor() ([]byte, []int) {
+	return file_hooks_proto_rawDescGZIP(), []int{101}
+}
+
+func (x *PreBalanceRequest) GetCtx() *HookContext {
+	if x != nil {
+		return x.Ctx
+	}
+	return nil
+}
+
+func (x *PreBalanceRequest) GetBalanceMode() int32 {
+	if x != nil {
+		return x.BalanceMode
+	}
+	return 0
+}
+
+type PostBalanceRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ctx           *HookContext           `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	BalanceMode   int32                  `protobuf:"varint,2,opt,name=balance_mode,json=balanceMode,proto3" json:"balance_mode,omitempty"`
+	Ran           bool                   `protobuf:"varint,3,opt,name=ran,proto3" json:"ran,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PostBalanceRequest) Reset() {
+	*x = PostBalanceRequest{}
+	mi := &file_hooks_proto_msgTypes[102]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PostBalanceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PostBalanceRequest) ProtoMessage() {}
+
+func (x *PostBalanceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hooks_proto_msgTypes[102]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PostBalanceRequest.ProtoReflect.Descriptor instead.
+func (*PostBalanceRequest) Descriptor() ([]byte, []int) {
+	return file_hooks_proto_rawDescGZIP(), []int{102}
+}
+
+func (x *PostBalanceRequest) GetCtx() *HookContext {
+	if x != nil {
+		return x.Ctx
+	}
+	return nil
+}
+
+func (x *PostBalanceRequest) GetBalanceMode() int32 {
+	if x != nil {
+		return x.BalanceMode
+	}
+	return 0
+}
+
+func (x *PostBalanceRequest) GetRan() bool {
+	if x != nil {
+		return x.Ran
+	}
+	return false
+}
+
 var File_hooks_proto protoreflect.FileDescriptor
 
 const file_hooks_proto_rawDesc = "" +
@@ -5664,7 +6941,104 @@ const file_hooks_proto_rawDesc = "" +
 	"\x13PreWALAppendRequest\x121\n" +
 	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x128\n" +
 	"\alog_key\x18\x02 \x01(\v2\x1f.virogg.hbasecop.v1.WalKeyProtoR\x06logKey\x12;\n" +
-	"\blog_edit\x18\x03 \x01(\v2 .virogg.hbasecop.v1.WalEditProtoR\alogEdit*\xfa\x11\n" +
+	"\blog_edit\x18\x03 \x01(\v2 .virogg.hbasecop.v1.WalEditProtoR\alogEdit\"\xd6\x01\n" +
+	"\x15PreCreateTableRequest\x121\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12B\n" +
+	"\n" +
+	"table_name\x18\x02 \x01(\v2#.virogg.hbasecop.hbase.v1.TableNameR\ttableName\x12)\n" +
+	"\x10table_descriptor\x18\x03 \x01(\fR\x0ftableDescriptor\x12\x1b\n" +
+	"\tsplit_key\x18\x04 \x03(\fR\bsplitKey\"\xd7\x01\n" +
+	"\x16PostCreateTableRequest\x121\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12B\n" +
+	"\n" +
+	"table_name\x18\x02 \x01(\v2#.virogg.hbasecop.hbase.v1.TableNameR\ttableName\x12)\n" +
+	"\x10table_descriptor\x18\x03 \x01(\fR\x0ftableDescriptor\x12\x1b\n" +
+	"\tsplit_key\x18\x04 \x03(\fR\bsplitKey\"\x8e\x01\n" +
+	"\x15PreDeleteTableRequest\x121\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12B\n" +
+	"\n" +
+	"table_name\x18\x02 \x01(\v2#.virogg.hbasecop.hbase.v1.TableNameR\ttableName\"\x8f\x01\n" +
+	"\x16PostDeleteTableRequest\x121\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12B\n" +
+	"\n" +
+	"table_name\x18\x02 \x01(\v2#.virogg.hbasecop.hbase.v1.TableNameR\ttableName\"\xc0\x01\n" +
+	"\x15PreModifyTableRequest\x121\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12B\n" +
+	"\n" +
+	"table_name\x18\x02 \x01(\v2#.virogg.hbasecop.hbase.v1.TableNameR\ttableName\x120\n" +
+	"\x14new_table_descriptor\x18\x03 \x01(\fR\x12newTableDescriptor\"\xf3\x01\n" +
+	"\x16PostModifyTableRequest\x121\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12B\n" +
+	"\n" +
+	"table_name\x18\x02 \x01(\v2#.virogg.hbasecop.hbase.v1.TableNameR\ttableName\x120\n" +
+	"\x14new_table_descriptor\x18\x03 \x01(\fR\x12newTableDescriptor\x120\n" +
+	"\x14old_table_descriptor\x18\x04 \x01(\fR\x12oldTableDescriptor\"\xb9\x01\n" +
+	"\x17PreTruncateTableRequest\x121\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12B\n" +
+	"\n" +
+	"table_name\x18\x02 \x01(\v2#.virogg.hbasecop.hbase.v1.TableNameR\ttableName\x12'\n" +
+	"\x0fpreserve_splits\x18\x03 \x01(\bR\x0epreserveSplits\"\xba\x01\n" +
+	"\x18PostTruncateTableRequest\x121\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12B\n" +
+	"\n" +
+	"table_name\x18\x02 \x01(\v2#.virogg.hbasecop.hbase.v1.TableNameR\ttableName\x12'\n" +
+	"\x0fpreserve_splits\x18\x03 \x01(\bR\x0epreserveSplits\"\x8e\x01\n" +
+	"\x15PreEnableTableRequest\x121\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12B\n" +
+	"\n" +
+	"table_name\x18\x02 \x01(\v2#.virogg.hbasecop.hbase.v1.TableNameR\ttableName\"\x8f\x01\n" +
+	"\x16PostEnableTableRequest\x121\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12B\n" +
+	"\n" +
+	"table_name\x18\x02 \x01(\v2#.virogg.hbasecop.hbase.v1.TableNameR\ttableName\"\x8f\x01\n" +
+	"\x16PreDisableTableRequest\x121\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12B\n" +
+	"\n" +
+	"table_name\x18\x02 \x01(\v2#.virogg.hbasecop.hbase.v1.TableNameR\ttableName\"\x90\x01\n" +
+	"\x17PostDisableTableRequest\x121\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12B\n" +
+	"\n" +
+	"table_name\x18\x02 \x01(\v2#.virogg.hbasecop.hbase.v1.TableNameR\ttableName\"X\n" +
+	"\x0fServerNameProto\x12\x12\n" +
+	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
+	"\x04port\x18\x02 \x01(\rR\x04port\x12\x1d\n" +
+	"\n" +
+	"start_code\x18\x03 \x01(\x04R\tstartCode\"\xe8\x01\n" +
+	"\x0ePreMoveRequest\x121\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12\x1f\n" +
+	"\vregion_info\x18\x02 \x01(\fR\n" +
+	"regionInfo\x12;\n" +
+	"\x06source\x18\x03 \x01(\v2#.virogg.hbasecop.v1.ServerNameProtoR\x06source\x12E\n" +
+	"\vdestination\x18\x04 \x01(\v2#.virogg.hbasecop.v1.ServerNameProtoR\vdestination\"\xe9\x01\n" +
+	"\x0fPostMoveRequest\x121\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12\x1f\n" +
+	"\vregion_info\x18\x02 \x01(\fR\n" +
+	"regionInfo\x12;\n" +
+	"\x06source\x18\x03 \x01(\v2#.virogg.hbasecop.v1.ServerNameProtoR\x06source\x12E\n" +
+	"\vdestination\x18\x04 \x01(\v2#.virogg.hbasecop.v1.ServerNameProtoR\vdestination\"f\n" +
+	"\x10PreAssignRequest\x121\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12\x1f\n" +
+	"\vregion_info\x18\x02 \x01(\fR\n" +
+	"regionInfo\"g\n" +
+	"\x11PostAssignRequest\x121\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12\x1f\n" +
+	"\vregion_info\x18\x02 \x01(\fR\n" +
+	"regionInfo\"h\n" +
+	"\x12PreUnassignRequest\x121\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12\x1f\n" +
+	"\vregion_info\x18\x02 \x01(\fR\n" +
+	"regionInfo\"i\n" +
+	"\x13PostUnassignRequest\x121\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12\x1f\n" +
+	"\vregion_info\x18\x02 \x01(\fR\n" +
+	"regionInfo\"i\n" +
+	"\x11PreBalanceRequest\x121\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12!\n" +
+	"\fbalance_mode\x18\x02 \x01(\x05R\vbalanceMode\"|\n" +
+	"\x12PostBalanceRequest\x121\n" +
+	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12!\n" +
+	"\fbalance_mode\x18\x02 \x01(\x05R\vbalanceMode\x12\x10\n" +
+	"\x03ran\x18\x03 \x01(\bR\x03ran*\xb4\x16\n" +
 	"\x06HookId\x12\x17\n" +
 	"\x13HOOK_ID_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10HOOK_ID_PRE_OPEN\x10\x01\x12\x15\n" +
@@ -5735,7 +7109,27 @@ const file_hooks_proto_rawDesc = "" +
 	"!HOOK_ID_POST_INCREMENT_BEFORE_WAL\x10A\x12\"\n" +
 	"\x1eHOOK_ID_POST_APPEND_BEFORE_WAL\x10B\x12+\n" +
 	"'HOOK_ID_POST_INSTANTIATE_DELETE_TRACKER\x10C\x12\x1a\n" +
-	"\x16HOOK_ID_PRE_WAL_APPEND\x10DBc\n" +
+	"\x16HOOK_ID_PRE_WAL_APPEND\x10D\x12\x1c\n" +
+	"\x18HOOK_ID_PRE_CREATE_TABLE\x10d\x12\x1d\n" +
+	"\x19HOOK_ID_POST_CREATE_TABLE\x10e\x12\x1c\n" +
+	"\x18HOOK_ID_PRE_DELETE_TABLE\x10f\x12\x1d\n" +
+	"\x19HOOK_ID_POST_DELETE_TABLE\x10g\x12\x1c\n" +
+	"\x18HOOK_ID_PRE_MODIFY_TABLE\x10h\x12\x1d\n" +
+	"\x19HOOK_ID_POST_MODIFY_TABLE\x10i\x12\x1e\n" +
+	"\x1aHOOK_ID_PRE_TRUNCATE_TABLE\x10j\x12\x1f\n" +
+	"\x1bHOOK_ID_POST_TRUNCATE_TABLE\x10k\x12\x1c\n" +
+	"\x18HOOK_ID_PRE_ENABLE_TABLE\x10l\x12\x1d\n" +
+	"\x19HOOK_ID_POST_ENABLE_TABLE\x10m\x12\x1d\n" +
+	"\x19HOOK_ID_PRE_DISABLE_TABLE\x10n\x12\x1e\n" +
+	"\x1aHOOK_ID_POST_DISABLE_TABLE\x10o\x12\x14\n" +
+	"\x10HOOK_ID_PRE_MOVE\x10p\x12\x15\n" +
+	"\x11HOOK_ID_POST_MOVE\x10q\x12\x16\n" +
+	"\x12HOOK_ID_PRE_ASSIGN\x10r\x12\x17\n" +
+	"\x13HOOK_ID_POST_ASSIGN\x10s\x12\x18\n" +
+	"\x14HOOK_ID_PRE_UNASSIGN\x10t\x12\x19\n" +
+	"\x15HOOK_ID_POST_UNASSIGN\x10u\x12\x17\n" +
+	"\x13HOOK_ID_PRE_BALANCE\x10v\x12\x18\n" +
+	"\x14HOOK_ID_POST_BALANCE\x10wBc\n" +
 	"\"com.virogg.hbasecop.bridge.wire.pbB\n" +
 	"HooksProtoP\x01Z/github.com/virogg/go-hbase/internal/wire/hookpbb\x06proto3"
 
@@ -5752,7 +7146,7 @@ func file_hooks_proto_rawDescGZIP() []byte {
 }
 
 var file_hooks_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_hooks_proto_msgTypes = make([]protoimpl.MessageInfo, 82)
+var file_hooks_proto_msgTypes = make([]protoimpl.MessageInfo, 103)
 var file_hooks_proto_goTypes = []any{
 	(HookId)(0),                                            // 0: virogg.hbasecop.v1.HookId
 	(*HookContext)(nil),                                    // 1: virogg.hbasecop.v1.HookContext
@@ -5837,23 +7231,44 @@ var file_hooks_proto_goTypes = []any{
 	(*PostAppendBeforeWALRequest)(nil),                     // 80: virogg.hbasecop.v1.PostAppendBeforeWALRequest
 	(*PostInstantiateDeleteTrackerRequest)(nil),            // 81: virogg.hbasecop.v1.PostInstantiateDeleteTrackerRequest
 	(*PreWALAppendRequest)(nil),                            // 82: virogg.hbasecop.v1.PreWALAppendRequest
-	(*hbasepb.TableName)(nil),                              // 83: virogg.hbasecop.hbase.v1.TableName
-	(*hbasepb.MutationProto)(nil),                          // 84: virogg.hbasecop.hbase.v1.MutationProto
-	(*hbasepb.Get)(nil),                                    // 85: virogg.hbasecop.hbase.v1.Get
-	(*hbasepb.Cell)(nil),                                   // 86: virogg.hbasecop.hbase.v1.Cell
-	(*hbasepb.Comparator)(nil),                             // 87: virogg.hbasecop.hbase.v1.Comparator
-	(*hbasepb.Filter)(nil),                                 // 88: virogg.hbasecop.hbase.v1.Filter
-	(*hbasepb.Result)(nil),                                 // 89: virogg.hbasecop.hbase.v1.Result
-	(*hbasepb.Scan)(nil),                                   // 90: virogg.hbasecop.hbase.v1.Scan
-	(*hbasepb.RegionInfo)(nil),                             // 91: virogg.hbasecop.hbase.v1.RegionInfo
+	(*PreCreateTableRequest)(nil),                          // 83: virogg.hbasecop.v1.PreCreateTableRequest
+	(*PostCreateTableRequest)(nil),                         // 84: virogg.hbasecop.v1.PostCreateTableRequest
+	(*PreDeleteTableRequest)(nil),                          // 85: virogg.hbasecop.v1.PreDeleteTableRequest
+	(*PostDeleteTableRequest)(nil),                         // 86: virogg.hbasecop.v1.PostDeleteTableRequest
+	(*PreModifyTableRequest)(nil),                          // 87: virogg.hbasecop.v1.PreModifyTableRequest
+	(*PostModifyTableRequest)(nil),                         // 88: virogg.hbasecop.v1.PostModifyTableRequest
+	(*PreTruncateTableRequest)(nil),                        // 89: virogg.hbasecop.v1.PreTruncateTableRequest
+	(*PostTruncateTableRequest)(nil),                       // 90: virogg.hbasecop.v1.PostTruncateTableRequest
+	(*PreEnableTableRequest)(nil),                          // 91: virogg.hbasecop.v1.PreEnableTableRequest
+	(*PostEnableTableRequest)(nil),                         // 92: virogg.hbasecop.v1.PostEnableTableRequest
+	(*PreDisableTableRequest)(nil),                         // 93: virogg.hbasecop.v1.PreDisableTableRequest
+	(*PostDisableTableRequest)(nil),                        // 94: virogg.hbasecop.v1.PostDisableTableRequest
+	(*ServerNameProto)(nil),                                // 95: virogg.hbasecop.v1.ServerNameProto
+	(*PreMoveRequest)(nil),                                 // 96: virogg.hbasecop.v1.PreMoveRequest
+	(*PostMoveRequest)(nil),                                // 97: virogg.hbasecop.v1.PostMoveRequest
+	(*PreAssignRequest)(nil),                               // 98: virogg.hbasecop.v1.PreAssignRequest
+	(*PostAssignRequest)(nil),                              // 99: virogg.hbasecop.v1.PostAssignRequest
+	(*PreUnassignRequest)(nil),                             // 100: virogg.hbasecop.v1.PreUnassignRequest
+	(*PostUnassignRequest)(nil),                            // 101: virogg.hbasecop.v1.PostUnassignRequest
+	(*PreBalanceRequest)(nil),                              // 102: virogg.hbasecop.v1.PreBalanceRequest
+	(*PostBalanceRequest)(nil),                             // 103: virogg.hbasecop.v1.PostBalanceRequest
+	(*hbasepb.TableName)(nil),                              // 104: virogg.hbasecop.hbase.v1.TableName
+	(*hbasepb.MutationProto)(nil),                          // 105: virogg.hbasecop.hbase.v1.MutationProto
+	(*hbasepb.Get)(nil),                                    // 106: virogg.hbasecop.hbase.v1.Get
+	(*hbasepb.Cell)(nil),                                   // 107: virogg.hbasecop.hbase.v1.Cell
+	(*hbasepb.Comparator)(nil),                             // 108: virogg.hbasecop.hbase.v1.Comparator
+	(*hbasepb.Filter)(nil),                                 // 109: virogg.hbasecop.hbase.v1.Filter
+	(*hbasepb.Result)(nil),                                 // 110: virogg.hbasecop.hbase.v1.Result
+	(*hbasepb.Scan)(nil),                                   // 111: virogg.hbasecop.hbase.v1.Scan
+	(*hbasepb.RegionInfo)(nil),                             // 112: virogg.hbasecop.hbase.v1.RegionInfo
 }
 var file_hooks_proto_depIdxs = []int32{
-	83,  // 0: virogg.hbasecop.v1.HookContext.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
+	104, // 0: virogg.hbasecop.v1.HookContext.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
 	2,   // 1: virogg.hbasecop.v1.HookResponse.error:type_name -> virogg.hbasecop.v1.HookError
 	1,   // 2: virogg.hbasecop.v1.PrePutRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	84,  // 3: virogg.hbasecop.v1.PrePutRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	105, // 3: virogg.hbasecop.v1.PrePutRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 4: virogg.hbasecop.v1.PostPutRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	84,  // 5: virogg.hbasecop.v1.PostPutRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	105, // 5: virogg.hbasecop.v1.PostPutRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 6: virogg.hbasecop.v1.PreOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	1,   // 7: virogg.hbasecop.v1.PostOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	1,   // 8: virogg.hbasecop.v1.PreCloseRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
@@ -5878,23 +7293,23 @@ var file_hooks_proto_depIdxs = []int32{
 	17,  // 27: virogg.hbasecop.v1.PostCompactRequest.result_file:type_name -> virogg.hbasecop.v1.StoreFilePathProto
 	18,  // 28: virogg.hbasecop.v1.PostCompactRequest.request:type_name -> virogg.hbasecop.v1.CompactionRequestSummary
 	1,   // 29: virogg.hbasecop.v1.PreGetOpRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	85,  // 30: virogg.hbasecop.v1.PreGetOpRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
+	106, // 30: virogg.hbasecop.v1.PreGetOpRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
 	1,   // 31: virogg.hbasecop.v1.PostGetOpRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	85,  // 32: virogg.hbasecop.v1.PostGetOpRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
-	86,  // 33: virogg.hbasecop.v1.PostGetOpRequest.result:type_name -> virogg.hbasecop.hbase.v1.Cell
+	106, // 32: virogg.hbasecop.v1.PostGetOpRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
+	107, // 33: virogg.hbasecop.v1.PostGetOpRequest.result:type_name -> virogg.hbasecop.hbase.v1.Cell
 	1,   // 34: virogg.hbasecop.v1.PreExistsRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	85,  // 35: virogg.hbasecop.v1.PreExistsRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
+	106, // 35: virogg.hbasecop.v1.PreExistsRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
 	1,   // 36: virogg.hbasecop.v1.PostExistsRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	85,  // 37: virogg.hbasecop.v1.PostExistsRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
+	106, // 37: virogg.hbasecop.v1.PostExistsRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
 	1,   // 38: virogg.hbasecop.v1.PreDeleteRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	84,  // 39: virogg.hbasecop.v1.PreDeleteRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	105, // 39: virogg.hbasecop.v1.PreDeleteRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 40: virogg.hbasecop.v1.PostDeleteRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	84,  // 41: virogg.hbasecop.v1.PostDeleteRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	105, // 41: virogg.hbasecop.v1.PostDeleteRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 42: virogg.hbasecop.v1.PrePrepareTimeStampForDeleteVersionRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	84,  // 43: virogg.hbasecop.v1.PrePrepareTimeStampForDeleteVersionRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
-	86,  // 44: virogg.hbasecop.v1.PrePrepareTimeStampForDeleteVersionRequest.cell:type_name -> virogg.hbasecop.hbase.v1.Cell
-	85,  // 45: virogg.hbasecop.v1.PrePrepareTimeStampForDeleteVersionRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
-	84,  // 46: virogg.hbasecop.v1.MutationOperation.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	105, // 43: virogg.hbasecop.v1.PrePrepareTimeStampForDeleteVersionRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	107, // 44: virogg.hbasecop.v1.PrePrepareTimeStampForDeleteVersionRequest.cell:type_name -> virogg.hbasecop.hbase.v1.Cell
+	106, // 45: virogg.hbasecop.v1.PrePrepareTimeStampForDeleteVersionRequest.get:type_name -> virogg.hbasecop.hbase.v1.Get
+	105, // 46: virogg.hbasecop.v1.MutationOperation.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 47: virogg.hbasecop.v1.PreBatchMutateRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	31,  // 48: virogg.hbasecop.v1.PreBatchMutateRequest.operation:type_name -> virogg.hbasecop.v1.MutationOperation
 	1,   // 49: virogg.hbasecop.v1.PostBatchMutateRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
@@ -5904,26 +7319,26 @@ var file_hooks_proto_depIdxs = []int32{
 	1,   // 53: virogg.hbasecop.v1.PostStartRegionOperationRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	1,   // 54: virogg.hbasecop.v1.PostCloseRegionOperationRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	1,   // 55: virogg.hbasecop.v1.PreCheckAndPutRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	87,  // 56: virogg.hbasecop.v1.PreCheckAndPutRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
-	84,  // 57: virogg.hbasecop.v1.PreCheckAndPutRequest.put:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	108, // 56: virogg.hbasecop.v1.PreCheckAndPutRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
+	105, // 57: virogg.hbasecop.v1.PreCheckAndPutRequest.put:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 58: virogg.hbasecop.v1.PostCheckAndPutRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	87,  // 59: virogg.hbasecop.v1.PostCheckAndPutRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
-	84,  // 60: virogg.hbasecop.v1.PostCheckAndPutRequest.put:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	108, // 59: virogg.hbasecop.v1.PostCheckAndPutRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
+	105, // 60: virogg.hbasecop.v1.PostCheckAndPutRequest.put:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 61: virogg.hbasecop.v1.PreCheckAndPutAfterRowLockRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	87,  // 62: virogg.hbasecop.v1.PreCheckAndPutAfterRowLockRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
-	84,  // 63: virogg.hbasecop.v1.PreCheckAndPutAfterRowLockRequest.put:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	108, // 62: virogg.hbasecop.v1.PreCheckAndPutAfterRowLockRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
+	105, // 63: virogg.hbasecop.v1.PreCheckAndPutAfterRowLockRequest.put:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 64: virogg.hbasecop.v1.PreCheckAndDeleteRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	87,  // 65: virogg.hbasecop.v1.PreCheckAndDeleteRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
-	84,  // 66: virogg.hbasecop.v1.PreCheckAndDeleteRequest.delete:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	108, // 65: virogg.hbasecop.v1.PreCheckAndDeleteRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
+	105, // 66: virogg.hbasecop.v1.PreCheckAndDeleteRequest.delete:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 67: virogg.hbasecop.v1.PostCheckAndDeleteRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	87,  // 68: virogg.hbasecop.v1.PostCheckAndDeleteRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
-	84,  // 69: virogg.hbasecop.v1.PostCheckAndDeleteRequest.delete:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	108, // 68: virogg.hbasecop.v1.PostCheckAndDeleteRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
+	105, // 69: virogg.hbasecop.v1.PostCheckAndDeleteRequest.delete:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 70: virogg.hbasecop.v1.PreCheckAndDeleteAfterRowLockRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	87,  // 71: virogg.hbasecop.v1.PreCheckAndDeleteAfterRowLockRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
-	84,  // 72: virogg.hbasecop.v1.PreCheckAndDeleteAfterRowLockRequest.delete:type_name -> virogg.hbasecop.hbase.v1.MutationProto
-	88,  // 73: virogg.hbasecop.v1.CheckAndMutateAction.filter:type_name -> virogg.hbasecop.hbase.v1.Filter
-	84,  // 74: virogg.hbasecop.v1.CheckAndMutateAction.action:type_name -> virogg.hbasecop.hbase.v1.MutationProto
-	89,  // 75: virogg.hbasecop.v1.CheckAndMutateResultProto.result:type_name -> virogg.hbasecop.hbase.v1.Result
+	108, // 71: virogg.hbasecop.v1.PreCheckAndDeleteAfterRowLockRequest.comparator:type_name -> virogg.hbasecop.hbase.v1.Comparator
+	105, // 72: virogg.hbasecop.v1.PreCheckAndDeleteAfterRowLockRequest.delete:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	109, // 73: virogg.hbasecop.v1.CheckAndMutateAction.filter:type_name -> virogg.hbasecop.hbase.v1.Filter
+	105, // 74: virogg.hbasecop.v1.CheckAndMutateAction.action:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	110, // 75: virogg.hbasecop.v1.CheckAndMutateResultProto.result:type_name -> virogg.hbasecop.hbase.v1.Result
 	1,   // 76: virogg.hbasecop.v1.PreCheckAndMutateRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	43,  // 77: virogg.hbasecop.v1.PreCheckAndMutateRequest.action:type_name -> virogg.hbasecop.v1.CheckAndMutateAction
 	44,  // 78: virogg.hbasecop.v1.PreCheckAndMutateRequest.input_result:type_name -> virogg.hbasecop.v1.CheckAndMutateResultProto
@@ -5934,42 +7349,42 @@ var file_hooks_proto_depIdxs = []int32{
 	43,  // 83: virogg.hbasecop.v1.PreCheckAndMutateAfterRowLockRequest.action:type_name -> virogg.hbasecop.v1.CheckAndMutateAction
 	44,  // 84: virogg.hbasecop.v1.PreCheckAndMutateAfterRowLockRequest.input_result:type_name -> virogg.hbasecop.v1.CheckAndMutateResultProto
 	1,   // 85: virogg.hbasecop.v1.PreAppendRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	84,  // 86: virogg.hbasecop.v1.PreAppendRequest.append:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	105, // 86: virogg.hbasecop.v1.PreAppendRequest.append:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 87: virogg.hbasecop.v1.PostAppendRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	84,  // 88: virogg.hbasecop.v1.PostAppendRequest.append:type_name -> virogg.hbasecop.hbase.v1.MutationProto
-	89,  // 89: virogg.hbasecop.v1.PostAppendRequest.result:type_name -> virogg.hbasecop.hbase.v1.Result
+	105, // 88: virogg.hbasecop.v1.PostAppendRequest.append:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	110, // 89: virogg.hbasecop.v1.PostAppendRequest.result:type_name -> virogg.hbasecop.hbase.v1.Result
 	1,   // 90: virogg.hbasecop.v1.PreAppendAfterRowLockRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	84,  // 91: virogg.hbasecop.v1.PreAppendAfterRowLockRequest.append:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	105, // 91: virogg.hbasecop.v1.PreAppendAfterRowLockRequest.append:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 92: virogg.hbasecop.v1.PreIncrementRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	84,  // 93: virogg.hbasecop.v1.PreIncrementRequest.increment:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	105, // 93: virogg.hbasecop.v1.PreIncrementRequest.increment:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 94: virogg.hbasecop.v1.PostIncrementRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	84,  // 95: virogg.hbasecop.v1.PostIncrementRequest.increment:type_name -> virogg.hbasecop.hbase.v1.MutationProto
-	89,  // 96: virogg.hbasecop.v1.PostIncrementRequest.result:type_name -> virogg.hbasecop.hbase.v1.Result
+	105, // 95: virogg.hbasecop.v1.PostIncrementRequest.increment:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	110, // 96: virogg.hbasecop.v1.PostIncrementRequest.result:type_name -> virogg.hbasecop.hbase.v1.Result
 	1,   // 97: virogg.hbasecop.v1.PreIncrementAfterRowLockRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	84,  // 98: virogg.hbasecop.v1.PreIncrementAfterRowLockRequest.increment:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	105, // 98: virogg.hbasecop.v1.PreIncrementAfterRowLockRequest.increment:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	1,   // 99: virogg.hbasecop.v1.PreScannerOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	90,  // 100: virogg.hbasecop.v1.PreScannerOpenRequest.scan:type_name -> virogg.hbasecop.hbase.v1.Scan
+	111, // 100: virogg.hbasecop.v1.PreScannerOpenRequest.scan:type_name -> virogg.hbasecop.hbase.v1.Scan
 	1,   // 101: virogg.hbasecop.v1.PostScannerOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	90,  // 102: virogg.hbasecop.v1.PostScannerOpenRequest.scan:type_name -> virogg.hbasecop.hbase.v1.Scan
+	111, // 102: virogg.hbasecop.v1.PostScannerOpenRequest.scan:type_name -> virogg.hbasecop.hbase.v1.Scan
 	1,   // 103: virogg.hbasecop.v1.PreScannerNextRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	1,   // 104: virogg.hbasecop.v1.PostScannerNextRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	89,  // 105: virogg.hbasecop.v1.PostScannerNextRequest.result:type_name -> virogg.hbasecop.hbase.v1.Result
+	110, // 105: virogg.hbasecop.v1.PostScannerNextRequest.result:type_name -> virogg.hbasecop.hbase.v1.Result
 	1,   // 106: virogg.hbasecop.v1.PostScannerFilterRowRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	86,  // 107: virogg.hbasecop.v1.PostScannerFilterRowRequest.current_row:type_name -> virogg.hbasecop.hbase.v1.Cell
+	107, // 107: virogg.hbasecop.v1.PostScannerFilterRowRequest.current_row:type_name -> virogg.hbasecop.hbase.v1.Cell
 	1,   // 108: virogg.hbasecop.v1.PreScannerCloseRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	1,   // 109: virogg.hbasecop.v1.PostScannerCloseRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	1,   // 110: virogg.hbasecop.v1.PreStoreScannerOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	86,  // 111: virogg.hbasecop.v1.WalEditProto.cell:type_name -> virogg.hbasecop.hbase.v1.Cell
+	107, // 111: virogg.hbasecop.v1.WalEditProto.cell:type_name -> virogg.hbasecop.hbase.v1.Cell
 	1,   // 112: virogg.hbasecop.v1.PreReplayWALsRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	91,  // 113: virogg.hbasecop.v1.PreReplayWALsRequest.region_info:type_name -> virogg.hbasecop.hbase.v1.RegionInfo
+	112, // 113: virogg.hbasecop.v1.PreReplayWALsRequest.region_info:type_name -> virogg.hbasecop.hbase.v1.RegionInfo
 	1,   // 114: virogg.hbasecop.v1.PostReplayWALsRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	91,  // 115: virogg.hbasecop.v1.PostReplayWALsRequest.region_info:type_name -> virogg.hbasecop.hbase.v1.RegionInfo
+	112, // 115: virogg.hbasecop.v1.PostReplayWALsRequest.region_info:type_name -> virogg.hbasecop.hbase.v1.RegionInfo
 	1,   // 116: virogg.hbasecop.v1.PreWALRestoreRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	91,  // 117: virogg.hbasecop.v1.PreWALRestoreRequest.region_info:type_name -> virogg.hbasecop.hbase.v1.RegionInfo
+	112, // 117: virogg.hbasecop.v1.PreWALRestoreRequest.region_info:type_name -> virogg.hbasecop.hbase.v1.RegionInfo
 	62,  // 118: virogg.hbasecop.v1.PreWALRestoreRequest.log_key:type_name -> virogg.hbasecop.v1.WalKeyProto
 	63,  // 119: virogg.hbasecop.v1.PreWALRestoreRequest.log_edit:type_name -> virogg.hbasecop.v1.WalEditProto
 	1,   // 120: virogg.hbasecop.v1.PostWALRestoreRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	91,  // 121: virogg.hbasecop.v1.PostWALRestoreRequest.region_info:type_name -> virogg.hbasecop.hbase.v1.RegionInfo
+	112, // 121: virogg.hbasecop.v1.PostWALRestoreRequest.region_info:type_name -> virogg.hbasecop.hbase.v1.RegionInfo
 	62,  // 122: virogg.hbasecop.v1.PostWALRestoreRequest.log_key:type_name -> virogg.hbasecop.v1.WalKeyProto
 	63,  // 123: virogg.hbasecop.v1.PostWALRestoreRequest.log_edit:type_name -> virogg.hbasecop.v1.WalEditProto
 	1,   // 124: virogg.hbasecop.v1.PreBulkLoadHFileRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
@@ -5982,27 +7397,63 @@ var file_hooks_proto_depIdxs = []int32{
 	1,   // 131: virogg.hbasecop.v1.PostCommitStoreFileRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	1,   // 132: virogg.hbasecop.v1.PreStoreFileReaderOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	1,   // 133: virogg.hbasecop.v1.PostStoreFileReaderOpenRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	86,  // 134: virogg.hbasecop.v1.CellPair.first:type_name -> virogg.hbasecop.hbase.v1.Cell
-	86,  // 135: virogg.hbasecop.v1.CellPair.second:type_name -> virogg.hbasecop.hbase.v1.Cell
+	107, // 134: virogg.hbasecop.v1.CellPair.first:type_name -> virogg.hbasecop.hbase.v1.Cell
+	107, // 135: virogg.hbasecop.v1.CellPair.second:type_name -> virogg.hbasecop.hbase.v1.Cell
 	1,   // 136: virogg.hbasecop.v1.PostMutationBeforeWALRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	84,  // 137: virogg.hbasecop.v1.PostMutationBeforeWALRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
-	86,  // 138: virogg.hbasecop.v1.PostMutationBeforeWALRequest.old_cell:type_name -> virogg.hbasecop.hbase.v1.Cell
-	86,  // 139: virogg.hbasecop.v1.PostMutationBeforeWALRequest.new_cell:type_name -> virogg.hbasecop.hbase.v1.Cell
+	105, // 137: virogg.hbasecop.v1.PostMutationBeforeWALRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	107, // 138: virogg.hbasecop.v1.PostMutationBeforeWALRequest.old_cell:type_name -> virogg.hbasecop.hbase.v1.Cell
+	107, // 139: virogg.hbasecop.v1.PostMutationBeforeWALRequest.new_cell:type_name -> virogg.hbasecop.hbase.v1.Cell
 	1,   // 140: virogg.hbasecop.v1.PostIncrementBeforeWALRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	84,  // 141: virogg.hbasecop.v1.PostIncrementBeforeWALRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	105, // 141: virogg.hbasecop.v1.PostIncrementBeforeWALRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	77,  // 142: virogg.hbasecop.v1.PostIncrementBeforeWALRequest.cell_pair:type_name -> virogg.hbasecop.v1.CellPair
 	1,   // 143: virogg.hbasecop.v1.PostAppendBeforeWALRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
-	84,  // 144: virogg.hbasecop.v1.PostAppendBeforeWALRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
+	105, // 144: virogg.hbasecop.v1.PostAppendBeforeWALRequest.mutation:type_name -> virogg.hbasecop.hbase.v1.MutationProto
 	77,  // 145: virogg.hbasecop.v1.PostAppendBeforeWALRequest.cell_pair:type_name -> virogg.hbasecop.v1.CellPair
 	1,   // 146: virogg.hbasecop.v1.PostInstantiateDeleteTrackerRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	1,   // 147: virogg.hbasecop.v1.PreWALAppendRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
 	62,  // 148: virogg.hbasecop.v1.PreWALAppendRequest.log_key:type_name -> virogg.hbasecop.v1.WalKeyProto
 	63,  // 149: virogg.hbasecop.v1.PreWALAppendRequest.log_edit:type_name -> virogg.hbasecop.v1.WalEditProto
-	150, // [150:150] is the sub-list for method output_type
-	150, // [150:150] is the sub-list for method input_type
-	150, // [150:150] is the sub-list for extension type_name
-	150, // [150:150] is the sub-list for extension extendee
-	0,   // [0:150] is the sub-list for field type_name
+	1,   // 150: virogg.hbasecop.v1.PreCreateTableRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	104, // 151: virogg.hbasecop.v1.PreCreateTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
+	1,   // 152: virogg.hbasecop.v1.PostCreateTableRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	104, // 153: virogg.hbasecop.v1.PostCreateTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
+	1,   // 154: virogg.hbasecop.v1.PreDeleteTableRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	104, // 155: virogg.hbasecop.v1.PreDeleteTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
+	1,   // 156: virogg.hbasecop.v1.PostDeleteTableRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	104, // 157: virogg.hbasecop.v1.PostDeleteTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
+	1,   // 158: virogg.hbasecop.v1.PreModifyTableRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	104, // 159: virogg.hbasecop.v1.PreModifyTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
+	1,   // 160: virogg.hbasecop.v1.PostModifyTableRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	104, // 161: virogg.hbasecop.v1.PostModifyTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
+	1,   // 162: virogg.hbasecop.v1.PreTruncateTableRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	104, // 163: virogg.hbasecop.v1.PreTruncateTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
+	1,   // 164: virogg.hbasecop.v1.PostTruncateTableRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	104, // 165: virogg.hbasecop.v1.PostTruncateTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
+	1,   // 166: virogg.hbasecop.v1.PreEnableTableRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	104, // 167: virogg.hbasecop.v1.PreEnableTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
+	1,   // 168: virogg.hbasecop.v1.PostEnableTableRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	104, // 169: virogg.hbasecop.v1.PostEnableTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
+	1,   // 170: virogg.hbasecop.v1.PreDisableTableRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	104, // 171: virogg.hbasecop.v1.PreDisableTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
+	1,   // 172: virogg.hbasecop.v1.PostDisableTableRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	104, // 173: virogg.hbasecop.v1.PostDisableTableRequest.table_name:type_name -> virogg.hbasecop.hbase.v1.TableName
+	1,   // 174: virogg.hbasecop.v1.PreMoveRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	95,  // 175: virogg.hbasecop.v1.PreMoveRequest.source:type_name -> virogg.hbasecop.v1.ServerNameProto
+	95,  // 176: virogg.hbasecop.v1.PreMoveRequest.destination:type_name -> virogg.hbasecop.v1.ServerNameProto
+	1,   // 177: virogg.hbasecop.v1.PostMoveRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	95,  // 178: virogg.hbasecop.v1.PostMoveRequest.source:type_name -> virogg.hbasecop.v1.ServerNameProto
+	95,  // 179: virogg.hbasecop.v1.PostMoveRequest.destination:type_name -> virogg.hbasecop.v1.ServerNameProto
+	1,   // 180: virogg.hbasecop.v1.PreAssignRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,   // 181: virogg.hbasecop.v1.PostAssignRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,   // 182: virogg.hbasecop.v1.PreUnassignRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,   // 183: virogg.hbasecop.v1.PostUnassignRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,   // 184: virogg.hbasecop.v1.PreBalanceRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	1,   // 185: virogg.hbasecop.v1.PostBalanceRequest.ctx:type_name -> virogg.hbasecop.v1.HookContext
+	186, // [186:186] is the sub-list for method output_type
+	186, // [186:186] is the sub-list for method input_type
+	186, // [186:186] is the sub-list for extension type_name
+	186, // [186:186] is the sub-list for extension extendee
+	0,   // [0:186] is the sub-list for field type_name
 }
 
 func init() { file_hooks_proto_init() }
@@ -6016,7 +7467,7 @@ func file_hooks_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_hooks_proto_rawDesc), len(file_hooks_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   82,
+			NumMessages:   103,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

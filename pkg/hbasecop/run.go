@@ -101,6 +101,75 @@ func Run(observers ...RegionObserver) error {
 	return nil
 }
 
+// RunMaster is the T51 master-side counterpart of Run. It boots the
+// shared runtime (shmem + heartbeat + dispatcher loop) against a
+// MasterObserver instead of a RegionObserver. A single process serves
+// a single observer surface — region or master, not both — which keeps
+// the coproc-jar packaging symmetric between RegionCoprocessor and
+// MasterCoprocessor on the Java side.
+func RunMaster(masters ...MasterObserver) error {
+	if len(masters) == 0 {
+		return errors.New("hbasecop.RunMaster: at least one master observer required")
+	}
+	if len(masters) > 1 {
+		return errors.New("hbasecop.RunMaster: multiple observers not supported")
+	}
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+
+	cfg, err := loadShmemConfigFromEnv()
+	if err != nil {
+		return err
+	}
+
+	inCh, err := shmem.Open(shmem.Config{
+		Filename:      cfg.inPath,
+		Capacity:      cfg.capacity,
+		MaxObjectSize: cfg.maxObjectSize,
+		Role:          shmem.RoleConsumer,
+	})
+	if err != nil {
+		return fmt.Errorf("hbasecop.RunMaster: open inbound ring: %w", err)
+	}
+	defer func() { _ = inCh.Close() }()
+
+	outCh, err := shmem.Open(shmem.Config{
+		Filename:      cfg.outPath,
+		Capacity:      cfg.capacity,
+		MaxObjectSize: cfg.maxObjectSize,
+		Role:          shmem.RoleProducer,
+	})
+	if err != nil {
+		return fmt.Errorf("hbasecop.RunMaster: open outbound ring: %w", err)
+	}
+	defer func() { _ = outCh.Close() }()
+
+	d := newMasterDispatcher(masters[0], logger)
+	loop, err := cpruntime.New(cpruntime.Config{
+		InCh:            inCh,
+		OutCh:           outCh,
+		HeartbeatPeriod: cfg.heartbeat,
+		Logger:          logger,
+		Handler:         d.dispatch,
+	})
+	if err != nil {
+		return err
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
+
+	logger.Info("hbasecop: started (master)",
+		"pid", os.Getpid(),
+		"in_path", cfg.inPath,
+		"out_path", cfg.outPath,
+	)
+	if err := loop.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+		return err
+	}
+	logger.Info("hbasecop: clean exit (master)")
+	return nil
+}
+
 type shmemEnvConfig struct {
 	inPath, outPath         string
 	capacity, maxObjectSize int
