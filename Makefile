@@ -29,6 +29,9 @@ COUNTER_OBSERVER_OUT := $(COUNTER_OBSERVER_DIR)/src/main/resources/bin/linux-amd
 FAULT_OBSERVER_DIR := examples/fault-observer
 FAULT_OBSERVER_OUT := $(FAULT_OBSERVER_DIR)/src/main/resources/bin/linux-amd64/hbasecop-runtime
 
+FILTER_OBSERVER_DIR := examples/filter-observer
+FILTER_OBSERVER_OUT := $(FILTER_OBSERVER_DIR)/src/main/resources/bin/linux-amd64/hbasecop-runtime
+
 # ---------------------------------------------------------------------------
 # Aggregates
 # ---------------------------------------------------------------------------
@@ -180,6 +183,30 @@ fault-observer-jar: go-build-fault ## T36: build fault-observer coproc-jar (inst
 	@echo "OK: fault-observer.jar -- bridge shaded, Go ELF embedded"
 
 # ---------------------------------------------------------------------------
+# Examples (T43): read-path filter coproc-jar.
+# ---------------------------------------------------------------------------
+
+.PHONY: go-build-filter
+go-build-filter: ## T43: build filter-observer Go ELF into example resources (Linux x86-64).
+	@mkdir -p $(dir $(FILTER_OBSERVER_OUT))
+	GOOS=linux GOARCH=amd64 $(GO) build $(GO_BUILD_FLAGS) -o $(FILTER_OBSERVER_OUT) ./$(FILTER_OBSERVER_DIR)
+
+.PHONY: filter-observer-jar
+filter-observer-jar: go-build-filter ## T43: build filter-observer coproc-jar (installs bridge into ~/.m2 first).
+	$(MVN) $(MVN_FLAGS) install -DskipTests
+	$(MVN) $(MVN_FLAGS) -f $(FILTER_OBSERVER_DIR)/pom.xml package
+	@unzip -l $(FILTER_OBSERVER_DIR)/target/filter-observer.jar | \
+	  grep -q 'bin/linux-amd64/hbasecop-runtime' || \
+	  { echo "ERROR: Go ELF missing from filter-observer.jar" >&2; exit 1; }
+	@unzip -l $(FILTER_OBSERVER_DIR)/target/filter-observer.jar | \
+	  grep -q 'com/virogg/hbasecop/examples/filter/FilterRegionObserver.class' || \
+	  { echo "ERROR: FilterRegionObserver class missing from coproc-jar" >&2; exit 1; }
+	@unzip -l $(FILTER_OBSERVER_DIR)/target/filter-observer.jar | \
+	  grep -q 'com/virogg/hbasecop/bridge/observer/RegionObserverAdapter.class' || \
+	  { echo "ERROR: bridge classes not shaded into coproc-jar" >&2; exit 1; }
+	@echo "OK: filter-observer.jar -- bridge shaded, Go ELF embedded"
+
+# ---------------------------------------------------------------------------
 # Integration (T26): HBase 2.5 standalone dev cluster.
 # ---------------------------------------------------------------------------
 
@@ -215,6 +242,7 @@ hbase-status: ## T26: curl the master-status page (smoke check post-up).
 
 COPROC_JAR_STAGED := test/integration/coproc-jars/counter-observer.jar
 FAULT_COPROC_JAR_STAGED := test/integration/coproc-jars/fault-observer.jar
+FILTER_COPROC_JAR_STAGED := test/integration/coproc-jars/filter-observer.jar
 
 .PHONY: demo-counter
 demo-counter: ## CP-γ: public demo — Put on HBase triggers Go observer counter; leaves cluster up.
@@ -247,6 +275,24 @@ test-fault: fault-observer-jar ## T36: full IT — bring up HBase, run FaultMatr
 	  $(MVN) $(MVN_FLAGS) test -Dtest=FaultMatrixIT -DfailIfNoTests=false; \
 	  status=$$?; \
 	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-fault.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
+
+# ---------------------------------------------------------------------------
+# Integration (T43): read-path hooks (preGetOp, preScannerOpen, preScannerNext)
+# verified end-to-end on real HBase via the filter-observer coproc-jar.
+# ---------------------------------------------------------------------------
+
+.PHONY: test-integration-read
+test-integration-read: filter-observer-jar ## T43: full IT — bring up HBase, run ReadPathFilterIT, tear down.
+	@mkdir -p test/integration/coproc-jars
+	cp $(FILTER_OBSERVER_DIR)/target/filter-observer.jar $(FILTER_COPROC_JAR_STAGED)
+	$(HBASE_COMPOSE_CMD) up -d --build
+	./test/integration/scripts/wait-master-status.sh
+	@set +e; \
+	  $(MVN) $(MVN_FLAGS) test -Dtest=ReadPathFilterIT -DfailIfNoTests=false; \
+	  status=$$?; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-read.log 2>&1 || true; \
 	  $(HBASE_COMPOSE_CMD) down; \
 	  exit $$status
 
