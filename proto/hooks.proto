@@ -206,6 +206,12 @@ enum HookId {
   // WAL roll.
   HOOK_ID_PRE_WAL_ROLL = 222;
   HOOK_ID_POST_WAL_ROLL = 223;
+
+  // BulkLoadObserver (T54). Region-scoped coprocessor invoked at
+  // bulk-load prepare/cleanup boundaries; HBase 2.5 hooks take only
+  // the observer context, so the per-hook payload is empty.
+  HOOK_ID_PRE_PREPARE_BULK_LOAD = 224;
+  HOOK_ID_PRE_CLEANUP_BULK_LOAD = 225;
 }
 
 // HookContext is the shared per-call envelope sent with every hook
@@ -943,4 +949,20 @@ message PostWALRollRequest {
   HookContext ctx = 1;
   string old_path = 2;
   string new_path = 3;
+}
+
+// ---------------------------------------------------------------------
+// BulkLoadObserver Request messages (T54).
+//
+// HBase 2.5's BulkLoadObserver hooks take no payload arguments beyond
+// the observer context — the table/region the bulk load targets travels
+// in HookContext (filled from the RegionCoprocessorEnvironment on the
+// Java side).
+// ---------------------------------------------------------------------
+
+message PrePrepareBulkLoadRequest {
+  HookContext ctx = 1;
+}
+message PreCleanupBulkLoadRequest {
+  HookContext ctx = 1;
 }

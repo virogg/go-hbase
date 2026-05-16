@@ -143,4 +143,9 @@ const (
 	HookIDPostWALWrite HookID = 221
 	HookIDPreWALRoll   HookID = 222
 	HookIDPostWALRoll  HookID = 223
+
+	// --- BulkLoadObserver hooks (T54). Region-scoped coproc invoked at
+	// bulk-load prepare/cleanup boundaries. ---
+	HookIDPrePrepareBulkLoad HookID = 224
+	HookIDPreCleanupBulkLoad HookID = 225
 )

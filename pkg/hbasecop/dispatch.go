@@ -32,6 +32,7 @@ type dispatcher struct {
 	master       MasterObserver
 	regionServer RegionServerObserver
 	wal          WALObserver
+	bulkLoad     BulkLoadObserver
 	logger       *slog.Logger
 }
 
@@ -61,6 +62,13 @@ func newWALDispatcher(wal WALObserver, logger *slog.Logger) *dispatcher {
 		logger = slog.Default()
 	}
 	return &dispatcher{wal: wal, logger: logger}
+}
+
+func newBulkLoadDispatcher(bl BulkLoadObserver, logger *slog.Logger) *dispatcher {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &dispatcher{bulkLoad: bl, logger: logger}
 }
 
 // dispatch decodes one Request frame, looks up the hook in the
@@ -97,6 +105,11 @@ func (d *dispatcher) dispatch(ctx context.Context, req *wire.Message) *wire.Mess
 	if d.wal != nil {
 		if entry, ok := walHooksByID[hookID]; ok {
 			return d.dispatchWAL(ctx, req, &wireReq, entry)
+		}
+	}
+	if d.bulkLoad != nil {
+		if entry, ok := bulkLoadHooksByID[hookID]; ok {
+			return d.dispatchBulkLoad(ctx, req, &wireReq, entry)
 		}
 	}
 	d.logger.Warn("hbasecop: unknown hook_id",
@@ -153,6 +166,19 @@ func (d *dispatcher) dispatchWAL(ctx context.Context, req *wire.Message, wireReq
 	}
 	env := envFromHookContext(extractHookCtx(inner))
 	result, callErr := entry.invoke(d.wal, ctx, env, inner)
+	return d.responseFrame(req, result, callErr)
+}
+
+func (d *dispatcher) dispatchBulkLoad(ctx context.Context, req *wire.Message, wireReq *wirepb.Request, entry bulkLoadHookEntry) *wire.Message {
+	inner := entry.decode()
+	if err := proto.Unmarshal(wireReq.GetHookCtx(), inner); err != nil {
+		d.logger.Error("hbasecop: invalid "+entry.name+"Request",
+			"err", err, "req_id", req.ReqID, "hook", entry.name)
+		return d.errorFrame(req, errCodeInvalidWireRequest,
+			"invalid "+entry.name+"Request: "+err.Error())
+	}
+	env := envFromHookContext(extractHookCtx(inner))
+	result, callErr := entry.invoke(d.bulkLoad, ctx, env, inner)
 	return d.responseFrame(req, result, callErr)
 }
 
