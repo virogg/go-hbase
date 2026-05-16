@@ -55,8 +55,8 @@
 - [x] T51 MasterObserver adapter + tests
 - [x] T52 RegionServerObserver adapter
 - [x] T53 WALObserver adapter (+ WAL throughput bench)
-- [ ] T54 BulkLoadObserver adapter
-- [ ] **CP-ε2:** all SPEC §2 observer types covered
+- [x] T54 BulkLoadObserver adapter
+- [x] **CP-ε2:** all SPEC §2 observer types covered
 
 ## Phase 6 — Multi-region multiplexing
 - [ ] T61 Region-scoped routing in mux (region_id in header)
