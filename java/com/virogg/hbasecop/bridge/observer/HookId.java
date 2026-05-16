@@ -148,7 +148,18 @@ public enum HookId {
   PRE_UNASSIGN((byte) 116, "preUnassign"),
   POST_UNASSIGN((byte) 117, "postUnassign"),
   PRE_BALANCE((byte) 118, "preBalance"),
-  POST_BALANCE((byte) 119, "postBalance");
+  POST_BALANCE((byte) 119, "postBalance"),
+
+  // --- RegionServerObserver (T52). IDs 200-255 reserved for the region-server surface. ---
+  PRE_STOP_REGION_SERVER((byte) 200, "preStopRegionServer"),
+  PRE_ROLL_WAL_WRITER_REQUEST((byte) 201, "preRollWALWriterRequest"),
+  POST_ROLL_WAL_WRITER_REQUEST((byte) 202, "postRollWALWriterRequest"),
+  PRE_REPLICATE_LOG_ENTRIES((byte) 203, "preReplicateLogEntries"),
+  POST_REPLICATE_LOG_ENTRIES((byte) 204, "postReplicateLogEntries"),
+  PRE_CLEAR_COMPACTION_QUEUES((byte) 205, "preClearCompactionQueues"),
+  POST_CLEAR_COMPACTION_QUEUES((byte) 206, "postClearCompactionQueues"),
+  PRE_EXECUTE_PROCEDURES((byte) 207, "preExecuteProcedures"),
+  POST_EXECUTE_PROCEDURES((byte) 208, "postExecuteProcedures");
 
   private final byte value;
   private final String methodName;

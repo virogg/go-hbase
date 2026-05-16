@@ -65,7 +65,12 @@ class RegionObserverAdapterFullCoverageTest {
     Set<String> methodNames = new HashSet<>();
     for (HookId id : HookId.values()) {
       assertNotNull(id.methodName(), "HookId " + id.name() + " has null methodName");
-      assertTrue(id.value() > 0, "HookId " + id.name() + " has non-positive value " + id.value());
+      // The wire byte is unsigned (0-255); hook ids >= 128 (e.g. the T52
+      // region-server surface at 200+) are negative as a signed Java byte,
+      // so compare the 0-255 value rather than the signed byte.
+      assertTrue(
+          (id.value() & 0xFF) > 0,
+          "HookId " + id.name() + " has non-positive wire value " + (id.value() & 0xFF));
       assertTrue(
           values.add(id.value()), "HookId " + id.name() + " duplicates wire value " + id.value());
       assertTrue(
