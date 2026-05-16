@@ -190,6 +190,100 @@ func TestDispatchPrePutObserverError(t *testing.T) {
 	}
 }
 
+// batchObserver overrides only PreBatchMutate so the dispatch-level test
+// can assert HookResult.BlockedIndices round-trips into HookResponse
+// without coupling to the broader capturingObserver fixture.
+type batchObserver struct {
+	UnimplementedRegionObserver
+
+	mu             sync.Mutex
+	calls          int
+	lastOperations int
+	result         HookResult
+	err            error
+}
+
+func (b *batchObserver) PreBatchMutate(
+	_ context.Context,
+	_ ObserverEnv,
+	req *hookpb.PreBatchMutateRequest,
+) (HookResult, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.calls++
+	b.lastOperations = len(req.GetOperation())
+	return b.result, b.err
+}
+
+func TestDispatchPreBatchMutateBlockedIndices(t *testing.T) {
+	obs := &batchObserver{result: HookResult{BlockedIndices: []uint32{0, 2}}}
+	d := newDispatcher(obs, nil)
+
+	inner := &hookpb.PreBatchMutateRequest{
+		Operation: []*hookpb.MutationOperation{
+			{Mutation: &hbasepb.MutationProto{Row: []byte("r0")}},
+			{Mutation: &hbasepb.MutationProto{Row: []byte("r1")}},
+			{Mutation: &hbasepb.MutationProto{Row: []byte("r2")}},
+		},
+	}
+	innerBytes, err := proto.Marshal(inner)
+	if err != nil {
+		t.Fatalf("marshal PreBatchMutateRequest: %v", err)
+	}
+	req := buildRequestFrame(t, HookIDPreBatchMutate, 42, innerBytes)
+
+	resp := d.dispatch(context.Background(), req)
+	if resp == nil {
+		t.Fatal("dispatch returned nil")
+	}
+	if obs.calls != 1 {
+		t.Fatalf("PreBatchMutate calls = %d, want 1", obs.calls)
+	}
+	if obs.lastOperations != 3 {
+		t.Fatalf("PreBatchMutate saw %d operations, want 3", obs.lastOperations)
+	}
+
+	hookResp := decodeHookResponse(t, resp)
+	got := hookResp.GetBlockedIndices()
+	want := []uint32{0, 2}
+	if len(got) != len(want) {
+		t.Fatalf("HookResponse.BlockedIndices = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("HookResponse.BlockedIndices[%d] = %d, want %d", i, got[i], want[i])
+		}
+	}
+	if hookResp.GetBypass() {
+		t.Fatalf("HookResponse.Bypass = true, want false (partial-block does not bypass)")
+	}
+	if hookResp.GetError() != nil {
+		t.Fatalf("HookResponse.Error = %v, want nil", hookResp.GetError())
+	}
+}
+
+func TestDispatchPreBatchMutateEmptyBlockedIndices(t *testing.T) {
+	obs := &batchObserver{}
+	d := newDispatcher(obs, nil)
+
+	inner := &hookpb.PreBatchMutateRequest{
+		Operation: []*hookpb.MutationOperation{
+			{Mutation: &hbasepb.MutationProto{Row: []byte("r0")}},
+		},
+	}
+	innerBytes, err := proto.Marshal(inner)
+	if err != nil {
+		t.Fatalf("marshal PreBatchMutateRequest: %v", err)
+	}
+	req := buildRequestFrame(t, HookIDPreBatchMutate, 43, innerBytes)
+
+	resp := d.dispatch(context.Background(), req)
+	hookResp := decodeHookResponse(t, resp)
+	if len(hookResp.GetBlockedIndices()) != 0 {
+		t.Fatalf("HookResponse.BlockedIndices = %v, want []", hookResp.GetBlockedIndices())
+	}
+}
+
 func TestDispatchPostPut(t *testing.T) {
 	obs := &capturingObserver{}
 	d := newDispatcher(obs, nil)

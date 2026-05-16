@@ -95,6 +95,77 @@ func TestPreScannerNext_CountsButNeverBypasses(t *testing.T) {
 	}
 }
 
+func TestPreBatchMutate_PartiallyBlocksByPrefix(t *testing.T) {
+	o := New([]byte("block-"))
+	req := &hookpb.PreBatchMutateRequest{
+		Operation: []*hookpb.MutationOperation{
+			{Mutation: &hbasepb.MutationProto{Row: []byte("ok-1")}},
+			{Mutation: &hbasepb.MutationProto{Row: []byte("block-1")}},
+			{Mutation: &hbasepb.MutationProto{Row: []byte("ok-2")}},
+			{Mutation: &hbasepb.MutationProto{Row: []byte("block-2")}},
+			{Mutation: &hbasepb.MutationProto{Row: []byte("ok-3")}},
+		},
+	}
+
+	res, err := o.PreBatchMutate(context.Background(), hbasecop.ObserverEnv{}, req)
+	if err != nil {
+		t.Fatalf("PreBatchMutate: unexpected err: %v", err)
+	}
+	if res.Bypass {
+		t.Fatalf("PreBatchMutate: want Bypass=false (partial block, not whole-batch), got true")
+	}
+	want := []uint32{1, 3}
+	if len(res.BlockedIndices) != len(want) {
+		t.Fatalf("BlockedIndices = %v, want %v", res.BlockedIndices, want)
+	}
+	for i := range want {
+		if res.BlockedIndices[i] != want[i] {
+			t.Fatalf("BlockedIndices[%d] = %d, want %d", i, res.BlockedIndices[i], want[i])
+		}
+	}
+	if got, want := o.PreBatchMutateCount(), uint64(1); got != want {
+		t.Fatalf("PreBatchMutateCount: got %d, want %d", got, want)
+	}
+	if got, want := o.BlockedBatchOps(), uint64(2); got != want {
+		t.Fatalf("BlockedBatchOps: got %d, want %d", got, want)
+	}
+}
+
+func TestPreBatchMutate_AllOkReturnsNoIndices(t *testing.T) {
+	o := New([]byte("block-"))
+	req := &hookpb.PreBatchMutateRequest{
+		Operation: []*hookpb.MutationOperation{
+			{Mutation: &hbasepb.MutationProto{Row: []byte("ok-1")}},
+			{Mutation: &hbasepb.MutationProto{Row: []byte("ok-2")}},
+		},
+	}
+
+	res, err := o.PreBatchMutate(context.Background(), hbasecop.ObserverEnv{}, req)
+	if err != nil {
+		t.Fatalf("PreBatchMutate: unexpected err: %v", err)
+	}
+	if len(res.BlockedIndices) != 0 {
+		t.Fatalf("BlockedIndices = %v, want []", res.BlockedIndices)
+	}
+}
+
+func TestPreBatchMutate_EmptyPrefixBlocksNothing(t *testing.T) {
+	o := New(nil)
+	req := &hookpb.PreBatchMutateRequest{
+		Operation: []*hookpb.MutationOperation{
+			{Mutation: &hbasepb.MutationProto{Row: []byte("block-1")}},
+		},
+	}
+
+	res, err := o.PreBatchMutate(context.Background(), hbasecop.ObserverEnv{}, req)
+	if err != nil {
+		t.Fatalf("PreBatchMutate: unexpected err: %v", err)
+	}
+	if len(res.BlockedIndices) != 0 {
+		t.Fatalf("empty prefix must never block, got BlockedIndices=%v", res.BlockedIndices)
+	}
+}
+
 func TestEmptyPrefix_DisablesBypass(t *testing.T) {
 	o := New(nil)
 	getReq := &hookpb.PreGetOpRequest{Get: &hbasepb.Get{Row: []byte("block-1")}}

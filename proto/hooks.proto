@@ -166,9 +166,18 @@ message HookError {
 // success, observer chose not to bypass and no error. Populating either
 // field triggers the corresponding RegionObserver semantics on the
 // Java side.
+//
+// blocked_indices is honored only by batch-shaped hooks (preBatchMutate
+// today; preBulkLoadHFile / future batch hooks may opt in). Each value
+// is a zero-based index into the inbound MutationOperation list; the
+// Java adapter calls MiniBatchOperationInProgress.setOperationStatus(i,
+// OperationStatus(SANITY_CHECK_FAILURE)) on each so the matching
+// individual mutation fails while the rest of the batch proceeds. The
+// field is ignored on non-batch hooks.
 message HookResponse {
   bool bypass = 1;
   HookError error = 2;
+  repeated uint32 blocked_indices = 3;
 }
 
 // PrePutRequest is the inbound payload for prePut. Phase-2 message,
