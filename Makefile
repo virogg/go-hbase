@@ -315,6 +315,24 @@ test-integration-batch: filter-observer-jar ## T44: full IT — bring up HBase, 
 	  exit $$status
 
 # ---------------------------------------------------------------------------
+# Integration (T45): storage hooks (preFlush/postFlush, preCompactSelection,
+# preCompact/postCompact) driven by admin.flush + admin.majorCompact.
+# ---------------------------------------------------------------------------
+
+.PHONY: test-integration-storage
+test-integration-storage: filter-observer-jar ## T45: full IT — bring up HBase, run StorageHooksIT, tear down.
+	@mkdir -p test/integration/coproc-jars
+	cp $(FILTER_OBSERVER_DIR)/target/filter-observer.jar $(FILTER_COPROC_JAR_STAGED)
+	$(HBASE_COMPOSE_CMD) up -d --build
+	./test/integration/scripts/wait-master-status.sh
+	@set +e; \
+	  $(MVN) $(MVN_FLAGS) test -Dtest=StorageHooksIT -DfailIfNoTests=false; \
+	  status=$$?; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-storage.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
+
+# ---------------------------------------------------------------------------
 # Misc
 # ---------------------------------------------------------------------------
 

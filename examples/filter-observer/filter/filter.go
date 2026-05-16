@@ -13,6 +13,7 @@ package filter
 import (
 	"bytes"
 	"context"
+	"log/slog"
 	"sync/atomic"
 
 	"github.com/virogg/go-hbase/internal/wire/hookpb"
@@ -27,14 +28,20 @@ type Observer struct {
 	hbasecop.UnimplementedRegionObserver
 
 	blocked []byte
+	logger  atomic.Pointer[slog.Logger]
 
-	preGetOps       atomic.Uint64
-	preScannerOpens atomic.Uint64
-	preScannerNexts atomic.Uint64
-	preBatchMutates atomic.Uint64
-	blockedGets     atomic.Uint64
-	blockedScans    atomic.Uint64
-	blockedBatchOps atomic.Uint64
+	preGetOps            atomic.Uint64
+	preScannerOpens      atomic.Uint64
+	preScannerNexts      atomic.Uint64
+	preBatchMutates      atomic.Uint64
+	blockedGets          atomic.Uint64
+	blockedScans         atomic.Uint64
+	blockedBatchOps      atomic.Uint64
+	preFlushes           atomic.Uint64
+	postFlushes          atomic.Uint64
+	preCompactSelections atomic.Uint64
+	preCompacts          atomic.Uint64
+	postCompacts         atomic.Uint64
 }
 
 // New constructs an Observer that bypasses reads whose target row begins
@@ -44,6 +51,19 @@ type Observer struct {
 func New(blockedPrefix []byte) *Observer {
 	cp := append([]byte(nil), blockedPrefix...)
 	return &Observer{blocked: cp}
+}
+
+// SetLogger overrides the slog.Logger used by storage-hook handlers. Nil
+// resets to slog.Default(). Safe for concurrent use.
+func (o *Observer) SetLogger(l *slog.Logger) {
+	o.logger.Store(l)
+}
+
+func (o *Observer) log() *slog.Logger {
+	if l := o.logger.Load(); l != nil {
+		return l
+	}
+	return slog.Default()
 }
 
 // PreGetOp bypasses the Get when its row matches the blocked prefix.
@@ -108,6 +128,90 @@ func (o *Observer) PreBatchMutate(
 	o.blockedBatchOps.Add(uint64(len(blocked)))
 	return hbasecop.HookResult{BlockedIndices: blocked}, nil
 }
+
+// PreFlush is a passive recorder: counts the invocation and emits a
+// uniquely-tagged slog line the live IT can grep for.
+func (o *Observer) PreFlush(
+	_ context.Context,
+	_ hbasecop.ObserverEnv,
+	_ *hookpb.PreFlushRequest,
+) (hbasecop.HookResult, error) {
+	o.preFlushes.Add(1)
+	o.log().Info("filter-observer: preFlush")
+	return hbasecop.HookResult{}, nil
+}
+
+// PostFlush is a passive recorder: counts the invocation and logs.
+func (o *Observer) PostFlush(
+	_ context.Context,
+	_ hbasecop.ObserverEnv,
+	_ *hookpb.PostFlushRequest,
+) error {
+	o.postFlushes.Add(1)
+	o.log().Info("filter-observer: postFlush")
+	return nil
+}
+
+// PreCompactSelection records the candidate-store-file list size so the IT
+// can prove the compaction lifecycle traversed the bridge end-to-end.
+func (o *Observer) PreCompactSelection(
+	_ context.Context,
+	_ hbasecop.ObserverEnv,
+	req *hookpb.PreCompactSelectionRequest,
+) (hbasecop.HookResult, error) {
+	o.preCompactSelections.Add(1)
+	o.log().Info(
+		"filter-observer: preCompactSelection",
+		"family", string(req.GetColumnFamily()),
+		"candidates", len(req.GetCandidate()),
+	)
+	return hbasecop.HookResult{}, nil
+}
+
+// PreCompact is a passive recorder for the compaction-scan entry hook.
+func (o *Observer) PreCompact(
+	_ context.Context,
+	_ hbasecop.ObserverEnv,
+	req *hookpb.PreCompactRequest,
+) (hbasecop.HookResult, error) {
+	o.preCompacts.Add(1)
+	o.log().Info(
+		"filter-observer: preCompact",
+		"family", string(req.GetColumnFamily()),
+		"is_major", req.GetRequest().GetIsMajor(),
+	)
+	return hbasecop.HookResult{}, nil
+}
+
+// PostCompact is a passive recorder for the compaction-completed hook.
+func (o *Observer) PostCompact(
+	_ context.Context,
+	_ hbasecop.ObserverEnv,
+	req *hookpb.PostCompactRequest,
+) error {
+	o.postCompacts.Add(1)
+	o.log().Info(
+		"filter-observer: postCompact",
+		"family", string(req.GetColumnFamily()),
+		"is_major", req.GetRequest().GetIsMajor(),
+	)
+	return nil
+}
+
+// PreFlushCount returns the cumulative count of PreFlush invocations.
+func (o *Observer) PreFlushCount() uint64 { return o.preFlushes.Load() }
+
+// PostFlushCount returns the cumulative count of PostFlush invocations.
+func (o *Observer) PostFlushCount() uint64 { return o.postFlushes.Load() }
+
+// PreCompactSelectionCount returns the cumulative count of PreCompactSelection invocations.
+func (o *Observer) PreCompactSelectionCount() uint64 { return o.preCompactSelections.Load() }
+
+// PreCompactCount returns the cumulative count of PreCompact invocations.
+func (o *Observer) PreCompactCount() uint64 { return o.preCompacts.Load() }
+
+// PostCompactCount returns the cumulative count of PostCompact invocations.
+func (o *Observer) PostCompactCount() uint64 { return o.postCompacts.Load() }
 
 // PreGetCount returns the cumulative count of PreGetOp invocations.
 func (o *Observer) PreGetCount() uint64 { return o.preGetOps.Load() }

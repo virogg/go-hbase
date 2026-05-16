@@ -4,7 +4,10 @@
 package filter
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/virogg/go-hbase/internal/wire/hbasepb"
@@ -184,5 +187,114 @@ func TestEmptyPrefix_DisablesBypass(t *testing.T) {
 	}
 	if res.Bypass {
 		t.Fatalf("empty prefix must never bypass scanner, got Bypass=true")
+	}
+}
+
+// T45: storage hooks (flush + compaction) — observer is a passive recorder.
+// Each handler increments its counter and emits a uniquely-tagged slog line
+// so the live IT can grep docker logs for proof the hook fired.
+
+func TestPreFlush_CountsAndPassesThrough(t *testing.T) {
+	o := New([]byte("block-"))
+	res, err := o.PreFlush(context.Background(), hbasecop.ObserverEnv{}, &hookpb.PreFlushRequest{})
+	if err != nil {
+		t.Fatalf("PreFlush: unexpected err: %v", err)
+	}
+	if res.Bypass {
+		t.Fatalf("PreFlush must not bypass the flush, got Bypass=true")
+	}
+	if got, want := o.PreFlushCount(), uint64(1); got != want {
+		t.Fatalf("PreFlushCount: got %d, want %d", got, want)
+	}
+}
+
+func TestPostFlush_Counts(t *testing.T) {
+	o := New([]byte("block-"))
+	if err := o.PostFlush(context.Background(), hbasecop.ObserverEnv{}, &hookpb.PostFlushRequest{}); err != nil {
+		t.Fatalf("PostFlush: unexpected err: %v", err)
+	}
+	if got, want := o.PostFlushCount(), uint64(1); got != want {
+		t.Fatalf("PostFlushCount: got %d, want %d", got, want)
+	}
+}
+
+func TestPreCompactSelection_CountsAndPassesThrough(t *testing.T) {
+	o := New([]byte("block-"))
+	res, err := o.PreCompactSelection(context.Background(), hbasecop.ObserverEnv{},
+		&hookpb.PreCompactSelectionRequest{ColumnFamily: []byte("cf")})
+	if err != nil {
+		t.Fatalf("PreCompactSelection: unexpected err: %v", err)
+	}
+	if res.Bypass {
+		t.Fatalf("PreCompactSelection must not bypass, got Bypass=true")
+	}
+	if got, want := o.PreCompactSelectionCount(), uint64(1); got != want {
+		t.Fatalf("PreCompactSelectionCount: got %d, want %d", got, want)
+	}
+}
+
+func TestPreCompact_CountsAndPassesThrough(t *testing.T) {
+	o := New([]byte("block-"))
+	res, err := o.PreCompact(context.Background(), hbasecop.ObserverEnv{},
+		&hookpb.PreCompactRequest{ColumnFamily: []byte("cf")})
+	if err != nil {
+		t.Fatalf("PreCompact: unexpected err: %v", err)
+	}
+	if res.Bypass {
+		t.Fatalf("PreCompact must not bypass, got Bypass=true")
+	}
+	if got, want := o.PreCompactCount(), uint64(1); got != want {
+		t.Fatalf("PreCompactCount: got %d, want %d", got, want)
+	}
+}
+
+func TestPostCompact_Counts(t *testing.T) {
+	o := New([]byte("block-"))
+	if err := o.PostCompact(context.Background(), hbasecop.ObserverEnv{},
+		&hookpb.PostCompactRequest{ColumnFamily: []byte("cf")}); err != nil {
+		t.Fatalf("PostCompact: unexpected err: %v", err)
+	}
+	if got, want := o.PostCompactCount(), uint64(1); got != want {
+		t.Fatalf("PostCompactCount: got %d, want %d", got, want)
+	}
+}
+
+func TestStorageHooks_EmitTaggedLogLines(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	o := New([]byte("block-"))
+	o.SetLogger(logger)
+
+	if _, err := o.PreFlush(context.Background(), hbasecop.ObserverEnv{}, &hookpb.PreFlushRequest{}); err != nil {
+		t.Fatalf("PreFlush: %v", err)
+	}
+	if err := o.PostFlush(context.Background(), hbasecop.ObserverEnv{}, &hookpb.PostFlushRequest{}); err != nil {
+		t.Fatalf("PostFlush: %v", err)
+	}
+	if _, err := o.PreCompactSelection(context.Background(), hbasecop.ObserverEnv{},
+		&hookpb.PreCompactSelectionRequest{ColumnFamily: []byte("cf")}); err != nil {
+		t.Fatalf("PreCompactSelection: %v", err)
+	}
+	if _, err := o.PreCompact(context.Background(), hbasecop.ObserverEnv{},
+		&hookpb.PreCompactRequest{ColumnFamily: []byte("cf")}); err != nil {
+		t.Fatalf("PreCompact: %v", err)
+	}
+	if err := o.PostCompact(context.Background(), hbasecop.ObserverEnv{},
+		&hookpb.PostCompactRequest{ColumnFamily: []byte("cf")}); err != nil {
+		t.Fatalf("PostCompact: %v", err)
+	}
+
+	out := buf.String()
+	for _, needle := range []string{
+		"filter-observer: preFlush",
+		"filter-observer: postFlush",
+		"filter-observer: preCompactSelection",
+		"filter-observer: preCompact",
+		"filter-observer: postCompact",
+	} {
+		if !strings.Contains(out, needle) {
+			t.Fatalf("expected log to contain %q; full output:\n%s", needle, out)
+		}
 	}
 }
