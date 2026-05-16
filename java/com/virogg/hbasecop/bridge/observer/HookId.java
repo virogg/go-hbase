@@ -159,7 +159,13 @@ public enum HookId {
   PRE_CLEAR_COMPACTION_QUEUES((byte) 205, "preClearCompactionQueues"),
   POST_CLEAR_COMPACTION_QUEUES((byte) 206, "postClearCompactionQueues"),
   PRE_EXECUTE_PROCEDURES((byte) 207, "preExecuteProcedures"),
-  POST_EXECUTE_PROCEDURES((byte) 208, "postExecuteProcedures");
+  POST_EXECUTE_PROCEDURES((byte) 208, "postExecuteProcedures"),
+
+  // --- WALObserver (T53). IDs 220-255 reserved for the WAL surface. ---
+  PRE_WAL_WRITE((byte) 220, "preWALWrite"),
+  POST_WAL_WRITE((byte) 221, "postWALWrite"),
+  PRE_WAL_ROLL((byte) 222, "preWALRoll"),
+  POST_WAL_ROLL((byte) 223, "postWALRoll");
 
   private final byte value;
   private final String methodName;
