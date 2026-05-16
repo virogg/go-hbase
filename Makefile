@@ -35,6 +35,9 @@ FILTER_OBSERVER_OUT := $(FILTER_OBSERVER_DIR)/src/main/resources/bin/linux-amd64
 MASTER_POLICY_DIR := examples/master-policy-observer
 MASTER_POLICY_OUT := $(MASTER_POLICY_DIR)/src/main/resources/bin/linux-amd64/hbasecop-runtime
 
+RS_POLICY_DIR := examples/rs-policy-observer
+RS_POLICY_OUT := $(RS_POLICY_DIR)/src/main/resources/bin/linux-amd64/hbasecop-runtime
+
 # ---------------------------------------------------------------------------
 # Aggregates
 # ---------------------------------------------------------------------------
@@ -234,6 +237,30 @@ master-policy-observer-jar: go-build-master-policy ## T51: build master-policy-o
 	@echo "OK: master-policy-observer.jar -- bridge shaded, Go ELF embedded"
 
 # ---------------------------------------------------------------------------
+# Examples (T52): rs-policy region-server coproc-jar.
+# ---------------------------------------------------------------------------
+
+.PHONY: go-build-rs-policy
+go-build-rs-policy: ## T52: build rs-policy-observer Go ELF into example resources (Linux x86-64).
+	@mkdir -p $(dir $(RS_POLICY_OUT))
+	GOOS=linux GOARCH=amd64 $(GO) build $(GO_BUILD_FLAGS) -o $(RS_POLICY_OUT) ./$(RS_POLICY_DIR)
+
+.PHONY: rs-policy-observer-jar
+rs-policy-observer-jar: go-build-rs-policy ## T52: build rs-policy-observer coproc-jar (installs bridge into ~/.m2 first).
+	$(MVN) $(MVN_FLAGS) install -DskipTests
+	$(MVN) $(MVN_FLAGS) -f $(RS_POLICY_DIR)/pom.xml package
+	@unzip -l $(RS_POLICY_DIR)/target/rs-policy-observer.jar | \
+	  grep -q 'bin/linux-amd64/hbasecop-runtime' || \
+	  { echo "ERROR: Go ELF missing from rs-policy-observer.jar" >&2; exit 1; }
+	@unzip -l $(RS_POLICY_DIR)/target/rs-policy-observer.jar | \
+	  grep -q 'com/virogg/hbasecop/examples/rspolicy/RsPolicyRegionServerObserver.class' || \
+	  { echo "ERROR: RsPolicyRegionServerObserver class missing from coproc-jar" >&2; exit 1; }
+	@unzip -l $(RS_POLICY_DIR)/target/rs-policy-observer.jar | \
+	  grep -q 'com/virogg/hbasecop/bridge/observer/RegionServerObserverAdapter.class' || \
+	  { echo "ERROR: bridge classes not shaded into coproc-jar" >&2; exit 1; }
+	@echo "OK: rs-policy-observer.jar -- bridge shaded, Go ELF embedded"
+
+# ---------------------------------------------------------------------------
 # Integration (T26): HBase 2.5 standalone dev cluster.
 # ---------------------------------------------------------------------------
 
@@ -381,6 +408,31 @@ test-integration-master: master-policy-observer-jar ## T51: full IT — bring up
 	  $(MVN) $(MVN_FLAGS) test -Dtest=MasterPolicyIT -DfailIfNoTests=false; \
 	  status=$$?; \
 	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-master.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
+
+# ---------------------------------------------------------------------------
+# Integration (T52): RegionServerObserver — preRollWALWriterRequest policy
+# rejection. The region-server coprocessor is registered cluster-wide (the
+# entrypoint patches hbase-site.xml when HBASECOP_RS_COPROC_CLASS is exported),
+# so the jar is staged before `up` and the env vars drive the injection.
+# ---------------------------------------------------------------------------
+
+RS_COPROC_JAR_STAGED := test/integration/coproc-jars/rs-policy-observer.jar
+
+.PHONY: test-integration-rs
+test-integration-rs: rs-policy-observer-jar ## T52: full IT — bring up HBase with region-server coproc, run RegionServerPolicyIT, tear down.
+	@mkdir -p test/integration/coproc-jars
+	cp $(RS_POLICY_DIR)/target/rs-policy-observer.jar $(RS_COPROC_JAR_STAGED)
+	@set +e; \
+	  export HBASECOP_RS_COPROC_CLASS=com.virogg.hbasecop.examples.rspolicy.RsPolicyRegionServerObserver; \
+	  export HBASECOP_RS_COPROC_JAR=/coproc-jars/rs-policy-observer.jar; \
+	  export HBASECOP_RS_POLICY_VETO_WAL_ROLL=true; \
+	  $(HBASE_COMPOSE_CMD) up -d --build; \
+	  ./test/integration/scripts/wait-master-status.sh; \
+	  $(MVN) $(MVN_FLAGS) test -Dtest=RegionServerPolicyIT -DfailIfNoTests=false; \
+	  status=$$?; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-rs.log 2>&1 || true; \
 	  $(HBASE_COMPOSE_CMD) down; \
 	  exit $$status
 

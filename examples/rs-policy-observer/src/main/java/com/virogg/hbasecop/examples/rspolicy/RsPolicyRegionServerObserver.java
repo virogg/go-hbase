@@ -1,0 +1,141 @@
+// Copyright 2026 The go-hbase Authors
+// SPDX-License-Identifier: Apache-2.0
+
+package com.virogg.hbasecop.examples.rspolicy;
+
+import com.virogg.hbasecop.bridge.CoprocessorRuntime;
+import java.io.IOException;
+import java.lang.System.Logger;
+import java.lang.System.Logger.Level;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Duration;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.stream.Stream;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.CoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessor;
+import org.apache.hadoop.hbase.coprocessor.RegionServerObserver;
+
+/**
+ * T52 region-server coprocessor. Mirrors {@code PolicyMasterObserver}'s layout — spawns a {@link
+ * CoprocessorRuntime} and delegates to its {@link RegionServerObserver} adapter — but attaches at a
+ * RegionServer instead of the HMaster. The embedded Go binary is the {@code rs-policy-observer}
+ * ELF, which audits region-server lifecycle hooks and, when WAL-roll vetoing is enabled, rejects
+ * every {@code preRollWALWriterRequest} by returning an error; rejection travels back as an
+ * IOException to the HBase admin client because the {@code preRollWALWriterRequest} hook defaults
+ * to the STRICT failure policy.
+ *
+ * <p>WAL-roll vetoing is read from the {@link #KEY_VETO_WAL_ROLL} coprocessor config and forwarded
+ * to the Go side via the {@code HBASECOP_RS_POLICY_VETO_WAL_ROLL} environment variable.
+ */
+public final class RsPolicyRegionServerObserver implements RegionServerCoprocessor {
+
+  private static final Logger LOG =
+      System.getLogger(RsPolicyRegionServerObserver.class.getName());
+
+  /**
+   * Configuration key (boolean) selecting whether WAL-writer rolls are vetoed. When {@code "true"}
+   * the {@code HBASECOP_RS_POLICY_VETO_WAL_ROLL} environment variable is forwarded to the spawned
+   * Go process; any other value (or unset) leaves the env var unset.
+   */
+  public static final String KEY_VETO_WAL_ROLL = "hbasecop.policy.veto_wal_roll";
+
+  private CoprocessorRuntime runtime;
+  private Path tmpDir;
+
+  /**
+   * Maps the {@link #KEY_VETO_WAL_ROLL} value in {@code conf} to the env-var map consumed by {@link
+   * CoprocessorRuntime.Config#extraEnv()}. A value other than {@code "true"} returns the empty map.
+   *
+   * <p>Visible-for-testing as a pure helper so the mapping can be exercised without driving a
+   * RegionServerCoprocessor lifecycle.
+   */
+  public static Map<String, String> envFromConfig(Configuration conf) {
+    Objects.requireNonNull(conf, "conf");
+    if ("true".equals(conf.get(KEY_VETO_WAL_ROLL))) {
+      return Map.of("HBASECOP_RS_POLICY_VETO_WAL_ROLL", "true");
+    }
+    return Map.of();
+  }
+
+  public RsPolicyRegionServerObserver() {}
+
+  @Override
+  public void start(CoprocessorEnvironment env) throws IOException {
+    tmpDir = Files.createTempDirectory("hbasecop-rs-policy-");
+    Path inFile = tmpDir.resolve("in.mmap");
+    Path outFile = tmpDir.resolve("out.mmap");
+
+    CoprocessorRuntime.Config cfg =
+        CoprocessorRuntime.Config.builder()
+            .javaToGoFile(inFile)
+            .goToJavaFile(outFile)
+            .ringCapacity(16)
+            .ringMaxObjectSize(1 << 20)
+            .hookTimeout(Duration.ofSeconds(5))
+            .gracefulShutdownTimeout(Duration.ofSeconds(2))
+            .configuration(env.getConfiguration())
+            .extraEnv(envFromConfig(env.getConfiguration()))
+            .build();
+
+    runtime = new CoprocessorRuntime(cfg);
+    try {
+      runtime.start();
+    } catch (IOException e) {
+      cleanupTmpDir();
+      runtime = null;
+      throw e;
+    }
+    LOG.log(
+        Level.INFO,
+        "RsPolicyRegionServerObserver: runtime started for env {0}, shmem dir {1}",
+        env,
+        tmpDir);
+  }
+
+  @Override
+  public void stop(CoprocessorEnvironment env) {
+    if (runtime != null) {
+      try {
+        runtime.stop();
+      } catch (IOException | InterruptedException e) {
+        LOG.log(Level.WARNING, "RsPolicyRegionServerObserver: runtime stop failed", e);
+        if (e instanceof InterruptedException) {
+          Thread.currentThread().interrupt();
+        }
+      }
+      runtime = null;
+    }
+    cleanupTmpDir();
+  }
+
+  @Override
+  public Optional<RegionServerObserver> getRegionServerObserver() {
+    return runtime == null
+        ? Optional.empty()
+        : Optional.ofNullable(runtime.getRegionServerObserver());
+  }
+
+  private void cleanupTmpDir() {
+    if (tmpDir == null) {
+      return;
+    }
+    try (Stream<Path> walk = Files.walk(tmpDir)) {
+      walk.sorted((a, b) -> b.getNameCount() - a.getNameCount())
+          .forEach(
+              p -> {
+                try {
+                  Files.deleteIfExists(p);
+                } catch (IOException ignored) {
+                  // best effort
+                }
+              });
+    } catch (IOException ignored) {
+      // best effort
+    }
+    tmpDir = null;
+  }
+}
