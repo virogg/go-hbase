@@ -142,6 +142,37 @@ enum HookId {
   // Delete tracker, WAL append.
   HOOK_ID_POST_INSTANTIATE_DELETE_TRACKER = 67;
   HOOK_ID_PRE_WAL_APPEND = 68;
+
+  // --- MasterObserver (T51). IDs 100-199 reserved for the master surface
+  // so region hooks (currently 1-68) can grow without renumbering. ---
+
+  // Table lifecycle.
+  HOOK_ID_PRE_CREATE_TABLE = 100;
+  HOOK_ID_POST_CREATE_TABLE = 101;
+  HOOK_ID_PRE_DELETE_TABLE = 102;
+  HOOK_ID_POST_DELETE_TABLE = 103;
+  HOOK_ID_PRE_MODIFY_TABLE = 104;
+  HOOK_ID_POST_MODIFY_TABLE = 105;
+  HOOK_ID_PRE_TRUNCATE_TABLE = 106;
+  HOOK_ID_POST_TRUNCATE_TABLE = 107;
+
+  // Enable / disable.
+  HOOK_ID_PRE_ENABLE_TABLE = 108;
+  HOOK_ID_POST_ENABLE_TABLE = 109;
+  HOOK_ID_PRE_DISABLE_TABLE = 110;
+  HOOK_ID_POST_DISABLE_TABLE = 111;
+
+  // Region placement.
+  HOOK_ID_PRE_MOVE = 112;
+  HOOK_ID_POST_MOVE = 113;
+  HOOK_ID_PRE_ASSIGN = 114;
+  HOOK_ID_POST_ASSIGN = 115;
+  HOOK_ID_PRE_UNASSIGN = 116;
+  HOOK_ID_POST_UNASSIGN = 117;
+
+  // Cluster balance.
+  HOOK_ID_PRE_BALANCE = 118;
+  HOOK_ID_POST_BALANCE = 119;
 }
 
 // HookContext is the shared per-call envelope sent with every hook
@@ -673,4 +704,125 @@ message PreWALAppendRequest {
   HookContext ctx = 1;
   WalKeyProto log_key = 2;
   WalEditProto log_edit = 3;
+}
+
+// ---------------------------------------------------------------------
+// MasterObserver Request messages (T51).
+//
+// All MasterObserver hooks share the HookContext envelope. table_name on
+// the context is left empty for cluster-level hooks (balance, etc); the
+// concrete table affected travels in the per-hook payload. The encoded
+// TableDescriptor / RegionInfo bytes are the canonical HBase 2.5
+// protobuf serialisations (TableDescriptor.toByteArray /
+// RegionInfo.toByteArray) — opaque to the Go side except as identifiers.
+// ---------------------------------------------------------------------
+
+message PreCreateTableRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.TableName table_name = 2;
+  bytes table_descriptor = 3;
+  repeated bytes split_key = 4;
+}
+message PostCreateTableRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.TableName table_name = 2;
+  bytes table_descriptor = 3;
+  repeated bytes split_key = 4;
+}
+
+message PreDeleteTableRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.TableName table_name = 2;
+}
+message PostDeleteTableRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.TableName table_name = 2;
+}
+
+message PreModifyTableRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.TableName table_name = 2;
+  bytes new_table_descriptor = 3;
+}
+message PostModifyTableRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.TableName table_name = 2;
+  bytes new_table_descriptor = 3;
+  bytes old_table_descriptor = 4;
+}
+
+message PreTruncateTableRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.TableName table_name = 2;
+  bool preserve_splits = 3;
+}
+message PostTruncateTableRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.TableName table_name = 2;
+  bool preserve_splits = 3;
+}
+
+message PreEnableTableRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.TableName table_name = 2;
+}
+message PostEnableTableRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.TableName table_name = 2;
+}
+message PreDisableTableRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.TableName table_name = 2;
+}
+message PostDisableTableRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.TableName table_name = 2;
+}
+
+message ServerNameProto {
+  string host = 1;
+  uint32 port = 2;
+  uint64 start_code = 3;
+}
+
+message PreMoveRequest {
+  HookContext ctx = 1;
+  bytes region_info = 2;       // RegionInfo.toByteArray
+  ServerNameProto source = 3;
+  ServerNameProto destination = 4;
+}
+message PostMoveRequest {
+  HookContext ctx = 1;
+  bytes region_info = 2;
+  ServerNameProto source = 3;
+  ServerNameProto destination = 4;
+}
+
+message PreAssignRequest {
+  HookContext ctx = 1;
+  bytes region_info = 2;
+}
+message PostAssignRequest {
+  HookContext ctx = 1;
+  bytes region_info = 2;
+}
+
+message PreUnassignRequest {
+  HookContext ctx = 1;
+  bytes region_info = 2;
+}
+message PostUnassignRequest {
+  HookContext ctx = 1;
+  bytes region_info = 2;
+}
+
+message PreBalanceRequest {
+  HookContext ctx = 1;
+  // 0=NONE, 1=NORMAL, 2=FORCE — mirrors HBase BalanceRequest.BalanceMode.
+  int32 balance_mode = 2;
+}
+message PostBalanceRequest {
+  HookContext ctx = 1;
+  int32 balance_mode = 2;
+  bool ran = 3;
 }

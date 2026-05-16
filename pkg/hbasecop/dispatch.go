@@ -29,6 +29,7 @@ const (
 // and the user-facing API.
 type dispatcher struct {
 	observer RegionObserver
+	master   MasterObserver
 	logger   *slog.Logger
 }
 
@@ -37,6 +38,13 @@ func newDispatcher(observer RegionObserver, logger *slog.Logger) *dispatcher {
 		logger = slog.Default()
 	}
 	return &dispatcher{observer: observer, logger: logger}
+}
+
+func newMasterDispatcher(master MasterObserver, logger *slog.Logger) *dispatcher {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &dispatcher{master: master, logger: logger}
 }
 
 // dispatch decodes one Request frame, looks up the hook in the
@@ -54,13 +62,23 @@ func (d *dispatcher) dispatch(ctx context.Context, req *wire.Message) *wire.Mess
 		return d.errorFrame(req, errCodeInvalidWireRequest, "invalid wire Request: "+err.Error())
 	}
 
-	entry, ok := hooksByID[HookID(req.HookID)]
-	if !ok {
-		d.logger.Warn("hbasecop: unknown hook_id",
-			"hook_id", req.HookID, "req_id", req.ReqID)
-		return d.errorFrame(req, errCodeUnknownHook, "unknown hook")
+	hookID := HookID(req.HookID)
+	if d.observer != nil {
+		if entry, ok := hooksByID[hookID]; ok {
+			return d.dispatchRegion(ctx, req, &wireReq, entry)
+		}
 	}
+	if d.master != nil {
+		if entry, ok := masterHooksByID[hookID]; ok {
+			return d.dispatchMaster(ctx, req, &wireReq, entry)
+		}
+	}
+	d.logger.Warn("hbasecop: unknown hook_id",
+		"hook_id", req.HookID, "req_id", req.ReqID)
+	return d.errorFrame(req, errCodeUnknownHook, "unknown hook")
+}
 
+func (d *dispatcher) dispatchRegion(ctx context.Context, req *wire.Message, wireReq *wirepb.Request, entry hookEntry) *wire.Message {
 	inner := entry.decode()
 	if err := proto.Unmarshal(wireReq.GetHookCtx(), inner); err != nil {
 		d.logger.Error("hbasecop: invalid "+entry.name+"Request",
@@ -69,8 +87,20 @@ func (d *dispatcher) dispatch(ctx context.Context, req *wire.Message) *wire.Mess
 			"invalid "+entry.name+"Request: "+err.Error())
 	}
 	env := envFromHookContext(extractHookCtx(inner))
-
 	result, callErr := entry.invoke(d.observer, ctx, env, inner)
+	return d.responseFrame(req, result, callErr)
+}
+
+func (d *dispatcher) dispatchMaster(ctx context.Context, req *wire.Message, wireReq *wirepb.Request, entry masterHookEntry) *wire.Message {
+	inner := entry.decode()
+	if err := proto.Unmarshal(wireReq.GetHookCtx(), inner); err != nil {
+		d.logger.Error("hbasecop: invalid "+entry.name+"Request",
+			"err", err, "req_id", req.ReqID, "hook", entry.name)
+		return d.errorFrame(req, errCodeInvalidWireRequest,
+			"invalid "+entry.name+"Request: "+err.Error())
+	}
+	env := envFromHookContext(extractHookCtx(inner))
+	result, callErr := entry.invoke(d.master, ctx, env, inner)
 	return d.responseFrame(req, result, callErr)
 }
 
