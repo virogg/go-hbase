@@ -9,6 +9,7 @@ import com.virogg.hbasecop.bridge.observer.MasterObserverAdapter;
 import com.virogg.hbasecop.bridge.observer.MuxHookDispatcher;
 import com.virogg.hbasecop.bridge.observer.RegionObserverAdapter;
 import com.virogg.hbasecop.bridge.observer.RegionServerObserverAdapter;
+import com.virogg.hbasecop.bridge.observer.WALObserverAdapter;
 import com.virogg.hbasecop.bridge.shmem.Channel;
 import com.virogg.hbasecop.bridge.shmem.Role;
 import com.virogg.hbasecop.bridge.shmem.ShmemException;
@@ -100,6 +101,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
   private RegionObserver observer;
   private org.apache.hadoop.hbase.coprocessor.MasterObserver masterObserver;
   private org.apache.hadoop.hbase.coprocessor.RegionServerObserver regionServerObserver;
+  private org.apache.hadoop.hbase.coprocessor.WALObserver walObserver;
   private HeartbeatWatchdog watchdog;
   private ScheduledExecutorService watchdogScheduler;
   private ScheduledFuture<?> watchdogTask;
@@ -170,6 +172,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
       observer = new RegionObserverAdapter(dispatcher, policy);
       masterObserver = new MasterObserverAdapter(dispatcher, policy);
       regionServerObserver = new RegionServerObserverAdapter(dispatcher, policy);
+      walObserver = new WALObserverAdapter(dispatcher, policy);
 
       started = true;
       ok = true;
@@ -214,6 +217,11 @@ public final class CoprocessorRuntime implements AutoCloseable {
   /** The RegionServerObserver to expose to HBase (T52); null until {@link #start()} succeeds. */
   public org.apache.hadoop.hbase.coprocessor.RegionServerObserver getRegionServerObserver() {
     return regionServerObserver;
+  }
+
+  /** The WALObserver to expose to HBase (T53); null until {@link #start()} succeeds. */
+  public org.apache.hadoop.hbase.coprocessor.WALObserver getWALObserver() {
+    return walObserver;
   }
 
   /**
@@ -319,6 +327,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
     observer = null;
     masterObserver = null;
     regionServerObserver = null;
+    walObserver = null;
     watchdog = null;
     restartController = null;
   }
