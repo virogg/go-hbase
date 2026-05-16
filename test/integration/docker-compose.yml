@@ -29,6 +29,14 @@ services:
       - "16020:16020"   # regionserver RPC
     volumes:
       - ./coproc-jars:/coproc-jars
+    # T51: master coprocessors must be registered cluster-wide at startup.
+    # These pass through from the host shell (empty for every non-master IT,
+    # so the entrypoint's injection is a no-op); `make test-integration-master`
+    # exports them before `docker compose up`.
+    environment:
+      HBASECOP_MASTER_COPROC_CLASS: "${HBASECOP_MASTER_COPROC_CLASS:-}"
+      HBASECOP_MASTER_COPROC_JAR: "${HBASECOP_MASTER_COPROC_JAR:-}"
+      HBASECOP_POLICY_BLOCKED_PREFIX: "${HBASECOP_POLICY_BLOCKED_PREFIX:-}"
     healthcheck:
       test:
         - "CMD-SHELL"
