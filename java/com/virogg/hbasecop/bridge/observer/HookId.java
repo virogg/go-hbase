@@ -126,7 +126,29 @@ public enum HookId {
 
   // Delete tracker, WAL append.
   POST_INSTANTIATE_DELETE_TRACKER((byte) 67, "postInstantiateDeleteTracker"),
-  PRE_WAL_APPEND((byte) 68, "preWALAppend");
+  PRE_WAL_APPEND((byte) 68, "preWALAppend"),
+
+  // --- MasterObserver (T51). IDs 100-199 reserved for the master surface. ---
+  PRE_CREATE_TABLE((byte) 100, "preCreateTable"),
+  POST_CREATE_TABLE((byte) 101, "postCreateTable"),
+  PRE_DELETE_TABLE((byte) 102, "preDeleteTable"),
+  POST_DELETE_TABLE((byte) 103, "postDeleteTable"),
+  PRE_MODIFY_TABLE((byte) 104, "preModifyTable"),
+  POST_MODIFY_TABLE((byte) 105, "postModifyTable"),
+  PRE_TRUNCATE_TABLE((byte) 106, "preTruncateTable"),
+  POST_TRUNCATE_TABLE((byte) 107, "postTruncateTable"),
+  PRE_ENABLE_TABLE((byte) 108, "preEnableTable"),
+  POST_ENABLE_TABLE((byte) 109, "postEnableTable"),
+  PRE_DISABLE_TABLE((byte) 110, "preDisableTable"),
+  POST_DISABLE_TABLE((byte) 111, "postDisableTable"),
+  PRE_MOVE((byte) 112, "preMove"),
+  POST_MOVE((byte) 113, "postMove"),
+  PRE_ASSIGN((byte) 114, "preAssign"),
+  POST_ASSIGN((byte) 115, "postAssign"),
+  PRE_UNASSIGN((byte) 116, "preUnassign"),
+  POST_UNASSIGN((byte) 117, "postUnassign"),
+  PRE_BALANCE((byte) 118, "preBalance"),
+  POST_BALANCE((byte) 119, "postBalance");
 
   private final byte value;
   private final String methodName;
