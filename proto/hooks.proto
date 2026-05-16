@@ -174,7 +174,7 @@ enum HookId {
   HOOK_ID_PRE_BALANCE = 118;
   HOOK_ID_POST_BALANCE = 119;
 
-  // --- RegionServerObserver (T52). IDs 200-255 reserved for the
+  // --- RegionServerObserver (T52). IDs 200-219 reserved for the
   // region-server surface so master hooks (100-199) and region hooks
   // (1-99) can grow without renumbering. ---
 
@@ -196,6 +196,16 @@ enum HookId {
   // Procedure execution.
   HOOK_ID_PRE_EXECUTE_PROCEDURES = 207;
   HOOK_ID_POST_EXECUTE_PROCEDURES = 208;
+
+  // --- WALObserver (T53). IDs 220-255 reserved for the WAL surface. ---
+
+  // WAL write — latency-critical hot path.
+  HOOK_ID_PRE_WAL_WRITE = 220;
+  HOOK_ID_POST_WAL_WRITE = 221;
+
+  // WAL roll.
+  HOOK_ID_PRE_WAL_ROLL = 222;
+  HOOK_ID_POST_WAL_ROLL = 223;
 }
 
 // HookContext is the shared per-call envelope sent with every hook
@@ -900,4 +910,37 @@ message PreExecuteProceduresRequest {
 message PostExecuteProceduresRequest {
   HookContext ctx = 1;
   ServerNameProto server = 2;
+}
+
+// ---------------------------------------------------------------------
+// WALObserver Request messages (T53).
+//
+// WALObserver attaches to the write-ahead log. preWALWrite / postWALWrite
+// sit on the latency-critical WAL append hot path; preWALRoll /
+// postWALRoll fire when the WAL file is rotated. The WALKey / WALEdit
+// slim envelopes are reused from the region-server WAL replay surface.
+// ---------------------------------------------------------------------
+
+message PreWALWriteRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.RegionInfo region_info = 2;
+  WalKeyProto log_key = 3;
+  WalEditProto log_edit = 4;
+}
+message PostWALWriteRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.RegionInfo region_info = 2;
+  WalKeyProto log_key = 3;
+  WalEditProto log_edit = 4;
+}
+
+message PreWALRollRequest {
+  HookContext ctx = 1;
+  string old_path = 2;
+  string new_path = 3;
+}
+message PostWALRollRequest {
+  HookContext ctx = 1;
+  string old_path = 2;
+  string new_path = 3;
 }

@@ -31,6 +31,7 @@ type dispatcher struct {
 	observer     RegionObserver
 	master       MasterObserver
 	regionServer RegionServerObserver
+	wal          WALObserver
 	logger       *slog.Logger
 }
 
@@ -53,6 +54,13 @@ func newRegionServerDispatcher(rs RegionServerObserver, logger *slog.Logger) *di
 		logger = slog.Default()
 	}
 	return &dispatcher{regionServer: rs, logger: logger}
+}
+
+func newWALDispatcher(wal WALObserver, logger *slog.Logger) *dispatcher {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &dispatcher{wal: wal, logger: logger}
 }
 
 // dispatch decodes one Request frame, looks up the hook in the
@@ -84,6 +92,11 @@ func (d *dispatcher) dispatch(ctx context.Context, req *wire.Message) *wire.Mess
 	if d.regionServer != nil {
 		if entry, ok := regionServerHooksByID[hookID]; ok {
 			return d.dispatchRegionServer(ctx, req, &wireReq, entry)
+		}
+	}
+	if d.wal != nil {
+		if entry, ok := walHooksByID[hookID]; ok {
+			return d.dispatchWAL(ctx, req, &wireReq, entry)
 		}
 	}
 	d.logger.Warn("hbasecop: unknown hook_id",
@@ -127,6 +140,19 @@ func (d *dispatcher) dispatchRegionServer(ctx context.Context, req *wire.Message
 	}
 	env := envFromHookContext(extractHookCtx(inner))
 	result, callErr := entry.invoke(d.regionServer, ctx, env, inner)
+	return d.responseFrame(req, result, callErr)
+}
+
+func (d *dispatcher) dispatchWAL(ctx context.Context, req *wire.Message, wireReq *wirepb.Request, entry walHookEntry) *wire.Message {
+	inner := entry.decode()
+	if err := proto.Unmarshal(wireReq.GetHookCtx(), inner); err != nil {
+		d.logger.Error("hbasecop: invalid "+entry.name+"Request",
+			"err", err, "req_id", req.ReqID, "hook", entry.name)
+		return d.errorFrame(req, errCodeInvalidWireRequest,
+			"invalid "+entry.name+"Request: "+err.Error())
+	}
+	env := envFromHookContext(extractHookCtx(inner))
+	result, callErr := entry.invoke(d.wal, ctx, env, inner)
 	return d.responseFrame(req, result, callErr)
 }
 
