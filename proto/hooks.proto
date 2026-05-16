@@ -196,10 +196,6 @@ enum HookId {
   // Procedure execution.
   HOOK_ID_PRE_EXECUTE_PROCEDURES = 207;
   HOOK_ID_POST_EXECUTE_PROCEDURES = 208;
-
-  // Online configuration reload.
-  HOOK_ID_PRE_UPDATE_REGION_SERVER_CONFIGURATION = 209;
-  HOOK_ID_POST_UPDATE_REGION_SERVER_CONFIGURATION = 210;
 }
 
 // HookContext is the shared per-call envelope sent with every hook
@@ -902,15 +898,6 @@ message PreExecuteProceduresRequest {
   ServerNameProto server = 2;
 }
 message PostExecuteProceduresRequest {
-  HookContext ctx = 1;
-  ServerNameProto server = 2;
-}
-
-message PreUpdateRegionServerConfigurationRequest {
-  HookContext ctx = 1;
-  ServerNameProto server = 2;
-}
-message PostUpdateRegionServerConfigurationRequest {
   HookContext ctx = 1;
   ServerNameProto server = 2;
 }

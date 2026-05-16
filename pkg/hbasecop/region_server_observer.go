@@ -37,10 +37,6 @@ type RegionServerObserver interface {
 	// Procedure execution.
 	PreExecuteProcedures(ctx context.Context, env ObserverEnv, req *hookpb.PreExecuteProceduresRequest) (HookResult, error)
 	PostExecuteProcedures(ctx context.Context, env ObserverEnv, req *hookpb.PostExecuteProceduresRequest) error
-
-	// Online configuration reload.
-	PreUpdateRegionServerConfiguration(ctx context.Context, env ObserverEnv, req *hookpb.PreUpdateRegionServerConfigurationRequest) (HookResult, error)
-	PostUpdateRegionServerConfiguration(ctx context.Context, env ObserverEnv, req *hookpb.PostUpdateRegionServerConfigurationRequest) error
 }
 
 // UnimplementedRegionServerObserver provides no-op implementations of
@@ -89,13 +85,5 @@ func (UnimplementedRegionServerObserver) PreExecuteProcedures(context.Context, O
 }
 
 func (UnimplementedRegionServerObserver) PostExecuteProcedures(context.Context, ObserverEnv, *hookpb.PostExecuteProceduresRequest) error {
-	return nil
-}
-
-func (UnimplementedRegionServerObserver) PreUpdateRegionServerConfiguration(context.Context, ObserverEnv, *hookpb.PreUpdateRegionServerConfigurationRequest) (HookResult, error) {
-	return HookResult{}, nil
-}
-
-func (UnimplementedRegionServerObserver) PostUpdateRegionServerConfiguration(context.Context, ObserverEnv, *hookpb.PostUpdateRegionServerConfigurationRequest) error {
 	return nil
 }
