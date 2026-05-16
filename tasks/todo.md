@@ -52,7 +52,7 @@
 - [x] **CP-ε1:** RegionObserver complete
 
 ## Phase 5 — Other Observer types
-- [ ] T51 MasterObserver adapter + tests
+- [x] T51 MasterObserver adapter + tests
 - [ ] T52 RegionServerObserver adapter
 - [ ] T53 WALObserver adapter (+ WAL throughput bench)
 - [ ] T54 BulkLoadObserver adapter

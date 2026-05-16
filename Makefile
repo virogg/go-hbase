@@ -32,6 +32,9 @@ FAULT_OBSERVER_OUT := $(FAULT_OBSERVER_DIR)/src/main/resources/bin/linux-amd64/h
 FILTER_OBSERVER_DIR := examples/filter-observer
 FILTER_OBSERVER_OUT := $(FILTER_OBSERVER_DIR)/src/main/resources/bin/linux-amd64/hbasecop-runtime
 
+MASTER_POLICY_DIR := examples/master-policy-observer
+MASTER_POLICY_OUT := $(MASTER_POLICY_DIR)/src/main/resources/bin/linux-amd64/hbasecop-runtime
+
 # ---------------------------------------------------------------------------
 # Aggregates
 # ---------------------------------------------------------------------------
@@ -207,6 +210,30 @@ filter-observer-jar: go-build-filter ## T43: build filter-observer coproc-jar (i
 	@echo "OK: filter-observer.jar -- bridge shaded, Go ELF embedded"
 
 # ---------------------------------------------------------------------------
+# Examples (T51): master-policy coproc-jar.
+# ---------------------------------------------------------------------------
+
+.PHONY: go-build-master-policy
+go-build-master-policy: ## T51: build master-policy-observer Go ELF into example resources (Linux x86-64).
+	@mkdir -p $(dir $(MASTER_POLICY_OUT))
+	GOOS=linux GOARCH=amd64 $(GO) build $(GO_BUILD_FLAGS) -o $(MASTER_POLICY_OUT) ./$(MASTER_POLICY_DIR)
+
+.PHONY: master-policy-observer-jar
+master-policy-observer-jar: go-build-master-policy ## T51: build master-policy-observer coproc-jar (installs bridge into ~/.m2 first).
+	$(MVN) $(MVN_FLAGS) install -DskipTests
+	$(MVN) $(MVN_FLAGS) -f $(MASTER_POLICY_DIR)/pom.xml package
+	@unzip -l $(MASTER_POLICY_DIR)/target/master-policy-observer.jar | \
+	  grep -q 'bin/linux-amd64/hbasecop-runtime' || \
+	  { echo "ERROR: Go ELF missing from master-policy-observer.jar" >&2; exit 1; }
+	@unzip -l $(MASTER_POLICY_DIR)/target/master-policy-observer.jar | \
+	  grep -q 'com/virogg/hbasecop/examples/masterpolicy/PolicyMasterObserver.class' || \
+	  { echo "ERROR: PolicyMasterObserver class missing from coproc-jar" >&2; exit 1; }
+	@unzip -l $(MASTER_POLICY_DIR)/target/master-policy-observer.jar | \
+	  grep -q 'com/virogg/hbasecop/bridge/observer/MasterObserverAdapter.class' || \
+	  { echo "ERROR: bridge classes not shaded into coproc-jar" >&2; exit 1; }
+	@echo "OK: master-policy-observer.jar -- bridge shaded, Go ELF embedded"
+
+# ---------------------------------------------------------------------------
 # Integration (T26): HBase 2.5 standalone dev cluster.
 # ---------------------------------------------------------------------------
 
@@ -329,6 +356,31 @@ test-integration-storage: filter-observer-jar ## T45: full IT — bring up HBase
 	  $(MVN) $(MVN_FLAGS) test -Dtest=StorageHooksIT -DfailIfNoTests=false; \
 	  status=$$?; \
 	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-storage.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
+
+# ---------------------------------------------------------------------------
+# Integration (T51): MasterObserver — preCreateTable policy rejection.
+# The master coprocessor is registered cluster-wide (the entrypoint patches
+# hbase-site.xml when HBASECOP_MASTER_COPROC_CLASS is exported), so the jar
+# is staged before `up` and the env vars drive the injection.
+# ---------------------------------------------------------------------------
+
+MASTER_COPROC_JAR_STAGED := test/integration/coproc-jars/master-policy-observer.jar
+
+.PHONY: test-integration-master
+test-integration-master: master-policy-observer-jar ## T51: full IT — bring up HBase with master coproc, run MasterPolicyIT, tear down.
+	@mkdir -p test/integration/coproc-jars
+	cp $(MASTER_POLICY_DIR)/target/master-policy-observer.jar $(MASTER_COPROC_JAR_STAGED)
+	@set +e; \
+	  export HBASECOP_MASTER_COPROC_CLASS=com.virogg.hbasecop.examples.masterpolicy.PolicyMasterObserver; \
+	  export HBASECOP_MASTER_COPROC_JAR=/coproc-jars/master-policy-observer.jar; \
+	  export HBASECOP_POLICY_BLOCKED_PREFIX=forbidden-; \
+	  $(HBASE_COMPOSE_CMD) up -d --build; \
+	  ./test/integration/scripts/wait-master-status.sh; \
+	  $(MVN) $(MVN_FLAGS) test -Dtest=MasterPolicyIT -DfailIfNoTests=false; \
+	  status=$$?; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-master.log 2>&1 || true; \
 	  $(HBASE_COMPOSE_CMD) down; \
 	  exit $$status
 
