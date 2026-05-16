@@ -5,9 +5,7 @@ package com.virogg.hbasecop.integration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -17,7 +15,6 @@ import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
@@ -103,24 +100,28 @@ final class BatchPartialBlockIT {
         batch.add(put(BLOCKED_PREFIX + "2"));
 
         Object[] results = new Object[batch.size()];
+        // Table.batch populates results[] with per-index Result / Throwable in
+        // both code paths: (a) returning normally on a "soft" partial failure, or
+        // (b) throwing RetriesExhaustedWithDetailsException after retries. Either
+        // way the per-slot data is what we assert on below; the umbrella
+        // exception only carries the rolled-up summary.
         try {
           table.batch(batch, results);
-          fail(
-              "Table.batch should have surfaced a retries-exhausted error for blocked indices — got"
-                  + " no exception. results="
-                  + Arrays.toString(results));
-        } catch (IOException expected) {
-          // Expected: blocked indices fail individually. The remaining "ok-*" indices
-          // populated their results slot; the failed indices' slots are null.
+        } catch (IOException withDetails) {
+          assertTrue(
+              withDetails.getMessage().contains("hbasecop: mutation blocked by observer"),
+              "umbrella IOException should mention the observer-supplied message; got: "
+                  + withDetails.getMessage());
         }
 
-        // ok-* indices populate their slot with a non-null Result (success marker).
-        // block-* indices stay null (failure marker).
-        assertNotNull(results[0], "results[0] (ok-1) should be non-null on success");
-        assertNotNull(results[1], "results[1] (ok-2) should be non-null on success");
-        assertNull(results[2], "results[2] (block-1) should be null on per-index failure");
-        assertNotNull(results[3], "results[3] (ok-3) should be non-null on success");
-        assertNull(results[4], "results[4] (block-2) should be null on per-index failure");
+        // Success slots carry a Result; failure slots carry a Throwable whose
+        // message contains the OperationStatus exceptionMsg ("hbasecop: mutation
+        // blocked by observer") we set on the Java adapter side.
+        assertResultSuccess(results, 0, "ok-1");
+        assertResultSuccess(results, 1, "ok-2");
+        assertBlocked(results, 2, "block-1");
+        assertResultSuccess(results, 3, "ok-3");
+        assertBlocked(results, 4, "block-2");
 
         // Round-trip read-back: only the ok-* rows landed in storage. Note this exercises
         // the Get path too — and our filter-observer also bypasses Gets on block-* rows,
@@ -138,6 +139,45 @@ final class BatchPartialBlockIT {
         dropTable(admin, tn);
       }
     }
+  }
+
+  private static void assertResultSuccess(Object[] results, int idx, String label) {
+    Object slot = results[idx];
+    assertNotNull(slot, "results[" + idx + "] (" + label + ") should be non-null on success");
+    assertTrue(
+        slot instanceof Result,
+        "results["
+            + idx
+            + "] ("
+            + label
+            + ") should be a Result on success, got "
+            + slot.getClass().getName()
+            + " = "
+            + slot);
+  }
+
+  private static void assertBlocked(Object[] results, int idx, String label) {
+    Object slot = results[idx];
+    assertNotNull(
+        slot, "results[" + idx + "] (" + label + ") should be non-null on per-index failure");
+    assertTrue(
+        slot instanceof Throwable,
+        "results["
+            + idx
+            + "] ("
+            + label
+            + ") should be a Throwable on per-index failure, got "
+            + slot.getClass().getName());
+    Throwable t = (Throwable) slot;
+    String msg = String.valueOf(t.getMessage());
+    assertTrue(
+        msg.contains("hbasecop: mutation blocked by observer"),
+        "results["
+            + idx
+            + "] ("
+            + label
+            + ") exception should carry the observer-supplied message; got: "
+            + msg);
   }
 
   private static Put put(String row) {
