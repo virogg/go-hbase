@@ -47,7 +47,7 @@
 - [x] T42 Per-hook serialization mappers (HBase native ↔ proto)
 - [x] T43 Read-path hooks (preGet, scanner)
 - [x] T44 Batch hooks (preBatchMutate)
-- [ ] T45 Storage hooks (flush/compact)
+- [x] T45 Storage hooks (flush/compact)
 - [ ] T46 Coverage matrix doc + CI gate
 - [ ] **CP-ε1:** RegionObserver complete
 
