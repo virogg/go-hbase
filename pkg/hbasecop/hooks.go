@@ -137,4 +137,10 @@ const (
 	HookIDPostClearCompactionQueues HookID = 206
 	HookIDPreExecuteProcedures      HookID = 207
 	HookIDPostExecuteProcedures     HookID = 208
+
+	// --- WALObserver hooks (T53). IDs 220-255 reserved for the WAL surface. ---
+	HookIDPreWALWrite  HookID = 220
+	HookIDPostWALWrite HookID = 221
+	HookIDPreWALRoll   HookID = 222
+	HookIDPostWALRoll  HookID = 223
 )
