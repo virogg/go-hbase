@@ -45,7 +45,7 @@
 ## Phase 4 — Full RegionObserver
 - [x] T41 Hook dispatch table generated from .proto (68 hooks)
 - [x] T42 Per-hook serialization mappers (HBase native ↔ proto)
-- [ ] T43 Read-path hooks (preGet, scanner)
+- [x] T43 Read-path hooks (preGet, scanner)
 - [ ] T44 Batch hooks (preBatchMutate)
 - [ ] T45 Storage hooks (flush/compact)
 - [ ] T46 Coverage matrix doc + CI gate
