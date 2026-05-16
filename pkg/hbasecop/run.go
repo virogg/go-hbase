@@ -170,6 +170,75 @@ func RunMaster(masters ...MasterObserver) error {
 	return nil
 }
 
+// RunRegionServer is the T52 region-server counterpart of Run and
+// RunMaster. It boots the shared runtime (shmem + heartbeat + dispatcher
+// loop) against a RegionServerObserver. A single process serves a single
+// observer surface — region, master or region-server — which keeps the
+// coproc-jar packaging symmetric across the three Coprocessor kinds on
+// the Java side.
+func RunRegionServer(observers ...RegionServerObserver) error {
+	if len(observers) == 0 {
+		return errors.New("hbasecop.RunRegionServer: at least one region-server observer required")
+	}
+	if len(observers) > 1 {
+		return errors.New("hbasecop.RunRegionServer: multiple observers not supported")
+	}
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+
+	cfg, err := loadShmemConfigFromEnv()
+	if err != nil {
+		return err
+	}
+
+	inCh, err := shmem.Open(shmem.Config{
+		Filename:      cfg.inPath,
+		Capacity:      cfg.capacity,
+		MaxObjectSize: cfg.maxObjectSize,
+		Role:          shmem.RoleConsumer,
+	})
+	if err != nil {
+		return fmt.Errorf("hbasecop.RunRegionServer: open inbound ring: %w", err)
+	}
+	defer func() { _ = inCh.Close() }()
+
+	outCh, err := shmem.Open(shmem.Config{
+		Filename:      cfg.outPath,
+		Capacity:      cfg.capacity,
+		MaxObjectSize: cfg.maxObjectSize,
+		Role:          shmem.RoleProducer,
+	})
+	if err != nil {
+		return fmt.Errorf("hbasecop.RunRegionServer: open outbound ring: %w", err)
+	}
+	defer func() { _ = outCh.Close() }()
+
+	d := newRegionServerDispatcher(observers[0], logger)
+	loop, err := cpruntime.New(cpruntime.Config{
+		InCh:            inCh,
+		OutCh:           outCh,
+		HeartbeatPeriod: cfg.heartbeat,
+		Logger:          logger,
+		Handler:         d.dispatch,
+	})
+	if err != nil {
+		return err
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
+
+	logger.Info("hbasecop: started (region-server)",
+		"pid", os.Getpid(),
+		"in_path", cfg.inPath,
+		"out_path", cfg.outPath,
+	)
+	if err := loop.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+		return err
+	}
+	logger.Info("hbasecop: clean exit (region-server)")
+	return nil
+}
+
 type shmemEnvConfig struct {
 	inPath, outPath         string
 	capacity, maxObjectSize int

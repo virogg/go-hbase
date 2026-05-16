@@ -173,6 +173,33 @@ enum HookId {
   // Cluster balance.
   HOOK_ID_PRE_BALANCE = 118;
   HOOK_ID_POST_BALANCE = 119;
+
+  // --- RegionServerObserver (T52). IDs 200-255 reserved for the
+  // region-server surface so master hooks (100-199) and region hooks
+  // (1-99) can grow without renumbering. ---
+
+  // Server lifecycle.
+  HOOK_ID_PRE_STOP_REGION_SERVER = 200;
+
+  // WAL writer roll.
+  HOOK_ID_PRE_ROLL_WAL_WRITER_REQUEST = 201;
+  HOOK_ID_POST_ROLL_WAL_WRITER_REQUEST = 202;
+
+  // Replication log entries.
+  HOOK_ID_PRE_REPLICATE_LOG_ENTRIES = 203;
+  HOOK_ID_POST_REPLICATE_LOG_ENTRIES = 204;
+
+  // Compaction queue clearing.
+  HOOK_ID_PRE_CLEAR_COMPACTION_QUEUES = 205;
+  HOOK_ID_POST_CLEAR_COMPACTION_QUEUES = 206;
+
+  // Procedure execution.
+  HOOK_ID_PRE_EXECUTE_PROCEDURES = 207;
+  HOOK_ID_POST_EXECUTE_PROCEDURES = 208;
+
+  // Online configuration reload.
+  HOOK_ID_PRE_UPDATE_REGION_SERVER_CONFIGURATION = 209;
+  HOOK_ID_POST_UPDATE_REGION_SERVER_CONFIGURATION = 210;
 }
 
 // HookContext is the shared per-call envelope sent with every hook
@@ -825,4 +852,65 @@ message PostBalanceRequest {
   HookContext ctx = 1;
   int32 balance_mode = 2;
   bool ran = 3;
+}
+
+// ---------------------------------------------------------------------
+// RegionServerObserver Request messages (T52).
+//
+// RegionServerObserver hooks are server-scoped, not table/region-scoped:
+// HookContext carries no table_name, and the affected RegionServer is
+// identified by the `server` field (env.getServerName() on the Java
+// side). The hooks themselves take no payload arguments in HBase 2.5
+// beyond the observer context, so every message is the (ctx, server)
+// envelope.
+// ---------------------------------------------------------------------
+
+message PreStopRegionServerRequest {
+  HookContext ctx = 1;
+  ServerNameProto server = 2;
+}
+
+message PreRollWalWriterRequestRequest {
+  HookContext ctx = 1;
+  ServerNameProto server = 2;
+}
+message PostRollWalWriterRequestRequest {
+  HookContext ctx = 1;
+  ServerNameProto server = 2;
+}
+
+message PreReplicateLogEntriesRequest {
+  HookContext ctx = 1;
+  ServerNameProto server = 2;
+}
+message PostReplicateLogEntriesRequest {
+  HookContext ctx = 1;
+  ServerNameProto server = 2;
+}
+
+message PreClearCompactionQueuesRequest {
+  HookContext ctx = 1;
+  ServerNameProto server = 2;
+}
+message PostClearCompactionQueuesRequest {
+  HookContext ctx = 1;
+  ServerNameProto server = 2;
+}
+
+message PreExecuteProceduresRequest {
+  HookContext ctx = 1;
+  ServerNameProto server = 2;
+}
+message PostExecuteProceduresRequest {
+  HookContext ctx = 1;
+  ServerNameProto server = 2;
+}
+
+message PreUpdateRegionServerConfigurationRequest {
+  HookContext ctx = 1;
+  ServerNameProto server = 2;
+}
+message PostUpdateRegionServerConfigurationRequest {
+  HookContext ctx = 1;
+  ServerNameProto server = 2;
 }

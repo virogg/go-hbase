@@ -28,9 +28,10 @@ const (
 // It is the only place where the SDK crosses between the wire encoding
 // and the user-facing API.
 type dispatcher struct {
-	observer RegionObserver
-	master   MasterObserver
-	logger   *slog.Logger
+	observer     RegionObserver
+	master       MasterObserver
+	regionServer RegionServerObserver
+	logger       *slog.Logger
 }
 
 func newDispatcher(observer RegionObserver, logger *slog.Logger) *dispatcher {
@@ -45,6 +46,13 @@ func newMasterDispatcher(master MasterObserver, logger *slog.Logger) *dispatcher
 		logger = slog.Default()
 	}
 	return &dispatcher{master: master, logger: logger}
+}
+
+func newRegionServerDispatcher(rs RegionServerObserver, logger *slog.Logger) *dispatcher {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &dispatcher{regionServer: rs, logger: logger}
 }
 
 // dispatch decodes one Request frame, looks up the hook in the
@@ -71,6 +79,11 @@ func (d *dispatcher) dispatch(ctx context.Context, req *wire.Message) *wire.Mess
 	if d.master != nil {
 		if entry, ok := masterHooksByID[hookID]; ok {
 			return d.dispatchMaster(ctx, req, &wireReq, entry)
+		}
+	}
+	if d.regionServer != nil {
+		if entry, ok := regionServerHooksByID[hookID]; ok {
+			return d.dispatchRegionServer(ctx, req, &wireReq, entry)
 		}
 	}
 	d.logger.Warn("hbasecop: unknown hook_id",
@@ -101,6 +114,19 @@ func (d *dispatcher) dispatchMaster(ctx context.Context, req *wire.Message, wire
 	}
 	env := envFromHookContext(extractHookCtx(inner))
 	result, callErr := entry.invoke(d.master, ctx, env, inner)
+	return d.responseFrame(req, result, callErr)
+}
+
+func (d *dispatcher) dispatchRegionServer(ctx context.Context, req *wire.Message, wireReq *wirepb.Request, entry regionServerHookEntry) *wire.Message {
+	inner := entry.decode()
+	if err := proto.Unmarshal(wireReq.GetHookCtx(), inner); err != nil {
+		d.logger.Error("hbasecop: invalid "+entry.name+"Request",
+			"err", err, "req_id", req.ReqID, "hook", entry.name)
+		return d.errorFrame(req, errCodeInvalidWireRequest,
+			"invalid "+entry.name+"Request: "+err.Error())
+	}
+	env := envFromHookContext(extractHookCtx(inner))
+	result, callErr := entry.invoke(d.regionServer, ctx, env, inner)
 	return d.responseFrame(req, result, callErr)
 }
 
