@@ -48,8 +48,8 @@
 - [x] T43 Read-path hooks (preGet, scanner)
 - [x] T44 Batch hooks (preBatchMutate)
 - [x] T45 Storage hooks (flush/compact)
-- [ ] T46 Coverage matrix doc + CI gate
-- [ ] **CP-ε1:** RegionObserver complete
+- [x] T46 Coverage matrix doc + CI gate
+- [x] **CP-ε1:** RegionObserver complete
 
 ## Phase 5 — Other Observer types
 - [ ] T51 MasterObserver adapter + tests
