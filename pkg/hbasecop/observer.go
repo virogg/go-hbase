@@ -24,8 +24,19 @@ type MutationProto = hbasepb.MutationProto
 // ObserverContext.bypass() so HBase skips its own implementation of
 // the hook. Post-hooks ignore Bypass — see the RegionObserver method
 // docs for which hooks honour it.
+//
+// BlockedIndices is honored only by batch-shaped hooks (PreBatchMutate
+// today). Each value is a zero-based index into the inbound
+// MutationOperation list; the Java adapter applies
+// MiniBatchOperationInProgress.setOperationStatus(i, SANITY_CHECK_FAILURE)
+// on every listed index, causing that individual mutation to fail while
+// the remaining batch entries proceed. Indices out of range or duplicates
+// are silently ignored on the Java side. Non-batch hooks ignore this
+// field — return Bypass instead if you need to short-circuit a non-batch
+// call.
 type HookResult struct {
-	Bypass bool
+	Bypass         bool
+	BlockedIndices []uint32
 }
 
 // RegionObserver is the public SDK contract for region-scoped HBase

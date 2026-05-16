@@ -585,7 +585,7 @@ public final class RegionObserverAdapter implements RegionObserver {
     PreBatchMutateRequest.Builder b = PreBatchMutateRequest.newBuilder().setCtx(hookCtx);
     addMiniBatchOperations(b::addOperation, miniBatch);
     HookResponse resp = dispatch(HookId.PRE_BATCH_MUTATE.value(), b.build().toByteArray());
-    applyHookResponse(c, resp);
+    applyBatchHookResponse(c, miniBatch, resp);
   }
 
   @Override
@@ -1642,6 +1642,41 @@ public final class RegionObserverAdapter implements RegionObserver {
     }
     if (resp.getBypass()) {
       c.bypass();
+    }
+  }
+
+  /**
+   * Batch-shaped variant of {@link #applyHookResponse}: in addition to honoring {@code bypass}, it
+   * walks {@code resp.getBlockedIndicesList()} and stamps {@code
+   * OperationStatus(SANITY_CHECK_FAILURE)} on every in-range index of the supplied {@link
+   * MiniBatchOperationInProgress}. Out-of-range indices are silently ignored — observer-supplied
+   * indices are treated as a hint, not an authority, so a buggy observer can never crash the
+   * RegionServer's batch path.
+   */
+  private static void applyBatchHookResponse(
+      ObserverContext<? extends RegionCoprocessorEnvironment> c,
+      MiniBatchOperationInProgress<Mutation> miniBatch,
+      HookResponse resp) {
+    if (resp == null) {
+      return;
+    }
+    if (resp.getBypass()) {
+      c.bypass();
+    }
+    if (miniBatch == null || resp.getBlockedIndicesCount() == 0) {
+      return;
+    }
+    int size = miniBatch.size();
+    for (int i = 0; i < resp.getBlockedIndicesCount(); i++) {
+      int idx = resp.getBlockedIndices(i);
+      if (idx < 0 || idx >= size) {
+        continue;
+      }
+      miniBatch.setOperationStatus(
+          idx,
+          new org.apache.hadoop.hbase.regionserver.OperationStatus(
+              org.apache.hadoop.hbase.HConstants.OperationStatusCode.SANITY_CHECK_FAILURE,
+              "hbasecop: mutation blocked by observer"));
     }
   }
 

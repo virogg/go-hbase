@@ -297,6 +297,24 @@ test-integration-read: filter-observer-jar ## T43: full IT — bring up HBase, r
 	  exit $$status
 
 # ---------------------------------------------------------------------------
+# Integration (T44): batch hooks (preBatchMutate) verified end-to-end with
+# partial-block semantics via Table.batch on the filter-observer coproc-jar.
+# ---------------------------------------------------------------------------
+
+.PHONY: test-integration-batch
+test-integration-batch: filter-observer-jar ## T44: full IT — bring up HBase, run BatchPartialBlockIT, tear down.
+	@mkdir -p test/integration/coproc-jars
+	cp $(FILTER_OBSERVER_DIR)/target/filter-observer.jar $(FILTER_COPROC_JAR_STAGED)
+	$(HBASE_COMPOSE_CMD) up -d --build
+	./test/integration/scripts/wait-master-status.sh
+	@set +e; \
+	  $(MVN) $(MVN_FLAGS) test -Dtest=BatchPartialBlockIT -DfailIfNoTests=false; \
+	  status=$$?; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-batch.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
+
+# ---------------------------------------------------------------------------
 # Misc
 # ---------------------------------------------------------------------------
 

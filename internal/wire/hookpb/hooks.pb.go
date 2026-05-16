@@ -435,12 +435,21 @@ func (x *HookError) GetMessage() string {
 // success, observer chose not to bypass and no error. Populating either
 // field triggers the corresponding RegionObserver semantics on the
 // Java side.
+//
+// blocked_indices is honored only by batch-shaped hooks (preBatchMutate
+// today; preBulkLoadHFile / future batch hooks may opt in). Each value
+// is a zero-based index into the inbound MutationOperation list; the
+// Java adapter calls MiniBatchOperationInProgress.setOperationStatus(i,
+// OperationStatus(SANITY_CHECK_FAILURE)) on each so the matching
+// individual mutation fails while the rest of the batch proceeds. The
+// field is ignored on non-batch hooks.
 type HookResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Bypass        bool                   `protobuf:"varint,1,opt,name=bypass,proto3" json:"bypass,omitempty"`
-	Error         *HookError             `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Bypass         bool                   `protobuf:"varint,1,opt,name=bypass,proto3" json:"bypass,omitempty"`
+	Error          *HookError             `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	BlockedIndices []uint32               `protobuf:"varint,3,rep,packed,name=blocked_indices,json=blockedIndices,proto3" json:"blocked_indices,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *HookResponse) Reset() {
@@ -483,6 +492,13 @@ func (x *HookResponse) GetBypass() bool {
 func (x *HookResponse) GetError() *HookError {
 	if x != nil {
 		return x.Error
+	}
+	return nil
+}
+
+func (x *HookResponse) GetBlockedIndices() []uint32 {
+	if x != nil {
+		return x.BlockedIndices
 	}
 	return nil
 }
@@ -5292,10 +5308,11 @@ const file_hooks_proto_rawDesc = "" +
 	"request_id\x18\x03 \x01(\x04R\trequestId\"9\n" +
 	"\tHookError\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\rR\x04code\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"[\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\x84\x01\n" +
 	"\fHookResponse\x12\x16\n" +
 	"\x06bypass\x18\x01 \x01(\bR\x06bypass\x123\n" +
-	"\x05error\x18\x02 \x01(\v2\x1d.virogg.hbasecop.v1.HookErrorR\x05error\"\x87\x01\n" +
+	"\x05error\x18\x02 \x01(\v2\x1d.virogg.hbasecop.v1.HookErrorR\x05error\x12'\n" +
+	"\x0fblocked_indices\x18\x03 \x03(\rR\x0eblockedIndices\"\x87\x01\n" +
 	"\rPrePutRequest\x121\n" +
 	"\x03ctx\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.HookContextR\x03ctx\x12C\n" +
 	"\bmutation\x18\x02 \x01(\v2'.virogg.hbasecop.hbase.v1.MutationProtoR\bmutation\"\x88\x01\n" +

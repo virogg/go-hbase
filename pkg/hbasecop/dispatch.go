@@ -71,7 +71,7 @@ func (d *dispatcher) dispatch(ctx context.Context, req *wire.Message) *wire.Mess
 	env := envFromHookContext(extractHookCtx(inner))
 
 	result, callErr := entry.invoke(d.observer, ctx, env, inner)
-	return d.responseFrame(req, result.Bypass, callErr)
+	return d.responseFrame(req, result, callErr)
 }
 
 // extractHookCtx pulls the shared HookContext out of any per-hook
@@ -110,8 +110,11 @@ func envFromHookContext(hc *hookpb.HookContext) ObserverEnv {
 	}
 }
 
-func (d *dispatcher) responseFrame(req *wire.Message, bypass bool, callErr error) *wire.Message {
-	hookResp := &hookpb.HookResponse{Bypass: bypass}
+func (d *dispatcher) responseFrame(req *wire.Message, result HookResult, callErr error) *wire.Message {
+	hookResp := &hookpb.HookResponse{Bypass: result.Bypass}
+	if len(result.BlockedIndices) > 0 {
+		hookResp.BlockedIndices = append([]uint32(nil), result.BlockedIndices...)
+	}
 	if callErr != nil {
 		hookResp.Error = &hookpb.HookError{Code: 1, Message: callErr.Error()}
 	}

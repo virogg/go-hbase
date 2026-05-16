@@ -31,8 +31,10 @@ type Observer struct {
 	preGetOps       atomic.Uint64
 	preScannerOpens atomic.Uint64
 	preScannerNexts atomic.Uint64
+	preBatchMutates atomic.Uint64
 	blockedGets     atomic.Uint64
 	blockedScans    atomic.Uint64
+	blockedBatchOps atomic.Uint64
 }
 
 // New constructs an Observer that bypasses reads whose target row begins
@@ -85,6 +87,28 @@ func (o *Observer) PreScannerNext(
 	return hbasecop.HookResult{}, nil
 }
 
+// PreBatchMutate returns per-mutation BlockedIndices for every operation
+// in the inbound MiniBatch whose target row matches the blocked prefix.
+// The Java adapter applies SANITY_CHECK_FAILURE per index, so blocked
+// mutations land as individual failures while the rest of the batch
+// proceeds — this is the partial-block path required by T44's AC.
+func (o *Observer) PreBatchMutate(
+	_ context.Context,
+	_ hbasecop.ObserverEnv,
+	req *hookpb.PreBatchMutateRequest,
+) (hbasecop.HookResult, error) {
+	o.preBatchMutates.Add(1)
+	ops := req.GetOperation()
+	var blocked []uint32
+	for i, op := range ops {
+		if o.matchesBlocked(op.GetMutation().GetRow()) {
+			blocked = append(blocked, uint32(i))
+		}
+	}
+	o.blockedBatchOps.Add(uint64(len(blocked)))
+	return hbasecop.HookResult{BlockedIndices: blocked}, nil
+}
+
 // PreGetCount returns the cumulative count of PreGetOp invocations.
 func (o *Observer) PreGetCount() uint64 { return o.preGetOps.Load() }
 
@@ -99,6 +123,12 @@ func (o *Observer) BlockedGetCount() uint64 { return o.blockedGets.Load() }
 
 // BlockedScanCount returns how many scanner-open calls were bypassed.
 func (o *Observer) BlockedScanCount() uint64 { return o.blockedScans.Load() }
+
+// PreBatchMutateCount returns the cumulative count of PreBatchMutate invocations.
+func (o *Observer) PreBatchMutateCount() uint64 { return o.preBatchMutates.Load() }
+
+// BlockedBatchOps returns the cumulative count of individual batch mutations marked blocked.
+func (o *Observer) BlockedBatchOps() uint64 { return o.blockedBatchOps.Load() }
 
 func (o *Observer) matchesBlocked(row []byte) bool {
 	return len(o.blocked) > 0 && bytes.HasPrefix(row, o.blocked)
