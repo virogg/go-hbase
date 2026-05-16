@@ -4,6 +4,7 @@
 package com.virogg.hbasecop.bridge;
 
 import com.virogg.hbasecop.bridge.config.PolicyConfig;
+import com.virogg.hbasecop.bridge.observer.BulkLoadObserverAdapter;
 import com.virogg.hbasecop.bridge.observer.HookDispatcher;
 import com.virogg.hbasecop.bridge.observer.MasterObserverAdapter;
 import com.virogg.hbasecop.bridge.observer.MuxHookDispatcher;
@@ -102,6 +103,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
   private org.apache.hadoop.hbase.coprocessor.MasterObserver masterObserver;
   private org.apache.hadoop.hbase.coprocessor.RegionServerObserver regionServerObserver;
   private org.apache.hadoop.hbase.coprocessor.WALObserver walObserver;
+  private org.apache.hadoop.hbase.coprocessor.BulkLoadObserver bulkLoadObserver;
   private HeartbeatWatchdog watchdog;
   private ScheduledExecutorService watchdogScheduler;
   private ScheduledFuture<?> watchdogTask;
@@ -173,6 +175,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
       masterObserver = new MasterObserverAdapter(dispatcher, policy);
       regionServerObserver = new RegionServerObserverAdapter(dispatcher, policy);
       walObserver = new WALObserverAdapter(dispatcher, policy);
+      bulkLoadObserver = new BulkLoadObserverAdapter(dispatcher, policy);
 
       started = true;
       ok = true;
@@ -222,6 +225,11 @@ public final class CoprocessorRuntime implements AutoCloseable {
   /** The WALObserver to expose to HBase (T53); null until {@link #start()} succeeds. */
   public org.apache.hadoop.hbase.coprocessor.WALObserver getWALObserver() {
     return walObserver;
+  }
+
+  /** The BulkLoadObserver to expose to HBase (T54); null until {@link #start()} succeeds. */
+  public org.apache.hadoop.hbase.coprocessor.BulkLoadObserver getBulkLoadObserver() {
+    return bulkLoadObserver;
   }
 
   /**
@@ -328,6 +336,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
     masterObserver = null;
     regionServerObserver = null;
     walObserver = null;
+    bulkLoadObserver = null;
     watchdog = null;
     restartController = null;
   }

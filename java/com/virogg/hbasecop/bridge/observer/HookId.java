@@ -165,7 +165,11 @@ public enum HookId {
   PRE_WAL_WRITE((byte) 220, "preWALWrite"),
   POST_WAL_WRITE((byte) 221, "postWALWrite"),
   PRE_WAL_ROLL((byte) 222, "preWALRoll"),
-  POST_WAL_ROLL((byte) 223, "postWALRoll");
+  POST_WAL_ROLL((byte) 223, "postWALRoll"),
+
+  // --- BulkLoadObserver (T54). Region-scoped coproc invoked at bulk-load boundaries. ---
+  PRE_PREPARE_BULK_LOAD((byte) 224, "prePrepareBulkLoad"),
+  PRE_CLEANUP_BULK_LOAD((byte) 225, "preCleanupBulkLoad");
 
   private final byte value;
   private final String methodName;
