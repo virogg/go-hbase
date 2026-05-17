@@ -125,7 +125,7 @@ func (d *dispatcher) dispatchRegion(ctx context.Context, req *wire.Message, wire
 		return d.errorFrame(req, errCodeInvalidWireRequest,
 			"invalid "+entry.name+"Request: "+err.Error())
 	}
-	env := envFromHookContext(extractHookCtx(inner))
+	env := envFromHookContext(req.RegionID, extractHookCtx(inner))
 	result, callErr := entry.invoke(d.observer, ctx, env, inner)
 	return d.responseFrame(req, result, callErr)
 }
@@ -138,7 +138,7 @@ func (d *dispatcher) dispatchMaster(ctx context.Context, req *wire.Message, wire
 		return d.errorFrame(req, errCodeInvalidWireRequest,
 			"invalid "+entry.name+"Request: "+err.Error())
 	}
-	env := envFromHookContext(extractHookCtx(inner))
+	env := envFromHookContext(req.RegionID, extractHookCtx(inner))
 	result, callErr := entry.invoke(d.master, ctx, env, inner)
 	return d.responseFrame(req, result, callErr)
 }
@@ -151,7 +151,7 @@ func (d *dispatcher) dispatchRegionServer(ctx context.Context, req *wire.Message
 		return d.errorFrame(req, errCodeInvalidWireRequest,
 			"invalid "+entry.name+"Request: "+err.Error())
 	}
-	env := envFromHookContext(extractHookCtx(inner))
+	env := envFromHookContext(req.RegionID, extractHookCtx(inner))
 	result, callErr := entry.invoke(d.regionServer, ctx, env, inner)
 	return d.responseFrame(req, result, callErr)
 }
@@ -164,7 +164,7 @@ func (d *dispatcher) dispatchWAL(ctx context.Context, req *wire.Message, wireReq
 		return d.errorFrame(req, errCodeInvalidWireRequest,
 			"invalid "+entry.name+"Request: "+err.Error())
 	}
-	env := envFromHookContext(extractHookCtx(inner))
+	env := envFromHookContext(req.RegionID, extractHookCtx(inner))
 	result, callErr := entry.invoke(d.wal, ctx, env, inner)
 	return d.responseFrame(req, result, callErr)
 }
@@ -177,7 +177,7 @@ func (d *dispatcher) dispatchBulkLoad(ctx context.Context, req *wire.Message, wi
 		return d.errorFrame(req, errCodeInvalidWireRequest,
 			"invalid "+entry.name+"Request: "+err.Error())
 	}
-	env := envFromHookContext(extractHookCtx(inner))
+	env := envFromHookContext(req.RegionID, extractHookCtx(inner))
 	result, callErr := entry.invoke(d.bulkLoad, ctx, env, inner)
 	return d.responseFrame(req, result, callErr)
 }
@@ -198,9 +198,9 @@ func extractHookCtx(msg proto.Message) *hookpb.HookContext {
 	return nil
 }
 
-func envFromHookContext(hc *hookpb.HookContext) ObserverEnv {
+func envFromHookContext(regionID uint32, hc *hookpb.HookContext) ObserverEnv {
 	if hc == nil {
-		return ObserverEnv{}
+		return ObserverEnv{RegionID: regionID}
 	}
 	var tn string
 	if t := hc.GetTableName(); t != nil {
@@ -215,6 +215,7 @@ func envFromHookContext(hc *hookpb.HookContext) ObserverEnv {
 	return ObserverEnv{
 		TableName:  tn,
 		RegionName: string(hc.GetRegionName()),
+		RegionID:   regionID,
 	}
 }
 

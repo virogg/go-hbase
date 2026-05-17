@@ -336,6 +336,63 @@ func TestDispatchUnknownHookReturnsError(t *testing.T) {
 	}
 }
 
+// TestDispatchExposesRegionID is the T61 SDK guard: the wire-level
+// region_id allocated by the Java supervisor must surface in
+// ObserverEnv so user code can shard state per region without having
+// to parse the (opaque) encoded region name.
+func TestDispatchExposesRegionID(t *testing.T) {
+	obs := &regionIDRecorder{}
+	d := newDispatcher(obs, nil)
+
+	mut := &hbasepb.MutationProto{Row: []byte("r")}
+	innerBytes, err := proto.Marshal(&hookpb.PrePutRequest{Mutation: mut})
+	if err != nil {
+		t.Fatalf("marshal PrePutRequest: %v", err)
+	}
+
+	for _, regionID := range []uint32{0, 1, 7, 4_294_967_295} {
+		req := &wire.Message{
+			Type:     wire.TypeRequest,
+			ReqID:    uint64(regionID) + 1,
+			RegionID: regionID,
+			HookID:   uint8(HookIDPrePut),
+			Payload:  innerBytes,
+		}
+		resp := d.dispatch(context.Background(), req)
+		if resp == nil {
+			t.Fatalf("region=%d: dispatch returned nil", regionID)
+		}
+		if resp.RegionID != regionID {
+			t.Fatalf("region=%d: resp.RegionID = %d", regionID, resp.RegionID)
+		}
+		if got := obs.last(); got != regionID {
+			t.Fatalf("region=%d: env.RegionID = %d", regionID, got)
+		}
+	}
+}
+
+// regionIDRecorder captures only env.RegionID from PrePut. Keeping the
+// fixture minimal isolates the assertion from unrelated env fields.
+type regionIDRecorder struct {
+	UnimplementedRegionObserver
+
+	mu       sync.Mutex
+	regionID uint32
+}
+
+func (r *regionIDRecorder) PrePut(_ context.Context, env ObserverEnv, _ *hbasepb.MutationProto) (HookResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.regionID = env.RegionID
+	return HookResult{}, nil
+}
+
+func (r *regionIDRecorder) last() uint32 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.regionID
+}
+
 func TestDispatchMalformedRequestPayloadReturnsError(t *testing.T) {
 	obs := &capturingObserver{}
 	d := newDispatcher(obs, nil)
