@@ -1120,7 +1120,7 @@ public final class RegionObserverAdapter implements RegionObserver {
             .build()
             .toByteArray();
     HookResponse resp = dispatch(regionIdFor(c), HookId.PRE_SCANNER_OPEN.value(), reqBytes);
-    applyHookResponse(c, resp);
+    applyScannerOpenHookResponse(scan, resp);
   }
 
   @Override
@@ -1731,8 +1731,48 @@ public final class RegionObserverAdapter implements RegionObserver {
       return;
     }
     if (resp.getBypass()) {
-      c.bypass();
+      requestBypass(c);
     }
+  }
+
+  /**
+   * Sentinel row used to neuter a scan an observer asked to bypass. HBase 2.5's {@code
+   * preScannerOpen} {@link ObserverContext} is <em>not</em> bypassable, so "bypass this scan" is
+   * realized instead by constraining the {@link Scan} to the empty half-open interval {@code
+   * [SENTINEL, SENTINEL)} — the opened scanner then yields no rows, the observable equivalent of a
+   * bypassed scan.
+   */
+  private static final byte[] SCAN_BYPASS_SENTINEL = {0};
+
+  /**
+   * Invoke {@link ObserverContext#bypass()} defensively. HBase 2.5 only makes the ObserverContext
+   * bypassable for a subset of hooks; calling {@code bypass()} on a non-bypassable hook throws
+   * {@link UnsupportedOperationException}, which — uncaught from a coprocessor — aborts the entire
+   * RegionServer. An over-eager observer must never be able to do that, so a rejected bypass is
+   * downgraded to a WARN and the host operation proceeds unbypassed.
+   */
+  private static void requestBypass(ObserverContext<? extends RegionCoprocessorEnvironment> c) {
+    try {
+      c.bypass();
+    } catch (UnsupportedOperationException e) {
+      LOG.log(
+          Level.WARNING,
+          "hbasecop: observer requested bypass on a hook that does not support it — ignored",
+          e);
+    }
+  }
+
+  /**
+   * Apply a {@code preScannerOpen} HookResponse. Unlike {@link #applyHookResponse}, a bypass here
+   * cannot go through {@link ObserverContext#bypass()} — HBase 2.5 does not make {@code
+   * preScannerOpen} bypassable. Instead the {@link Scan} itself is constrained to an empty row
+   * range so the scanner about to be opened yields no rows.
+   */
+  private static void applyScannerOpenHookResponse(Scan scan, HookResponse resp) {
+    if (resp == null || !resp.getBypass()) {
+      return;
+    }
+    scan.withStartRow(SCAN_BYPASS_SENTINEL, true).withStopRow(SCAN_BYPASS_SENTINEL, false);
   }
 
   /**
@@ -1751,7 +1791,7 @@ public final class RegionObserverAdapter implements RegionObserver {
       return;
     }
     if (resp.getBypass()) {
-      c.bypass();
+      requestBypass(c);
     }
     if (miniBatch == null || resp.getBlockedIndicesCount() == 0) {
       return;
