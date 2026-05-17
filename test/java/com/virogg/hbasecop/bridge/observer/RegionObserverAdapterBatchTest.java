@@ -83,7 +83,7 @@ class RegionObserverAdapterBatchTest {
   @Test
   void preBatchMutateAppliesPerIndexFailureForBlockedIndices() throws Exception {
     primeMiniBatch(5);
-    when(dispatcher.dispatchHook(anyByte(), any(), any()))
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any()))
         .thenReturn(
             HookResponse.newBuilder()
                 .addBlockedIndices(1)
@@ -107,7 +107,7 @@ class RegionObserverAdapterBatchTest {
   @Test
   void preBatchMutateLeavesMiniBatchAloneWhenNoBlockedIndices() throws Exception {
     primeMiniBatch(3);
-    when(dispatcher.dispatchHook(anyByte(), any(), any()))
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any()))
         .thenReturn(HookResponse.newBuilder().build().toByteArray());
 
     adapter.preBatchMutate(ctx, miniBatch);
@@ -118,7 +118,7 @@ class RegionObserverAdapterBatchTest {
   @Test
   void preBatchMutateIgnoresOutOfRangeBlockedIndices() throws Exception {
     primeMiniBatch(3);
-    when(dispatcher.dispatchHook(anyByte(), any(), any()))
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any()))
         .thenReturn(
             HookResponse.newBuilder()
                 .addBlockedIndices(0)

@@ -19,15 +19,20 @@ import java.util.concurrent.TimeoutException;
 public interface HookDispatcher {
 
   /**
-   * Send a Request frame carrying {@code hookCtxBytes} for {@code hookId} and synchronously wait
-   * for the matching peer response. Returns the serialized {@code hookpb.HookResponse} bytes (i.e.
-   * the {@code wirepb.Response.hook_resp} payload) the adapter then parses into a {@code
-   * HookResponse} proto.
+   * Send a Request frame carrying {@code hookCtxBytes} for {@code hookId} on the route identified
+   * by {@code regionId} and synchronously wait for the matching peer response. Returns the
+   * serialized {@code hookpb.HookResponse} bytes (i.e. the {@code wirepb.Response.hook_resp}
+   * payload) the adapter then parses into a {@code HookResponse} proto.
+   *
+   * <p>{@code regionId} is the wire-level routing key for T61 multi-region multiplexing. Pass the
+   * id allocated by {@link com.virogg.hbasecop.multiplex.RegionIdAllocator} for the RegionObserver
+   * instance owning this call, or {@code 0} for observer surfaces without region scope (Master,
+   * RegionServer, WAL, BulkLoad).
    *
    * @throws IOException on transport-level failure
    * @throws InterruptedException if the caller thread is interrupted while waiting
    * @throws TimeoutException if no response arrives within {@code timeout}
    */
-  byte[] dispatchHook(byte hookId, byte[] hookCtxBytes, Duration timeout)
+  byte[] dispatchHook(int regionId, byte hookId, byte[] hookCtxBytes, Duration timeout)
       throws IOException, InterruptedException, TimeoutException;
 }

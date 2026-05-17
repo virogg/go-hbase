@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyByte;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -63,7 +64,7 @@ class RegionServerObserverAdapterTest {
   void preStopRegionServer_encodesServerNameAndDispatches()
       throws IOException, InterruptedException, java.util.concurrent.TimeoutException {
     when(dispatcher.dispatchHook(
-            eq(HookId.PRE_STOP_REGION_SERVER.value()), any(), any(Duration.class)))
+            anyInt(), eq(HookId.PRE_STOP_REGION_SERVER.value()), any(), any(Duration.class)))
         .thenReturn(HookResponse.newBuilder().build().toByteArray());
 
     adapter.preStopRegionServer(ctx);
@@ -71,7 +72,10 @@ class RegionServerObserverAdapterTest {
     ArgumentCaptor<byte[]> payload = ArgumentCaptor.forClass(byte[].class);
     verify(dispatcher, times(1))
         .dispatchHook(
-            eq(HookId.PRE_STOP_REGION_SERVER.value()), payload.capture(), any(Duration.class));
+            anyInt(),
+            eq(HookId.PRE_STOP_REGION_SERVER.value()),
+            payload.capture(),
+            any(Duration.class));
     PreStopRegionServerRequest req = parseStop(payload.getValue());
     assertEquals("rs-7.example.com", req.getServer().getHost(), "host not round-tripped");
     assertEquals(16020, req.getServer().getPort(), "port not round-tripped");
@@ -82,7 +86,7 @@ class RegionServerObserverAdapterTest {
   @Test
   void preStopRegionServer_bypassPropagates()
       throws IOException, InterruptedException, java.util.concurrent.TimeoutException {
-    when(dispatcher.dispatchHook(anyByte(), any(), any(Duration.class)))
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any(Duration.class)))
         .thenReturn(HookResponse.newBuilder().setBypass(true).build().toByteArray());
 
     adapter.preStopRegionServer(ctx);
@@ -97,7 +101,7 @@ class RegionServerObserverAdapterTest {
     conf.set("hbasecop.policy.preStopRegionServer", "strict");
     adapter = new RegionServerObserverAdapter(dispatcher, new PolicyConfig(conf));
 
-    when(dispatcher.dispatchHook(anyByte(), any(), any(Duration.class)))
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any(Duration.class)))
         .thenReturn(
             HookResponse.newBuilder()
                 .setError(HookError.newBuilder().setCode(7).setMessage("stop vetoed"))
@@ -115,13 +119,14 @@ class RegionServerObserverAdapterTest {
   void postExecuteProcedures_dispatches()
       throws IOException, InterruptedException, java.util.concurrent.TimeoutException {
     when(dispatcher.dispatchHook(
-            eq(HookId.POST_EXECUTE_PROCEDURES.value()), any(), any(Duration.class)))
+            anyInt(), eq(HookId.POST_EXECUTE_PROCEDURES.value()), any(), any(Duration.class)))
         .thenReturn(HookResponse.newBuilder().build().toByteArray());
 
     adapter.postExecuteProcedures(ctx);
 
     verify(dispatcher, times(1))
-        .dispatchHook(eq(HookId.POST_EXECUTE_PROCEDURES.value()), any(), any(Duration.class));
+        .dispatchHook(
+            anyInt(), eq(HookId.POST_EXECUTE_PROCEDURES.value()), any(), any(Duration.class));
   }
 
   // --- helpers -------------------------------------------------------------

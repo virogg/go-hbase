@@ -164,16 +164,58 @@ public final class RegionObserverAdapter implements RegionObserver {
 
   private final HookDispatcher dispatcher;
   private final PolicyConfig policyConfig;
+  private final com.virogg.hbasecop.multiplex.RegionIdAllocator regionIdAllocator;
 
   public RegionObserverAdapter(HookDispatcher dispatcher, PolicyConfig policyConfig) {
+    this(dispatcher, policyConfig, new com.virogg.hbasecop.multiplex.RegionIdAllocator());
+  }
+
+  /**
+   * T61 ctor: inject a shared {@link com.virogg.hbasecop.multiplex.RegionIdAllocator} so multiple
+   * adapter instances on one RegionServer share the same region_id space (T63 lifecycle refcount).
+   */
+  public RegionObserverAdapter(
+      HookDispatcher dispatcher,
+      PolicyConfig policyConfig,
+      com.virogg.hbasecop.multiplex.RegionIdAllocator regionIdAllocator) {
     this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
     this.policyConfig = Objects.requireNonNull(policyConfig, "policyConfig");
+    this.regionIdAllocator = Objects.requireNonNull(regionIdAllocator, "regionIdAllocator");
+  }
+
+  // --- Region lifecycle: region_id allocation (T61) ---------------------
+  //
+  // RegionObserver fires preOpen / postClose per region open/close on a
+  // RegionServer — exactly the right granularity for the per-region wire
+  // routing key. We mint the id in preOpen (so every subsequent hook
+  // dispatched for this region carries a non-zero region_id) and release
+  // in postClose (so reopen gets a fresh monotonic id, never recycled).
+  // The Coprocessor.start(env) lifecycle on the supertype fires once per
+  // RegionServer load and is therefore not suitable for per-region scope.
+
+  /**
+   * Public hook for the supervisor / tests to register a region without going through {@link
+   * #preOpen(ObserverContext)} (e.g. the T61 unit tests skip the preOpen dispatch round-trip and
+   * just want the allocator wired). Idempotent.
+   */
+  public void start(RegionCoprocessorEnvironment env) {
+    Objects.requireNonNull(env, "env");
+    regionIdAllocator.allocate(env.getRegion().getRegionInfo().getEncodedName());
+  }
+
+  /** Counterpart of {@link #start(RegionCoprocessorEnvironment)}. */
+  public void stop(RegionCoprocessorEnvironment env) {
+    Objects.requireNonNull(env, "env");
+    regionIdAllocator.release(env.getRegion().getRegionInfo().getEncodedName());
   }
 
   // --- Lifecycle ---------------------------------------------------------
 
   @Override
   public void preOpen(ObserverContext<RegionCoprocessorEnvironment> c) throws IOException {
+    // T61: allocate the wire region_id before dispatching so the preOpen
+    // frame and every subsequent hook on this region share the same id.
+    regionIdAllocator.allocate(c.getEnvironment().getRegion().getRegionInfo().getEncodedName());
     dispatchStub(c, HookId.PRE_OPEN, PreOpenRequest.newBuilder());
   }
 
@@ -192,7 +234,7 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setAbortRequested(abortRequested)
             .build()
             .toByteArray();
-    HookResponse resp = dispatch(HookId.PRE_CLOSE.value(), reqBytes);
+    HookResponse resp = dispatch(regionIdFor(c), HookId.PRE_CLOSE.value(), reqBytes);
     applyHookResponse(c, resp);
   }
 
@@ -202,10 +244,14 @@ public final class RegionObserverAdapter implements RegionObserver {
     try {
       PostCloseRequest req =
           PostCloseRequest.newBuilder().setCtx(hookCtx).setAbortRequested(abortRequested).build();
-      HookResponse resp = dispatch(HookId.POST_CLOSE.value(), req.toByteArray());
+      HookResponse resp = dispatch(regionIdFor(c), HookId.POST_CLOSE.value(), req.toByteArray());
       applyHookResponse(c, resp);
     } catch (IOException e) {
       LOG.log(Level.WARNING, "hbasecop: postClose threw IOException, swallowed (best-effort)", e);
+    } finally {
+      // T61: release the region_id mapping last, so postClose's own frame
+      // is dispatched under the same id as the rest of the region's lifecycle.
+      regionIdAllocator.release(c.getEnvironment().getRegion().getRegionInfo().getEncodedName());
     }
   }
 
@@ -283,7 +329,8 @@ public final class RegionObserverAdapter implements RegionObserver {
     PreCompactSelectionRequest.Builder b =
         PreCompactSelectionRequest.newBuilder().setCtx(hookCtx).setColumnFamily(familyOf(store));
     addStoreFiles(b::addCandidate, candidates);
-    HookResponse resp = dispatch(HookId.PRE_COMPACT_SELECTION.value(), b.build().toByteArray());
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.PRE_COMPACT_SELECTION.value(), b.build().toByteArray());
     applyHookResponse(c, resp);
   }
 
@@ -300,7 +347,8 @@ public final class RegionObserverAdapter implements RegionObserver {
           PostCompactSelectionRequest.newBuilder().setCtx(hookCtx).setColumnFamily(familyOf(store));
       addStoreFiles(b::addSelected, selected);
       b.setRequest(compactionSummary(request));
-      HookResponse resp = dispatch(HookId.POST_COMPACT_SELECTION.value(), b.build().toByteArray());
+      HookResponse resp =
+          dispatch(regionIdFor(c), HookId.POST_COMPACT_SELECTION.value(), b.build().toByteArray());
       applyHookResponse(c, resp);
     } catch (IOException e) {
       LOG.log(
@@ -328,7 +376,7 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setRequest(compactionSummary(request))
             .build()
             .toByteArray();
-    HookResponse resp = dispatch(HookId.PRE_COMPACT_SCANNER_OPEN.value(), reqBytes);
+    HookResponse resp = dispatch(regionIdFor(c), HookId.PRE_COMPACT_SCANNER_OPEN.value(), reqBytes);
     applyHookResponse(c, resp);
   }
 
@@ -350,7 +398,7 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setRequest(compactionSummary(request))
             .build()
             .toByteArray();
-    HookResponse resp = dispatch(HookId.PRE_COMPACT.value(), reqBytes);
+    HookResponse resp = dispatch(regionIdFor(c), HookId.PRE_COMPACT.value(), reqBytes);
     applyHookResponse(c, resp);
     return scanner;
   }
@@ -372,7 +420,8 @@ public final class RegionObserverAdapter implements RegionObserver {
     if (resultFile != null) {
       b.setResultFile(storeFilePath(resultFile));
     }
-    HookResponse resp = dispatch(HookId.POST_COMPACT.value(), b.build().toByteArray());
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.POST_COMPACT.value(), b.build().toByteArray());
     applyHookResponse(c, resp);
   }
 
@@ -434,7 +483,7 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setGet(GetConverter.toProto(get))
             .build()
             .toByteArray();
-    HookResponse resp = dispatch(HookId.PRE_GET_OP.value(), reqBytes);
+    HookResponse resp = dispatch(regionIdFor(c), HookId.PRE_GET_OP.value(), reqBytes);
     applyHookResponse(c, resp);
   }
 
@@ -449,7 +498,8 @@ public final class RegionObserverAdapter implements RegionObserver {
         b.addResult(CellConverter.toProto(cell));
       }
     }
-    HookResponse resp = dispatch(HookId.POST_GET_OP.value(), b.build().toByteArray());
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.POST_GET_OP.value(), b.build().toByteArray());
     applyHookResponse(c, resp);
   }
 
@@ -464,7 +514,7 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setExists(exists)
             .build()
             .toByteArray();
-    HookResponse resp = dispatch(HookId.PRE_EXISTS.value(), reqBytes);
+    HookResponse resp = dispatch(regionIdFor(c), HookId.PRE_EXISTS.value(), reqBytes);
     applyHookResponse(c, resp);
     return exists;
   }
@@ -480,7 +530,7 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setExists(exists)
             .build()
             .toByteArray();
-    HookResponse resp = dispatch(HookId.POST_EXISTS.value(), reqBytes);
+    HookResponse resp = dispatch(regionIdFor(c), HookId.POST_EXISTS.value(), reqBytes);
     applyHookResponse(c, resp);
     return exists;
   }
@@ -495,7 +545,7 @@ public final class RegionObserverAdapter implements RegionObserver {
     MutationProto mutation = MutationConverter.toProto(put);
     byte[] reqBytes =
         PrePutRequest.newBuilder().setCtx(hookCtx).setMutation(mutation).build().toByteArray();
-    HookResponse resp = dispatch(HOOK_PRE_PUT, reqBytes);
+    HookResponse resp = dispatch(regionIdFor(c), HOOK_PRE_PUT, reqBytes);
     applyHookResponse(c, resp);
   }
 
@@ -507,7 +557,7 @@ public final class RegionObserverAdapter implements RegionObserver {
     MutationProto mutation = MutationConverter.toProto(put);
     byte[] reqBytes =
         PostPutRequest.newBuilder().setCtx(hookCtx).setMutation(mutation).build().toByteArray();
-    HookResponse resp = dispatch(HOOK_POST_PUT, reqBytes);
+    HookResponse resp = dispatch(regionIdFor(c), HOOK_POST_PUT, reqBytes);
     applyHookResponse(c, resp);
   }
 
@@ -527,7 +577,7 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setMutation(MutationConverter.toProto(delete))
             .build()
             .toByteArray();
-    HookResponse resp = dispatch(HookId.PRE_DELETE.value(), reqBytes);
+    HookResponse resp = dispatch(regionIdFor(c), HookId.PRE_DELETE.value(), reqBytes);
     applyHookResponse(c, resp);
   }
 
@@ -545,7 +595,7 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setMutation(MutationConverter.toProto(delete))
             .build()
             .toByteArray();
-    HookResponse resp = dispatch(HookId.POST_DELETE.value(), reqBytes);
+    HookResponse resp = dispatch(regionIdFor(c), HookId.POST_DELETE.value(), reqBytes);
     applyHookResponse(c, resp);
   }
 
@@ -570,7 +620,10 @@ public final class RegionObserverAdapter implements RegionObserver {
       b.setGet(GetConverter.toProto(get));
     }
     HookResponse resp =
-        dispatch(HookId.PRE_PREPARE_TIME_STAMP_FOR_DELETE_VERSION.value(), b.build().toByteArray());
+        dispatch(
+            regionIdFor(c),
+            HookId.PRE_PREPARE_TIME_STAMP_FOR_DELETE_VERSION.value(),
+            b.build().toByteArray());
     applyHookResponse(c, resp);
   }
 
@@ -584,7 +637,8 @@ public final class RegionObserverAdapter implements RegionObserver {
     HookContext hookCtx = buildHookContext(c);
     PreBatchMutateRequest.Builder b = PreBatchMutateRequest.newBuilder().setCtx(hookCtx);
     addMiniBatchOperations(b::addOperation, miniBatch);
-    HookResponse resp = dispatch(HookId.PRE_BATCH_MUTATE.value(), b.build().toByteArray());
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.PRE_BATCH_MUTATE.value(), b.build().toByteArray());
     applyBatchHookResponse(c, miniBatch, resp);
   }
 
@@ -596,7 +650,8 @@ public final class RegionObserverAdapter implements RegionObserver {
     HookContext hookCtx = buildHookContext(c);
     PostBatchMutateRequest.Builder b = PostBatchMutateRequest.newBuilder().setCtx(hookCtx);
     addMiniBatchOperations(b::addOperation, miniBatch);
-    HookResponse resp = dispatch(HookId.POST_BATCH_MUTATE.value(), b.build().toByteArray());
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.POST_BATCH_MUTATE.value(), b.build().toByteArray());
     applyHookResponse(c, resp);
   }
 
@@ -611,7 +666,10 @@ public final class RegionObserverAdapter implements RegionObserver {
         PostBatchMutateIndispensablyRequest.newBuilder().setCtx(hookCtx).setSuccess(success);
     addMiniBatchOperations(b::addOperation, miniBatch);
     HookResponse resp =
-        dispatch(HookId.POST_BATCH_MUTATE_INDISPENSABLY.value(), b.build().toByteArray());
+        dispatch(
+            regionIdFor(c),
+            HookId.POST_BATCH_MUTATE_INDISPENSABLY.value(),
+            b.build().toByteArray());
     applyHookResponse(c, resp);
   }
 
@@ -625,7 +683,8 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setOperation(op == null ? -1 : op.ordinal())
             .build()
             .toByteArray();
-    HookResponse resp = dispatch(HookId.POST_START_REGION_OPERATION.value(), reqBytes);
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.POST_START_REGION_OPERATION.value(), reqBytes);
     applyHookResponse(c, resp);
   }
 
@@ -639,7 +698,8 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setOperation(op == null ? -1 : op.ordinal())
             .build()
             .toByteArray();
-    HookResponse resp = dispatch(HookId.POST_CLOSE_REGION_OPERATION.value(), reqBytes);
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.POST_CLOSE_REGION_OPERATION.value(), reqBytes);
     applyHookResponse(c, resp);
   }
 
@@ -667,7 +727,8 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setComparator(ComparatorConverter.toProto(comparator))
             .setPut(MutationConverter.toProto(put))
             .setInputResult(result);
-    HookResponse resp = dispatch(HookId.PRE_CHECK_AND_PUT.value(), b.build().toByteArray());
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.PRE_CHECK_AND_PUT.value(), b.build().toByteArray());
     applyHookResponse(c, resp);
     return result;
   }
@@ -694,7 +755,8 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setComparator(ComparatorConverter.toProto(comparator))
             .setPut(MutationConverter.toProto(put))
             .setInputResult(result);
-    HookResponse resp = dispatch(HookId.POST_CHECK_AND_PUT.value(), b.build().toByteArray());
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.POST_CHECK_AND_PUT.value(), b.build().toByteArray());
     applyHookResponse(c, resp);
     return result;
   }
@@ -722,7 +784,10 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setPut(MutationConverter.toProto(put))
             .setInputResult(result);
     HookResponse resp =
-        dispatch(HookId.PRE_CHECK_AND_PUT_AFTER_ROW_LOCK.value(), b.build().toByteArray());
+        dispatch(
+            regionIdFor(c),
+            HookId.PRE_CHECK_AND_PUT_AFTER_ROW_LOCK.value(),
+            b.build().toByteArray());
     applyHookResponse(c, resp);
     return result;
   }
@@ -751,7 +816,8 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setComparator(ComparatorConverter.toProto(comparator))
             .setDelete(MutationConverter.toProto(delete))
             .setInputResult(result);
-    HookResponse resp = dispatch(HookId.PRE_CHECK_AND_DELETE.value(), b.build().toByteArray());
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.PRE_CHECK_AND_DELETE.value(), b.build().toByteArray());
     applyHookResponse(c, resp);
     return result;
   }
@@ -778,7 +844,8 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setComparator(ComparatorConverter.toProto(comparator))
             .setDelete(MutationConverter.toProto(delete))
             .setInputResult(result);
-    HookResponse resp = dispatch(HookId.POST_CHECK_AND_DELETE.value(), b.build().toByteArray());
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.POST_CHECK_AND_DELETE.value(), b.build().toByteArray());
     applyHookResponse(c, resp);
     return result;
   }
@@ -806,7 +873,10 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setDelete(MutationConverter.toProto(delete))
             .setInputResult(result);
     HookResponse resp =
-        dispatch(HookId.PRE_CHECK_AND_DELETE_AFTER_ROW_LOCK.value(), b.build().toByteArray());
+        dispatch(
+            regionIdFor(c),
+            HookId.PRE_CHECK_AND_DELETE_AFTER_ROW_LOCK.value(),
+            b.build().toByteArray());
     applyHookResponse(c, resp);
     return result;
   }
@@ -827,7 +897,7 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setInputResult(buildCheckAndMutateResult(result))
             .build()
             .toByteArray();
-    HookResponse resp = dispatch(HookId.PRE_CHECK_AND_MUTATE.value(), reqBytes);
+    HookResponse resp = dispatch(regionIdFor(c), HookId.PRE_CHECK_AND_MUTATE.value(), reqBytes);
     applyHookResponse(c, resp);
     return result;
   }
@@ -846,7 +916,7 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setInputResult(buildCheckAndMutateResult(result))
             .build()
             .toByteArray();
-    HookResponse resp = dispatch(HookId.POST_CHECK_AND_MUTATE.value(), reqBytes);
+    HookResponse resp = dispatch(regionIdFor(c), HookId.POST_CHECK_AND_MUTATE.value(), reqBytes);
     applyHookResponse(c, resp);
     return result;
   }
@@ -865,7 +935,8 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setInputResult(buildCheckAndMutateResult(result))
             .build()
             .toByteArray();
-    HookResponse resp = dispatch(HookId.PRE_CHECK_AND_MUTATE_AFTER_ROW_LOCK.value(), reqBytes);
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.PRE_CHECK_AND_MUTATE_AFTER_ROW_LOCK.value(), reqBytes);
     applyHookResponse(c, resp);
     return result;
   }
@@ -948,7 +1019,7 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setAppend(MutationConverter.toProto(append))
             .build()
             .toByteArray();
-    HookResponse resp = dispatch(HookId.PRE_APPEND.value(), reqBytes);
+    HookResponse resp = dispatch(regionIdFor(c), HookId.PRE_APPEND.value(), reqBytes);
     applyHookResponse(c, resp);
     return null;
   }
@@ -963,7 +1034,8 @@ public final class RegionObserverAdapter implements RegionObserver {
     if (result != null) {
       b.setResult(ResultConverter.toProto(result));
     }
-    HookResponse resp = dispatch(HookId.POST_APPEND.value(), b.build().toByteArray());
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.POST_APPEND.value(), b.build().toByteArray());
     applyHookResponse(c, resp);
     return result;
   }
@@ -978,7 +1050,8 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setAppend(MutationConverter.toProto(append))
             .build()
             .toByteArray();
-    HookResponse resp = dispatch(HookId.PRE_APPEND_AFTER_ROW_LOCK.value(), reqBytes);
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.PRE_APPEND_AFTER_ROW_LOCK.value(), reqBytes);
     applyHookResponse(c, resp);
     return null;
   }
@@ -995,7 +1068,7 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setIncrement(MutationConverter.toProto(increment))
             .build()
             .toByteArray();
-    HookResponse resp = dispatch(HookId.PRE_INCREMENT.value(), reqBytes);
+    HookResponse resp = dispatch(regionIdFor(c), HookId.PRE_INCREMENT.value(), reqBytes);
     applyHookResponse(c, resp);
     return null;
   }
@@ -1012,7 +1085,8 @@ public final class RegionObserverAdapter implements RegionObserver {
     if (result != null) {
       b.setResult(ResultConverter.toProto(result));
     }
-    HookResponse resp = dispatch(HookId.POST_INCREMENT.value(), b.build().toByteArray());
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.POST_INCREMENT.value(), b.build().toByteArray());
     applyHookResponse(c, resp);
     return result;
   }
@@ -1027,7 +1101,8 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setIncrement(MutationConverter.toProto(increment))
             .build()
             .toByteArray();
-    HookResponse resp = dispatch(HookId.PRE_INCREMENT_AFTER_ROW_LOCK.value(), reqBytes);
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.PRE_INCREMENT_AFTER_ROW_LOCK.value(), reqBytes);
     applyHookResponse(c, resp);
     return null;
   }
@@ -1044,7 +1119,7 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setScan(ScanConverter.toProto(scan))
             .build()
             .toByteArray();
-    HookResponse resp = dispatch(HookId.PRE_SCANNER_OPEN.value(), reqBytes);
+    HookResponse resp = dispatch(regionIdFor(c), HookId.PRE_SCANNER_OPEN.value(), reqBytes);
     applyHookResponse(c, resp);
   }
 
@@ -1059,7 +1134,7 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setScan(ScanConverter.toProto(scan))
             .build()
             .toByteArray();
-    HookResponse resp = dispatch(HookId.POST_SCANNER_OPEN.value(), reqBytes);
+    HookResponse resp = dispatch(regionIdFor(c), HookId.POST_SCANNER_OPEN.value(), reqBytes);
     applyHookResponse(c, resp);
     return scanner;
   }
@@ -1080,7 +1155,7 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setHasMore(hasMore)
             .build()
             .toByteArray();
-    HookResponse resp = dispatch(HookId.PRE_SCANNER_NEXT.value(), reqBytes);
+    HookResponse resp = dispatch(regionIdFor(c), HookId.PRE_SCANNER_NEXT.value(), reqBytes);
     applyHookResponse(c, resp);
     return hasMore;
   }
@@ -1101,7 +1176,8 @@ public final class RegionObserverAdapter implements RegionObserver {
         b.addResult(ResultConverter.toProto(r));
       }
     }
-    HookResponse resp = dispatch(HookId.POST_SCANNER_NEXT.value(), b.build().toByteArray());
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.POST_SCANNER_NEXT.value(), b.build().toByteArray());
     applyHookResponse(c, resp);
     return hasMore;
   }
@@ -1121,7 +1197,7 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setHasMore(hasMore)
             .build()
             .toByteArray();
-    HookResponse resp = dispatch(HookId.POST_SCANNER_FILTER_ROW.value(), reqBytes);
+    HookResponse resp = dispatch(regionIdFor(c), HookId.POST_SCANNER_FILTER_ROW.value(), reqBytes);
     applyHookResponse(c, resp);
     return hasMore;
   }
@@ -1153,7 +1229,7 @@ public final class RegionObserverAdapter implements RegionObserver {
                         store.getColumnFamilyDescriptor().getName()))
             .build()
             .toByteArray();
-    HookResponse resp = dispatch(HookId.PRE_STORE_SCANNER_OPEN.value(), reqBytes);
+    HookResponse resp = dispatch(regionIdFor(c), HookId.PRE_STORE_SCANNER_OPEN.value(), reqBytes);
     applyHookResponse(c, resp);
   }
 
@@ -1173,7 +1249,8 @@ public final class RegionObserverAdapter implements RegionObserver {
     if (edits != null) {
       b.setEditsPath(edits.toString());
     }
-    HookResponse resp = dispatch(HookId.PRE_REPLAY_WA_LS.value(), b.build().toByteArray());
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.PRE_REPLAY_WA_LS.value(), b.build().toByteArray());
     applyHookResponse(c, resp);
   }
 
@@ -1191,7 +1268,8 @@ public final class RegionObserverAdapter implements RegionObserver {
     if (edits != null) {
       b.setEditsPath(edits.toString());
     }
-    HookResponse resp = dispatch(HookId.POST_REPLAY_WA_LS.value(), b.build().toByteArray());
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.POST_REPLAY_WA_LS.value(), b.build().toByteArray());
     applyHookResponse(c, resp);
   }
 
@@ -1213,7 +1291,8 @@ public final class RegionObserverAdapter implements RegionObserver {
     if (logEdit != null) {
       b.setLogEdit(walEdit(logEdit));
     }
-    HookResponse resp = dispatch(HookId.PRE_WAL_RESTORE.value(), b.build().toByteArray());
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.PRE_WAL_RESTORE.value(), b.build().toByteArray());
     applyHookResponse(c, resp);
   }
 
@@ -1235,7 +1314,8 @@ public final class RegionObserverAdapter implements RegionObserver {
     if (logEdit != null) {
       b.setLogEdit(walEdit(logEdit));
     }
-    HookResponse resp = dispatch(HookId.POST_WAL_RESTORE.value(), b.build().toByteArray());
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.POST_WAL_RESTORE.value(), b.build().toByteArray());
     applyHookResponse(c, resp);
   }
 
@@ -1256,7 +1336,8 @@ public final class RegionObserverAdapter implements RegionObserver {
                 .build());
       }
     }
-    HookResponse resp = dispatch(HookId.PRE_BULK_LOAD_H_FILE.value(), b.build().toByteArray());
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.PRE_BULK_LOAD_H_FILE.value(), b.build().toByteArray());
     applyHookResponse(c, resp);
   }
 
@@ -1292,7 +1373,8 @@ public final class RegionObserverAdapter implements RegionObserver {
         b.addFinalPath(fb);
       }
     }
-    HookResponse resp = dispatch(HookId.POST_BULK_LOAD_H_FILE.value(), b.build().toByteArray());
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.POST_BULK_LOAD_H_FILE.value(), b.build().toByteArray());
     applyHookResponse(c, resp);
   }
 
@@ -1316,7 +1398,8 @@ public final class RegionObserverAdapter implements RegionObserver {
                 .build());
       }
     }
-    HookResponse resp = dispatch(HookId.PRE_COMMIT_STORE_FILE.value(), b.build().toByteArray());
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.PRE_COMMIT_STORE_FILE.value(), b.build().toByteArray());
     applyHookResponse(c, resp);
   }
 
@@ -1336,7 +1419,7 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setDestinationPath(dstPath == null ? "" : dstPath.toString())
             .build()
             .toByteArray();
-    HookResponse resp = dispatch(HookId.POST_COMMIT_STORE_FILE.value(), reqBytes);
+    HookResponse resp = dispatch(regionIdFor(c), HookId.POST_COMMIT_STORE_FILE.value(), reqBytes);
     applyHookResponse(c, resp);
   }
 
@@ -1361,7 +1444,8 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setSizeBytes(size)
             .build()
             .toByteArray();
-    HookResponse resp = dispatch(HookId.PRE_STORE_FILE_READER_OPEN.value(), reqBytes);
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.PRE_STORE_FILE_READER_OPEN.value(), reqBytes);
     applyHookResponse(c, resp);
     return reader;
   }
@@ -1385,7 +1469,8 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setSizeBytes(size)
             .build()
             .toByteArray();
-    HookResponse resp = dispatch(HookId.POST_STORE_FILE_READER_OPEN.value(), reqBytes);
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.POST_STORE_FILE_READER_OPEN.value(), reqBytes);
     applyHookResponse(c, resp);
     return reader;
   }
@@ -1459,7 +1544,8 @@ public final class RegionObserverAdapter implements RegionObserver {
     if (newCell != null) {
       b.setNewCell(CellConverter.toProto(newCell));
     }
-    HookResponse resp = dispatch(HookId.POST_MUTATION_BEFORE_WAL.value(), b.build().toByteArray());
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.POST_MUTATION_BEFORE_WAL.value(), b.build().toByteArray());
     applyHookResponse(c, resp);
     return newCell;
   }
@@ -1480,7 +1566,8 @@ public final class RegionObserverAdapter implements RegionObserver {
         b.addCellPair(buildCellPair(p));
       }
     }
-    HookResponse resp = dispatch(HookId.POST_INCREMENT_BEFORE_WAL.value(), b.build().toByteArray());
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.POST_INCREMENT_BEFORE_WAL.value(), b.build().toByteArray());
     applyHookResponse(c, resp);
     return cellPairs;
   }
@@ -1501,7 +1588,8 @@ public final class RegionObserverAdapter implements RegionObserver {
         b.addCellPair(buildCellPair(p));
       }
     }
-    HookResponse resp = dispatch(HookId.POST_APPEND_BEFORE_WAL.value(), b.build().toByteArray());
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.POST_APPEND_BEFORE_WAL.value(), b.build().toByteArray());
     applyHookResponse(c, resp);
     return cellPairs;
   }
@@ -1530,7 +1618,8 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setTrackerClass(tracker == null ? "" : tracker.getClass().getName())
             .build()
             .toByteArray();
-    HookResponse resp = dispatch(HookId.POST_INSTANTIATE_DELETE_TRACKER.value(), reqBytes);
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.POST_INSTANTIATE_DELETE_TRACKER.value(), reqBytes);
     applyHookResponse(c, resp);
     return tracker;
   }
@@ -1547,7 +1636,8 @@ public final class RegionObserverAdapter implements RegionObserver {
     if (edit != null) {
       b.setLogEdit(walEdit(edit));
     }
-    HookResponse resp = dispatch(HookId.PRE_WAL_APPEND.value(), b.build().toByteArray());
+    HookResponse resp =
+        dispatch(regionIdFor(c), HookId.PRE_WAL_APPEND.value(), b.build().toByteArray());
     applyHookResponse(c, resp);
   }
 
@@ -1568,7 +1658,7 @@ public final class RegionObserverAdapter implements RegionObserver {
     HookContext hookCtx = buildHookContext(c);
     Descriptors.FieldDescriptor ctxField = builder.getDescriptorForType().findFieldByNumber(1);
     builder.setField(ctxField, hookCtx);
-    HookResponse resp = dispatch(hookId.value(), builder.build().toByteArray());
+    HookResponse resp = dispatch(regionIdFor(c), hookId.value(), builder.build().toByteArray());
     applyHookResponse(c, resp);
   }
 
@@ -1598,11 +1688,11 @@ public final class RegionObserverAdapter implements RegionObserver {
    * the call failed and the hook's policy is best-effort (caller must treat as no-op). Strict
    * failures throw {@link IOException}.
    */
-  private HookResponse dispatch(byte hookId, byte[] reqBytes) throws IOException {
+  private HookResponse dispatch(int regionId, byte hookId, byte[] reqBytes) throws IOException {
     HookPolicy pol = policyConfig.forHook(hookId);
     final byte[] respBytes;
     try {
-      respBytes = dispatcher.dispatchHook(hookId, reqBytes, pol.timeout());
+      respBytes = dispatcher.dispatchHook(regionId, hookId, reqBytes, pol.timeout());
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new IOException("hbasecop: hook " + hookId + " dispatch interrupted", e);
@@ -1678,6 +1768,15 @@ public final class RegionObserverAdapter implements RegionObserver {
               org.apache.hadoop.hbase.HConstants.OperationStatusCode.SANITY_CHECK_FAILURE,
               "hbasecop: mutation blocked by observer"));
     }
+  }
+
+  /**
+   * Resolve the wire-level region_id for {@code c}. Returns {@code 0} if {@link
+   * #start(org.apache.hadoop.hbase.CoprocessorEnvironment)} has not yet registered the region —
+   * preserving the Phase-2 wire shape so an unwired adapter still works against the Go runtime.
+   */
+  private int regionIdFor(ObserverContext<? extends RegionCoprocessorEnvironment> c) {
+    return regionIdAllocator.idFor(c.getEnvironment().getRegion().getRegionInfo().getEncodedName());
   }
 
   private static HookContext buildHookContext(

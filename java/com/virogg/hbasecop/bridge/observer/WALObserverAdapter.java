@@ -198,7 +198,7 @@ public final class WALObserverAdapter implements WALObserver {
     HookPolicy pol = policyConfig.forHook(hookId);
     final byte[] respBytes;
     try {
-      respBytes = dispatcher.dispatchHook(hookId, reqBytes, pol.timeout());
+      respBytes = dispatcher.dispatchHook(0, hookId, reqBytes, pol.timeout());
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new IOException("hbasecop: hook " + hookId + " dispatch interrupted", e);

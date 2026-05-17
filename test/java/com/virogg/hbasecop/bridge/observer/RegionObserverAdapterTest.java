@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyByte;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -20,6 +21,7 @@ import com.virogg.hbasecop.bridge.wire.pb.HookError;
 import com.virogg.hbasecop.bridge.wire.pb.HookResponse;
 import com.virogg.hbasecop.bridge.wire.pb.PrePutRequest;
 import com.virogg.hbasecop.hbase.v1.ClientProtos.MutationProto;
+import com.virogg.hbasecop.multiplex.RegionIdAllocator;
 import java.io.IOException;
 import java.time.Duration;
 import org.apache.hadoop.conf.Configuration;
@@ -80,7 +82,7 @@ class RegionObserverAdapterTest {
 
   @Test
   void prePutSerializesMutationAndDispatchesAsHook1() throws Exception {
-    when(dispatcher.dispatchHook(anyByte(), any(), any()))
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any()))
         .thenReturn(HookResponse.newBuilder().build().toByteArray());
 
     adapter.prePut(ctx, samplePut(), walEdit, Durability.USE_DEFAULT);
@@ -88,7 +90,10 @@ class RegionObserverAdapterTest {
     ArgumentCaptor<byte[]> bytesCap = ArgumentCaptor.forClass(byte[].class);
     verify(dispatcher)
         .dispatchHook(
-            eq(RegionObserverAdapter.HOOK_PRE_PUT), bytesCap.capture(), eq(Duration.ofSeconds(5)));
+            anyInt(),
+            eq(RegionObserverAdapter.HOOK_PRE_PUT),
+            bytesCap.capture(),
+            eq(Duration.ofSeconds(5)));
 
     PrePutRequest decoded = PrePutRequest.parseFrom(bytesCap.getValue());
     assertEquals("row-7", decoded.getMutation().getRow().toStringUtf8());
@@ -116,7 +121,7 @@ class RegionObserverAdapterTest {
 
   @Test
   void prePutBypassResponseTriggersObserverBypass() throws Exception {
-    when(dispatcher.dispatchHook(anyByte(), any(), any()))
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any()))
         .thenReturn(HookResponse.newBuilder().setBypass(true).build().toByteArray());
 
     adapter.prePut(ctx, samplePut(), walEdit, Durability.USE_DEFAULT);
@@ -126,7 +131,7 @@ class RegionObserverAdapterTest {
 
   @Test
   void prePutErrorResponseThrowsIOExceptionUnderStrictDefault() throws Exception {
-    when(dispatcher.dispatchHook(anyByte(), any(), any()))
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any()))
         .thenReturn(
             HookResponse.newBuilder()
                 .setError(HookError.newBuilder().setCode(7).setMessage("policy rejected"))
@@ -143,17 +148,18 @@ class RegionObserverAdapterTest {
 
   @Test
   void postPutDispatchesAsHook2() throws Exception {
-    when(dispatcher.dispatchHook(anyByte(), any(), any()))
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any()))
         .thenReturn(HookResponse.newBuilder().build().toByteArray());
 
     adapter.postPut(ctx, samplePut(), walEdit, Durability.USE_DEFAULT);
 
-    verify(dispatcher).dispatchHook(eq(RegionObserverAdapter.HOOK_POST_PUT), any(), any());
+    verify(dispatcher)
+        .dispatchHook(anyInt(), eq(RegionObserverAdapter.HOOK_POST_PUT), any(), any());
   }
 
   @Test
   void prePutTimeoutMapsToIOExceptionUnderStrictDefault() throws Exception {
-    when(dispatcher.dispatchHook(anyByte(), any(), any()))
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any()))
         .thenThrow(new java.util.concurrent.TimeoutException("ring stalled"));
 
     IOException ex =
@@ -167,7 +173,7 @@ class RegionObserverAdapterTest {
 
   @Test
   void prePutInterruptPropagatesAndPreservesInterruptFlag() throws Exception {
-    when(dispatcher.dispatchHook(anyByte(), any(), any()))
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any()))
         .thenThrow(new InterruptedException("supervisor stopped"));
 
     IOException ex =
@@ -184,7 +190,7 @@ class RegionObserverAdapterTest {
 
   @Test
   void postPutErrorResponseSwallowedUnderDefaultBestEffort() throws Exception {
-    when(dispatcher.dispatchHook(anyByte(), any(), any()))
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any()))
         .thenReturn(
             HookResponse.newBuilder()
                 .setError(HookError.newBuilder().setCode(7).setMessage("go rejected"))
@@ -199,7 +205,7 @@ class RegionObserverAdapterTest {
 
   @Test
   void postPutTimeoutSwallowedUnderDefaultBestEffort() throws Exception {
-    when(dispatcher.dispatchHook(anyByte(), any(), any()))
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any()))
         .thenThrow(new java.util.concurrent.TimeoutException("ring stalled"));
 
     adapter.postPut(ctx, samplePut(), walEdit, Durability.USE_DEFAULT);
@@ -211,7 +217,7 @@ class RegionObserverAdapterTest {
 
   @Test
   void postPutTransportIOExceptionSwallowedUnderDefaultBestEffort() throws Exception {
-    when(dispatcher.dispatchHook(anyByte(), any(), any()))
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any()))
         .thenThrow(new IOException("channel closed"));
 
     adapter.postPut(ctx, samplePut(), walEdit, Durability.USE_DEFAULT);
@@ -225,7 +231,7 @@ class RegionObserverAdapterTest {
     conf.set("hbasecop.policy.prePut", "best-effort");
     adapter = new RegionObserverAdapter(dispatcher, new PolicyConfig(conf));
 
-    when(dispatcher.dispatchHook(anyByte(), any(), any()))
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any()))
         .thenReturn(
             HookResponse.newBuilder()
                 .setError(HookError.newBuilder().setCode(1).setMessage("nope"))
@@ -243,7 +249,7 @@ class RegionObserverAdapterTest {
     conf.set("hbasecop.policy.postPut", "strict");
     adapter = new RegionObserverAdapter(dispatcher, new PolicyConfig(conf));
 
-    when(dispatcher.dispatchHook(anyByte(), any(), any()))
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any()))
         .thenReturn(
             HookResponse.newBuilder()
                 .setError(HookError.newBuilder().setCode(2).setMessage("go rejected"))
@@ -263,12 +269,115 @@ class RegionObserverAdapterTest {
     conf.set("hbasecop.timeout.prePut", "250ms");
     adapter = new RegionObserverAdapter(dispatcher, new PolicyConfig(conf));
 
-    when(dispatcher.dispatchHook(anyByte(), any(), any()))
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any()))
         .thenReturn(HookResponse.newBuilder().build().toByteArray());
 
     adapter.prePut(ctx, samplePut(), walEdit, Durability.USE_DEFAULT);
 
     verify(dispatcher)
-        .dispatchHook(eq(RegionObserverAdapter.HOOK_PRE_PUT), any(), eq(Duration.ofMillis(250)));
+        .dispatchHook(
+            anyInt(), eq(RegionObserverAdapter.HOOK_PRE_PUT), any(), eq(Duration.ofMillis(250)));
+  }
+
+  // ---------- T61: region_id routing through dispatch ----------
+
+  @Test
+  void prePutDispatchesAllocatedRegionIdFromEnv() throws Exception {
+    RegionIdAllocator allocator = new RegionIdAllocator();
+    adapter =
+        new RegionObserverAdapter(
+            dispatcher, new PolicyConfig(new Configuration(false)), allocator);
+
+    // Region "abc1234" — already stubbed in @BeforeEach.
+    when(regionInfo.getEncodedName()).thenReturn("abc1234");
+    adapter.start(env);
+
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any()))
+        .thenReturn(HookResponse.newBuilder().build().toByteArray());
+
+    adapter.prePut(ctx, samplePut(), walEdit, Durability.USE_DEFAULT);
+
+    int expected = allocator.idFor("abc1234");
+    assertTrue(expected > 0, "start(env) must allocate a non-zero region id");
+    verify(dispatcher)
+        .dispatchHook(eq(expected), eq(RegionObserverAdapter.HOOK_PRE_PUT), any(), any());
+  }
+
+  @Test
+  void distinctRegionsDispatchUnderDistinctRegionIds() throws Exception {
+    RegionIdAllocator allocator = new RegionIdAllocator();
+    adapter =
+        new RegionObserverAdapter(
+            dispatcher, new PolicyConfig(new Configuration(false)), allocator);
+
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any()))
+        .thenReturn(HookResponse.newBuilder().build().toByteArray());
+
+    // First region.
+    when(regionInfo.getEncodedName()).thenReturn("region-a");
+    adapter.start(env);
+    adapter.prePut(ctx, samplePut(), walEdit, Durability.USE_DEFAULT);
+
+    // Second region — same adapter instance, different env scope. The
+    // T63 design holds one adapter per RegionObserver registration, so
+    // distinct regions go through distinct adapter instances in practice;
+    // exercising one adapter across two regions here keeps the test focused
+    // on the allocator contract.
+    RegionInfo regionInfo2 = org.mockito.Mockito.mock(RegionInfo.class);
+    Region region2 = org.mockito.Mockito.mock(Region.class);
+    RegionCoprocessorEnvironment env2 =
+        org.mockito.Mockito.mock(RegionCoprocessorEnvironment.class);
+    @SuppressWarnings("unchecked")
+    ObserverContext<RegionCoprocessorEnvironment> ctx2 =
+        org.mockito.Mockito.mock(ObserverContext.class);
+    when(ctx2.getEnvironment()).thenReturn(env2);
+    when(env2.getRegion()).thenReturn(region2);
+    when(region2.getRegionInfo()).thenReturn(regionInfo2);
+    when(regionInfo2.getTable()).thenReturn(TableName.valueOf("default", "users"));
+    when(regionInfo2.getEncodedNameAsBytes()).thenReturn("region-b".getBytes());
+    when(regionInfo2.getEncodedName()).thenReturn("region-b");
+    adapter.start(env2);
+    adapter.prePut(ctx2, samplePut(), walEdit, Durability.USE_DEFAULT);
+
+    int idA = allocator.idFor("region-a");
+    int idB = allocator.idFor("region-b");
+    assertTrue(idA > 0 && idB > 0 && idA != idB, "regions must receive distinct non-zero ids");
+
+    verify(dispatcher).dispatchHook(eq(idA), eq(RegionObserverAdapter.HOOK_PRE_PUT), any(), any());
+    verify(dispatcher).dispatchHook(eq(idB), eq(RegionObserverAdapter.HOOK_PRE_PUT), any(), any());
+  }
+
+  @Test
+  void stopReleasesRegionIdMapping() throws Exception {
+    RegionIdAllocator allocator = new RegionIdAllocator();
+    adapter =
+        new RegionObserverAdapter(
+            dispatcher, new PolicyConfig(new Configuration(false)), allocator);
+
+    when(regionInfo.getEncodedName()).thenReturn("abc1234");
+    adapter.start(env);
+    assertTrue(allocator.idFor("abc1234") > 0);
+
+    adapter.stop(env);
+    assertEquals(0, allocator.idFor("abc1234"));
+  }
+
+  @Test
+  void prePutWithoutStartFallsBackToZeroRegionId() throws Exception {
+    RegionIdAllocator allocator = new RegionIdAllocator();
+    adapter =
+        new RegionObserverAdapter(
+            dispatcher, new PolicyConfig(new Configuration(false)), allocator);
+
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any()))
+        .thenReturn(HookResponse.newBuilder().build().toByteArray());
+
+    when(regionInfo.getEncodedName()).thenReturn("never-started");
+    adapter.prePut(ctx, samplePut(), walEdit, Durability.USE_DEFAULT);
+
+    // No start(env) ⇒ allocator empty ⇒ idFor=0 ⇒ wire region_id=0. This
+    // matches the Phase-2 wire shape so hooks issued before lifecycle
+    // wiring kicks in still reach the Go side, just without region scope.
+    verify(dispatcher).dispatchHook(eq(0), eq(RegionObserverAdapter.HOOK_PRE_PUT), any(), any());
   }
 }

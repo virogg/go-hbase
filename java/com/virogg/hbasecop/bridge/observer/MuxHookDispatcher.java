@@ -37,7 +37,7 @@ public final class MuxHookDispatcher implements HookDispatcher {
   }
 
   @Override
-  public byte[] dispatchHook(byte hookId, byte[] hookCtxBytes, Duration timeout)
+  public byte[] dispatchHook(int regionId, byte hookId, byte[] hookCtxBytes, Duration timeout)
       throws IOException, InterruptedException, TimeoutException {
     Objects.requireNonNull(hookCtxBytes, "hookCtxBytes");
     Objects.requireNonNull(timeout, "timeout");
@@ -46,8 +46,9 @@ public final class MuxHookDispatcher implements HookDispatcher {
     // dispatcher unmarshals from Message.payload (see pkg/hbasecop/dispatch.go).
     byte[] requestPayload =
         Request.newBuilder().setHookCtx(ByteString.copyFrom(hookCtxBytes)).build().toByteArray();
-    // regionId is reserved for T61 multi-region routing; passing 0 keeps the wire shape stable.
-    Message req = new Message(FrameType.REQUEST, 0L, 0, hookId, requestPayload);
+    // regionId is the T61 multi-region routing key, allocated by the adapter
+    // via RegionIdAllocator on RegionObserver.start(env). 0 = no region scope.
+    Message req = new Message(FrameType.REQUEST, 0L, regionId, hookId, requestPayload);
     CompletableFuture<Message> fut = mux.call(req);
 
     final Message resp;

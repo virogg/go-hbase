@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyByte;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -71,14 +72,16 @@ class MasterObserverAdapterTest {
     TableName tn = TableName.valueOf("default", "make-me");
     TableDescriptor desc = sampleDescriptor(tn);
 
-    when(dispatcher.dispatchHook(eq(HookId.PRE_CREATE_TABLE.value()), any(), any(Duration.class)))
+    when(dispatcher.dispatchHook(
+            anyInt(), eq(HookId.PRE_CREATE_TABLE.value()), any(), any(Duration.class)))
         .thenReturn(HookResponse.newBuilder().build().toByteArray());
 
     adapter.preCreateTable(ctx, desc, new org.apache.hadoop.hbase.client.RegionInfo[0]);
 
     ArgumentCaptor<byte[]> payload = ArgumentCaptor.forClass(byte[].class);
     verify(dispatcher, times(1))
-        .dispatchHook(eq(HookId.PRE_CREATE_TABLE.value()), payload.capture(), any(Duration.class));
+        .dispatchHook(
+            anyInt(), eq(HookId.PRE_CREATE_TABLE.value()), payload.capture(), any(Duration.class));
     PreCreateTableRequest req = parseCreate(payload.getValue());
     assertArrayEquals(
         "default".getBytes(),
@@ -97,7 +100,7 @@ class MasterObserverAdapterTest {
     TableName tn = TableName.valueOf("default", "bypass-me");
     TableDescriptor desc = sampleDescriptor(tn);
 
-    when(dispatcher.dispatchHook(anyByte(), any(), any(Duration.class)))
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any(Duration.class)))
         .thenReturn(HookResponse.newBuilder().setBypass(true).build().toByteArray());
 
     adapter.preCreateTable(ctx, desc, new org.apache.hadoop.hbase.client.RegionInfo[0]);
@@ -112,7 +115,7 @@ class MasterObserverAdapterTest {
     conf.set("hbasecop.policy.preCreateTable", "strict");
     adapter = new MasterObserverAdapter(dispatcher, new PolicyConfig(conf));
 
-    when(dispatcher.dispatchHook(anyByte(), any(), any(Duration.class)))
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any(Duration.class)))
         .thenReturn(
             HookResponse.newBuilder()
                 .setError(HookError.newBuilder().setCode(7).setMessage("nope"))
@@ -138,14 +141,16 @@ class MasterObserverAdapterTest {
   @Test
   void preDeleteTable_encodesTableName()
       throws IOException, InterruptedException, java.util.concurrent.TimeoutException {
-    when(dispatcher.dispatchHook(eq(HookId.PRE_DELETE_TABLE.value()), any(), any(Duration.class)))
+    when(dispatcher.dispatchHook(
+            anyInt(), eq(HookId.PRE_DELETE_TABLE.value()), any(), any(Duration.class)))
         .thenReturn(HookResponse.newBuilder().build().toByteArray());
 
     adapter.preDeleteTable(ctx, TableName.valueOf("ns1", "drop-me"));
 
     ArgumentCaptor<byte[]> payload = ArgumentCaptor.forClass(byte[].class);
     verify(dispatcher, times(1))
-        .dispatchHook(eq(HookId.PRE_DELETE_TABLE.value()), payload.capture(), any(Duration.class));
+        .dispatchHook(
+            anyInt(), eq(HookId.PRE_DELETE_TABLE.value()), payload.capture(), any(Duration.class));
     PreDeleteTableRequest req = parseDelete(payload.getValue());
     assertArrayEquals("ns1".getBytes(), req.getTableName().getNamespace().toByteArray());
     assertArrayEquals("drop-me".getBytes(), req.getTableName().getQualifier().toByteArray());
@@ -154,7 +159,7 @@ class MasterObserverAdapterTest {
   @Test
   void preModifyTable_passesNewDescriptorThrough()
       throws IOException, InterruptedException, java.util.concurrent.TimeoutException {
-    when(dispatcher.dispatchHook(anyByte(), any(), any(Duration.class)))
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any(Duration.class)))
         .thenReturn(HookResponse.newBuilder().build().toByteArray());
 
     TableName tn = TableName.valueOf("default", "modify-me");
