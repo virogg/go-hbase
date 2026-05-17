@@ -111,57 +111,65 @@ final class ReadPathFilterIT {
         dropTable(admin, tn);
       }
 
-      createTableWithCoproc(admin, tn);
-      try (Table table = conn.getTable(tn)) {
-        // Pre-populate: 3 block-* and 3 ok-* rows. Puts are allowed (observer
-        // only inspects read-path hooks).
-        populate(table, BLOCKED_PREFIX, N_PER_GROUP);
-        populate(table, ALLOWED_PREFIX, N_PER_GROUP);
+      // Create the table WITHOUT the coprocessor and pre-populate first: the
+      // shared filter-observer also implements preBatchMutate (added in T44),
+      // which vetoes every block-* mutation. Attaching the observer only after
+      // the 3 block-* and 3 ok-* rows are in place keeps this test focused on
+      // the read-path hooks instead of tripping the write-path block.
+      createTablePlain(admin, tn);
+      try {
+        try (Table seed = conn.getTable(tn)) {
+          populate(seed, BLOCKED_PREFIX, N_PER_GROUP);
+          populate(seed, ALLOWED_PREFIX, N_PER_GROUP);
+        }
+        attachCoproc(admin, tn);
 
-        // --- Get path ----------------------------------------------------
-        Result blockedGet =
-            table.get(new Get((BLOCKED_PREFIX + "1").getBytes(StandardCharsets.UTF_8)));
-        assertNotNull(blockedGet, "blocked Get must return a non-null (empty) Result");
-        assertTrue(
-            blockedGet.isEmpty(),
-            "blocked Get must return empty Result (observer bypassed HBase Get) — got "
-                + blockedGet);
+        try (Table table = conn.getTable(tn)) {
+          // --- Get path --------------------------------------------------
+          Result blockedGet =
+              table.get(new Get((BLOCKED_PREFIX + "1").getBytes(StandardCharsets.UTF_8)));
+          assertNotNull(blockedGet, "blocked Get must return a non-null (empty) Result");
+          assertTrue(
+              blockedGet.isEmpty(),
+              "blocked Get must return empty Result (observer bypassed HBase Get) — got "
+                  + blockedGet);
 
-        Result allowedGet =
-            table.get(new Get((ALLOWED_PREFIX + "1").getBytes(StandardCharsets.UTF_8)));
-        assertNotNull(allowedGet, "allowed Get must return a non-null Result");
-        assertFalse(
-            allowedGet.isEmpty(), "allowed Get must return the stored cell — got empty Result");
+          Result allowedGet =
+              table.get(new Get((ALLOWED_PREFIX + "1").getBytes(StandardCharsets.UTF_8)));
+          assertNotNull(allowedGet, "allowed Get must return a non-null Result");
+          assertFalse(
+              allowedGet.isEmpty(), "allowed Get must return the stored cell — got empty Result");
 
-        // --- Scan path ---------------------------------------------------
-        List<String> blockedRows = scanRowKeys(table, BLOCKED_PREFIX, BLOCKED_PREFIX + "~");
-        assertEquals(
-            0,
-            blockedRows.size(),
-            "blocked scan must return 0 rows (observer bypassed scanner open) — got "
-                + blockedRows);
+          // --- Scan path -------------------------------------------------
+          List<String> blockedRows = scanRowKeys(table, BLOCKED_PREFIX, BLOCKED_PREFIX + "~");
+          assertEquals(
+              0,
+              blockedRows.size(),
+              "blocked scan must return 0 rows (observer bypassed scanner open) — got "
+                  + blockedRows);
 
-        List<String> allowedRows = scanRowKeys(table, ALLOWED_PREFIX, ALLOWED_PREFIX + "~");
-        assertEquals(
-            N_PER_GROUP,
-            allowedRows.size(),
-            "allowed scan must return all " + N_PER_GROUP + " ok-* rows — got " + allowedRows);
+          List<String> allowedRows = scanRowKeys(table, ALLOWED_PREFIX, ALLOWED_PREFIX + "~");
+          assertEquals(
+              N_PER_GROUP,
+              allowedRows.size(),
+              "allowed scan must return all " + N_PER_GROUP + " ok-* rows — got " + allowedRows);
 
-        // --- Hooks fired -------------------------------------------------
-        // Wait briefly for runtime logs to flush, then assert the Go side
-        // produced its startup log (proves the filter-observer ELF ran),
-        // plus the runtime emitted hook-handling traffic.
-        waitForLog(baselinePreGet, 1, "filter-observer: starting", LOG_GRACE);
-        long startupCount = countLogLines("filter-observer: starting") - baselinePreGet;
-        assertTrue(
-            startupCount >= 1,
-            "filter-observer should have logged its startup line at least once — got "
-                + startupCount);
+          // --- Hooks fired -----------------------------------------------
+          // Wait briefly for runtime logs to flush, then assert the Go side
+          // produced its startup log (proves the filter-observer ELF ran),
+          // plus the runtime emitted hook-handling traffic.
+          waitForLog(baselinePreGet, 1, "filter-observer: starting", LOG_GRACE);
+          long startupCount = countLogLines("filter-observer: starting") - baselinePreGet;
+          assertTrue(
+              startupCount >= 1,
+              "filter-observer should have logged its startup line at least once — got "
+                  + startupCount);
 
-        long runtimeCount = countLogLines("hbasecop-runtime") - baselineRuntime;
-        assertTrue(
-            runtimeCount >= 1,
-            "Java bridge must have logged runtime activity — got " + runtimeCount);
+          long runtimeCount = countLogLines("hbasecop-runtime") - baselineRuntime;
+          assertTrue(
+              runtimeCount >= 1,
+              "Java bridge must have logged runtime activity — got " + runtimeCount);
+        }
       } finally {
         dropTable(admin, tn);
       }
@@ -196,10 +204,23 @@ final class ReadPathFilterIT {
         "HBase cluster not ready within " + deadline + ": " + lastFailure, lastFailure);
   }
 
-  private static void createTableWithCoproc(Admin admin, TableName tn) throws IOException {
+  /** Create the bare table — no coprocessor — so the seed Puts are not observed. */
+  private static void createTablePlain(Admin admin, TableName tn) throws IOException {
     TableDescriptor desc =
         TableDescriptorBuilder.newBuilder(tn)
             .setColumnFamily(ColumnFamilyDescriptorBuilder.of(CF))
+            .build();
+    admin.createTable(desc);
+  }
+
+  /**
+   * Attach the filter-observer coprocessor to an existing table via the standard
+   * disable/modify/enable cycle. Run after seeding so the observer never sees the seed mutations.
+   */
+  private static void attachCoproc(Admin admin, TableName tn) throws IOException {
+    admin.disableTable(tn);
+    TableDescriptor updated =
+        TableDescriptorBuilder.newBuilder(admin.getDescriptor(tn))
             .setValue(CONF_KEY_BLOCKED_PREFIX, BLOCKED_PREFIX)
             .setCoprocessor(
                 CoprocessorDescriptorBuilder.newBuilder(COPROC_CLASSNAME)
@@ -207,7 +228,8 @@ final class ReadPathFilterIT {
                     .setPriority(0)
                     .build())
             .build();
-    admin.createTable(desc);
+    admin.modifyTable(updated);
+    admin.enableTable(tn);
   }
 
   private static void dropTable(Admin admin, TableName tn) throws IOException {

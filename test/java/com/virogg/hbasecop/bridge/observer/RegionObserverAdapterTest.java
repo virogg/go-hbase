@@ -3,6 +3,7 @@
 
 package com.virogg.hbasecop.bridge.observer;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -11,6 +12,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyByte;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -29,6 +31,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.Region;
@@ -379,5 +382,55 @@ class RegionObserverAdapterTest {
     // matches the Phase-2 wire shape so hooks issued before lifecycle
     // wiring kicks in still reach the Go side, just without region scope.
     verify(dispatcher).dispatchHook(eq(0), eq(RegionObserverAdapter.HOOK_PRE_PUT), any(), any());
+  }
+
+  // ---------- bypass() safety on non-bypassable hooks ----------
+
+  @Test
+  void bypassRequestOnNonBypassableHookDoesNotPropagate() throws Exception {
+    // HBase 2.5 makes ObserverContext#bypass() throw UnsupportedOperationException
+    // on hooks that are not bypassable; uncaught, that aborts the whole
+    // RegionServer. An over-eager observer must never be able to do that.
+    doThrow(new UnsupportedOperationException("This method does not support 'bypass'."))
+        .when(ctx)
+        .bypass();
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any()))
+        .thenReturn(HookResponse.newBuilder().setBypass(true).build().toByteArray());
+
+    // Must complete normally — the rejected bypass is downgraded to a WARN.
+    adapter.prePut(ctx, samplePut(), walEdit, Durability.USE_DEFAULT);
+  }
+
+  // ---------- preScannerOpen bypass → empty Scan (HBase 2.5) ----------
+
+  @Test
+  void preScannerOpenBypassConstrainsScanToEmptyRange() throws Exception {
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any()))
+        .thenReturn(HookResponse.newBuilder().setBypass(true).build().toByteArray());
+
+    Scan scan = new Scan();
+    adapter.preScannerOpen(ctx, scan);
+
+    // preScannerOpen is not bypassable in HBase 2.5, so the adapter must NOT
+    // call ObserverContext#bypass(); it neuters the Scan to an empty
+    // half-open row interval [sentinel, sentinel) instead.
+    verify(ctx, never()).bypass();
+    assertArrayEquals(new byte[] {0}, scan.getStartRow());
+    assertArrayEquals(new byte[] {0}, scan.getStopRow());
+    assertTrue(scan.includeStartRow(), "start row must be inclusive");
+    assertFalse(scan.includeStopRow(), "stop row must be exclusive → empty interval");
+  }
+
+  @Test
+  void preScannerOpenWithoutBypassLeavesScanUntouched() throws Exception {
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any()))
+        .thenReturn(HookResponse.newBuilder().build().toByteArray());
+
+    Scan scan = new Scan().withStartRow("ok-".getBytes()).withStopRow("ok-~".getBytes());
+    adapter.preScannerOpen(ctx, scan);
+
+    verify(ctx, never()).bypass();
+    assertArrayEquals("ok-".getBytes(), scan.getStartRow());
+    assertArrayEquals("ok-~".getBytes(), scan.getStopRow());
   }
 }
