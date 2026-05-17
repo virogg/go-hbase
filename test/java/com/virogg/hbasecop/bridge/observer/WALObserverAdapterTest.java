@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyByte;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -64,14 +65,16 @@ class WALObserverAdapterTest {
     when(logKey.getSequenceId()).thenReturn(987L);
     when(logKey.getWriteTime()).thenReturn(1_700_000_000_000L);
     when(logKey.getTableName()).thenReturn(TableName.valueOf("default", "t"));
-    when(dispatcher.dispatchHook(eq(HookId.PRE_WAL_WRITE.value()), any(), any(Duration.class)))
+    when(dispatcher.dispatchHook(
+            anyInt(), eq(HookId.PRE_WAL_WRITE.value()), any(), any(Duration.class)))
         .thenReturn(HookResponse.newBuilder().build().toByteArray());
 
     adapter.preWALWrite(ctx, null, logKey, null);
 
     ArgumentCaptor<byte[]> payload = ArgumentCaptor.forClass(byte[].class);
     verify(dispatcher, times(1))
-        .dispatchHook(eq(HookId.PRE_WAL_WRITE.value()), payload.capture(), any(Duration.class));
+        .dispatchHook(
+            anyInt(), eq(HookId.PRE_WAL_WRITE.value()), payload.capture(), any(Duration.class));
     PreWALWriteRequest req = parseWrite(payload.getValue());
     assertEquals(987L, req.getLogKey().getLogSeqNum(), "log seq num not round-tripped");
     verify(ctx, times(0)).bypass();
@@ -80,7 +83,7 @@ class WALObserverAdapterTest {
   @Test
   void preWALWrite_bypassPropagates()
       throws IOException, InterruptedException, java.util.concurrent.TimeoutException {
-    when(dispatcher.dispatchHook(anyByte(), any(), any(Duration.class)))
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any(Duration.class)))
         .thenReturn(HookResponse.newBuilder().setBypass(true).build().toByteArray());
 
     adapter.preWALWrite(ctx, null, null, null);
@@ -95,7 +98,7 @@ class WALObserverAdapterTest {
     conf.set("hbasecop.policy.preWALWrite", "strict");
     adapter = new WALObserverAdapter(dispatcher, new PolicyConfig(conf));
 
-    when(dispatcher.dispatchHook(anyByte(), any(), any(Duration.class)))
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any(Duration.class)))
         .thenReturn(
             HookResponse.newBuilder()
                 .setError(HookError.newBuilder().setCode(7).setMessage("wal vetoed"))
@@ -113,14 +116,16 @@ class WALObserverAdapterTest {
   @Test
   void postWALRoll_encodesPathsAndDispatches()
       throws IOException, InterruptedException, java.util.concurrent.TimeoutException {
-    when(dispatcher.dispatchHook(eq(HookId.POST_WAL_ROLL.value()), any(), any(Duration.class)))
+    when(dispatcher.dispatchHook(
+            anyInt(), eq(HookId.POST_WAL_ROLL.value()), any(), any(Duration.class)))
         .thenReturn(HookResponse.newBuilder().build().toByteArray());
 
     adapter.postWALRoll(ctx, new Path("/wal/old.1"), new Path("/wal/new.2"));
 
     ArgumentCaptor<byte[]> payload = ArgumentCaptor.forClass(byte[].class);
     verify(dispatcher, times(1))
-        .dispatchHook(eq(HookId.POST_WAL_ROLL.value()), payload.capture(), any(Duration.class));
+        .dispatchHook(
+            anyInt(), eq(HookId.POST_WAL_ROLL.value()), payload.capture(), any(Duration.class));
     PostWALRollRequest req = parseRoll(payload.getValue());
     assertTrue(req.getOldPath().endsWith("/wal/old.1"), "old path not round-tripped");
     assertTrue(req.getNewPath().endsWith("/wal/new.2"), "new path not round-tripped");

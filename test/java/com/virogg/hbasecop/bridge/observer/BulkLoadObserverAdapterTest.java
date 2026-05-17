@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyByte;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -64,7 +65,7 @@ class BulkLoadObserverAdapterTest {
   void prePrepareBulkLoad_encodesTableNameAndDispatches()
       throws IOException, InterruptedException, java.util.concurrent.TimeoutException {
     when(dispatcher.dispatchHook(
-            eq(HookId.PRE_PREPARE_BULK_LOAD.value()), any(), any(Duration.class)))
+            anyInt(), eq(HookId.PRE_PREPARE_BULK_LOAD.value()), any(), any(Duration.class)))
         .thenReturn(HookResponse.newBuilder().build().toByteArray());
 
     adapter.prePrepareBulkLoad(ctx);
@@ -72,7 +73,10 @@ class BulkLoadObserverAdapterTest {
     ArgumentCaptor<byte[]> payload = ArgumentCaptor.forClass(byte[].class);
     verify(dispatcher, times(1))
         .dispatchHook(
-            eq(HookId.PRE_PREPARE_BULK_LOAD.value()), payload.capture(), any(Duration.class));
+            anyInt(),
+            eq(HookId.PRE_PREPARE_BULK_LOAD.value()),
+            payload.capture(),
+            any(Duration.class));
     PrePrepareBulkLoadRequest req = parsePrepare(payload.getValue());
     assertArrayEquals(
         "default".getBytes(),
@@ -88,7 +92,7 @@ class BulkLoadObserverAdapterTest {
   @Test
   void prePrepareBulkLoad_bypassPropagates()
       throws IOException, InterruptedException, java.util.concurrent.TimeoutException {
-    when(dispatcher.dispatchHook(anyByte(), any(), any(Duration.class)))
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any(Duration.class)))
         .thenReturn(HookResponse.newBuilder().setBypass(true).build().toByteArray());
 
     adapter.prePrepareBulkLoad(ctx);
@@ -103,7 +107,7 @@ class BulkLoadObserverAdapterTest {
     conf.set("hbasecop.policy.prePrepareBulkLoad", "strict");
     adapter = new BulkLoadObserverAdapter(dispatcher, new PolicyConfig(conf));
 
-    when(dispatcher.dispatchHook(anyByte(), any(), any(Duration.class)))
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any(Duration.class)))
         .thenReturn(
             HookResponse.newBuilder()
                 .setError(HookError.newBuilder().setCode(7).setMessage("bulk load vetoed"))
@@ -121,13 +125,14 @@ class BulkLoadObserverAdapterTest {
   void preCleanupBulkLoad_dispatches()
       throws IOException, InterruptedException, java.util.concurrent.TimeoutException {
     when(dispatcher.dispatchHook(
-            eq(HookId.PRE_CLEANUP_BULK_LOAD.value()), any(), any(Duration.class)))
+            anyInt(), eq(HookId.PRE_CLEANUP_BULK_LOAD.value()), any(), any(Duration.class)))
         .thenReturn(HookResponse.newBuilder().build().toByteArray());
 
     adapter.preCleanupBulkLoad(ctx);
 
     verify(dispatcher, times(1))
-        .dispatchHook(eq(HookId.PRE_CLEANUP_BULK_LOAD.value()), any(), any(Duration.class));
+        .dispatchHook(
+            anyInt(), eq(HookId.PRE_CLEANUP_BULK_LOAD.value()), any(), any(Duration.class));
   }
 
   // --- helpers -------------------------------------------------------------
