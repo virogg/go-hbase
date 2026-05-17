@@ -59,7 +59,7 @@
 - [x] **CP-ε2:** all SPEC §2 observer types covered
 
 ## Phase 6 — Multi-region multiplexing
-- [ ] T61 Region-scoped routing in mux (region_id in header)
+- [x] T61 Region-scoped routing in mux (region_id in header)
 - [ ] T62 Concurrent inflight from N regions stress test
 - [ ] T63 Lifecycle refcount on Observer start/stop
 - [ ] **CP-ε3:** N regions per RS sharing one Go process; **gate:** Open Q #2 (hot reload), #3 (signing)
