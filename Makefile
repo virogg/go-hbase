@@ -141,6 +141,15 @@ test-e2e-ping: go-build-runtime ## T19: spawn real Go runtime, run 10k PING/PONG
 demo-ping: test-e2e-ping ## Public demo alias for the T19 ping/pong run.
 
 # ---------------------------------------------------------------------------
+# Bench (T62): multi-region dispatch throughput vs GOMAXPROCS.
+# ---------------------------------------------------------------------------
+
+.PHONY: bench-region-concurrency
+bench-region-concurrency: ## T62: throughput bench across N regions × {1,2,4,8} cores.
+	go test -run='^$$' -bench=BenchmarkRegionConcurrencyThroughput \
+		-benchtime=1s -cpu=1,2,4,8 ./pkg/hbasecop/
+
+# ---------------------------------------------------------------------------
 # Examples (T25): counter-observer reference coproc-jar.
 # ---------------------------------------------------------------------------
 

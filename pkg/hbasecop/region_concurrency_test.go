@@ -428,6 +428,18 @@ func recvOne(t *testing.T, h *loopHarness, timeout time.Duration) <-chan []byte 
 
 func encodeStressPrePut(t *testing.T, regionID uint32, reqID uint64) []byte {
 	t.Helper()
+	frame, err := buildStressPrePutFrame(regionID, reqID)
+	if err != nil {
+		t.Fatalf("encode PrePut region=%d req_id=%d: %v", regionID, reqID, err)
+	}
+	return frame
+}
+
+// buildStressPrePutFrame is shared between the Test and Benchmark
+// drivers in this package: both need to mint a valid PrePut wire frame
+// for a given (region_id, req_id), and the fatal-helper variants for
+// *testing.T / *testing.B both wrap this.
+func buildStressPrePutFrame(regionID uint32, reqID uint64) ([]byte, error) {
 	hctx := &hookpb.HookContext{
 		TableName: &hbasepb.TableName{
 			Namespace: []byte("default"),
@@ -441,11 +453,11 @@ func encodeStressPrePut(t *testing.T, regionID uint32, reqID uint64) []byte {
 		Mutation: &hbasepb.MutationProto{Row: fmt.Appendf(nil, "row-%d", reqID)},
 	})
 	if err != nil {
-		t.Fatalf("marshal PrePutRequest: %v", err)
+		return nil, fmt.Errorf("marshal PrePutRequest: %w", err)
 	}
 	outerBytes, err := proto.Marshal(&wirepb.Request{HookCtx: innerBytes})
 	if err != nil {
-		t.Fatalf("marshal wirepb.Request: %v", err)
+		return nil, fmt.Errorf("marshal wirepb.Request: %w", err)
 	}
 	var encoded bytes.Buffer
 	if err := wire.NewEncoder(&encoded).Encode(&wire.Message{
@@ -455,7 +467,7 @@ func encodeStressPrePut(t *testing.T, regionID uint32, reqID uint64) []byte {
 		HookID:   uint8(HookIDPrePut),
 		Payload:  outerBytes,
 	}); err != nil {
-		t.Fatalf("wire encode: %v", err)
+		return nil, fmt.Errorf("wire encode: %w", err)
 	}
-	return encoded.Bytes()
+	return encoded.Bytes(), nil
 }
