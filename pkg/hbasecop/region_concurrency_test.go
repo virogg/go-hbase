@@ -232,6 +232,200 @@ func TestRegionConcurrencyStress(t *testing.T) {
 	loopWG.Wait()
 }
 
+// holdRegionObserver blocks PrePut for one designated "slow" region
+// until release is closed, while letting every other region return
+// immediately. It surfaces a head-of-line regression: if a single slow
+// observer call stalls dispatch for the whole runtime, the fast
+// regions' responses never arrive.
+type holdRegionObserver struct {
+	UnimplementedRegionObserver
+
+	slowRegion uint32
+	entered    chan struct{}
+	release    chan struct{}
+}
+
+func newHoldRegionObserver(slowRegion uint32) *holdRegionObserver {
+	return &holdRegionObserver{
+		slowRegion: slowRegion,
+		entered:    make(chan struct{}, 1),
+		release:    make(chan struct{}),
+	}
+}
+
+func (o *holdRegionObserver) PrePut(ctx context.Context, env ObserverEnv, _ *hbasepb.MutationProto) (HookResult, error) {
+	if env.RegionID != o.slowRegion {
+		return HookResult{}, nil
+	}
+	select {
+	case o.entered <- struct{}{}:
+	default:
+	}
+	select {
+	case <-o.release:
+	case <-ctx.Done():
+	}
+	return HookResult{}, nil
+}
+
+// TestNoHeadOfLineBlockingAcrossRegions is the T62 Wave-B acceptance:
+// a single slow observer on region 1 must not block PrePut delivery
+// for the other nFast regions. The test sends the slow request first,
+// waits for the observer to confirm it is inside the handler, then
+// sends nFast fast requests on distinct region_ids. If dispatch were
+// serial — e.g. a global mutex around handler invocations or a
+// single-threaded dispatcher — the fast responses would never arrive
+// because the slow handler is still parked. Only genuinely
+// per-request parallelism lets the fast tail drain.
+func TestNoHeadOfLineBlockingAcrossRegions(t *testing.T) {
+	const (
+		slowRegion   = uint32(1)
+		nFast        = 8
+		ringCapacity = 32
+	)
+
+	h := openLoopHarnessWith(t, ringCapacity)
+	obs := newHoldRegionObserver(slowRegion)
+	d := newDispatcher(obs, nil)
+
+	loop, err := cpruntime.New(cpruntime.Config{
+		InCh:            h.loopIn,
+		OutCh:           h.loopOut,
+		HeartbeatPeriod: -1,
+		Handler:         d.dispatch,
+	})
+	if err != nil {
+		t.Fatalf("cpruntime.New: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var loopWG sync.WaitGroup
+	loopWG.Add(1)
+	go func() {
+		defer loopWG.Done()
+		_ = loop.Run(ctx)
+	}()
+
+	deadline := time.Now().Add(3 * time.Second)
+	send := func(regionID uint32, reqID uint64) {
+		frame := encodeStressPrePut(t, regionID, reqID)
+		for {
+			if time.Now().After(deadline) {
+				t.Fatalf("send deadline exceeded at region=%d req_id=%d", regionID, reqID)
+			}
+			err := h.mockOut.Send(frame)
+			if err == nil {
+				return
+			}
+			if !errors.Is(err, shmem.ErrRingFull) {
+				t.Fatalf("send region=%d req_id=%d: %v", regionID, reqID, err)
+			}
+			runtime.Gosched()
+		}
+	}
+
+	// 1) Fire the slow request and wait until the observer confirms it
+	// has reached the block point. Without this synchronization the
+	// fast requests could legitimately race ahead of slow dispatch and
+	// the test would not actually prove what it claims.
+	slowReqID := uint64(1)
+	send(slowRegion, slowReqID)
+	select {
+	case <-obs.entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("slow observer did not enter PrePut within 2s")
+	}
+
+	// 2) Fire nFast fast requests on distinct region_ids while the slow
+	// handler is parked. ReqID = region_id (distinct from slowReqID).
+	for r := uint32(2); r <= uint32(1+nFast); r++ {
+		send(r, uint64(r))
+	}
+
+	// 3) Drain exactly nFast responses. If any fast response is missing
+	// while the slow handler is still parked, the runtime is
+	// head-of-line blocking — fail.
+	gotFast := 0
+	fastDeadline := time.Now().Add(2 * time.Second)
+	for gotFast < nFast {
+		if time.Now().After(fastDeadline) {
+			t.Fatalf("only %d/%d fast responses arrived while slow region was parked — head-of-line blocking",
+				gotFast, nFast)
+		}
+		data, err := h.mockIn.Recv()
+		if errors.Is(err, shmem.ErrNoData) {
+			runtime.Gosched()
+			continue
+		}
+		if err != nil {
+			t.Fatalf("recv: %v", err)
+		}
+		resp, err := wire.NewDecoder(bytes.NewReader(data)).Decode()
+		if err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if resp.Type != wire.TypeResponse {
+			t.Fatalf("resp.Type = %v, want Response", resp.Type)
+		}
+		if resp.RegionID == slowRegion {
+			t.Fatalf("slow region %d responded while still parked (req_id=%d)",
+				slowRegion, resp.ReqID)
+		}
+		gotFast++
+	}
+
+	// 4) Release the slow handler and confirm its response now lands.
+	close(obs.release)
+	select {
+	case data := <-recvOne(t, h, 2*time.Second):
+		resp, err := wire.NewDecoder(bytes.NewReader(data)).Decode()
+		if err != nil {
+			t.Fatalf("decode slow response: %v", err)
+		}
+		if resp.Type != wire.TypeResponse {
+			t.Fatalf("slow resp.Type = %v, want Response", resp.Type)
+		}
+		if resp.RegionID != slowRegion || resp.ReqID != slowReqID {
+			t.Fatalf("slow response = (region=%d, req_id=%d), want (%d, %d)",
+				resp.RegionID, resp.ReqID, slowRegion, slowReqID)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("slow region did not respond after release")
+	}
+
+	cancel()
+	loopWG.Wait()
+}
+
+// recvOne returns a channel that yields the next frame from h.mockIn
+// or fails the test if no frame arrives within timeout. It is a thin
+// shim around the busy-poll pattern used elsewhere in this file so the
+// Wave-B test can select on a clean channel.
+func recvOne(t *testing.T, h *loopHarness, timeout time.Duration) <-chan []byte {
+	t.Helper()
+	out := make(chan []byte, 1)
+	go func() {
+		deadline := time.Now().Add(timeout)
+		for {
+			if time.Now().After(deadline) {
+				return
+			}
+			data, err := h.mockIn.Recv()
+			if err == nil {
+				out <- data
+				return
+			}
+			if !errors.Is(err, shmem.ErrNoData) {
+				return
+			}
+			runtime.Gosched()
+		}
+	}()
+	return out
+}
+
 func encodeStressPrePut(t *testing.T, regionID uint32, reqID uint64) []byte {
 	t.Helper()
 	hctx := &hookpb.HookContext{
