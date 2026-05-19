@@ -89,6 +89,11 @@ go-build-runtime: ## Build cmd/hbasecop-runtime into the bridge jar resources (L
 	@mkdir -p $(dir $(GO_RUNTIME_OUT))
 	GOOS=linux GOARCH=amd64 $(GO) build $(GO_BUILD_FLAGS) -o $(GO_RUNTIME_OUT) ./cmd/hbasecop-runtime
 
+.PHONY: hbasecop-build
+hbasecop-build: ## T71: build the coproc-jar packaging CLI (host arch, target/bin/hbasecop-build).
+	@mkdir -p target/bin
+	$(GO) build $(GO_BUILD_FLAGS) -o target/bin/hbasecop-build ./cmd/hbasecop-build
+
 .PHONY: go-test
 go-test: ## Run Go tests with the race detector.
 	$(GO) test -race -count=1 $(GO_PKGS)
