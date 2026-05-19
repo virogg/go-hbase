@@ -158,8 +158,18 @@ public final class CoprocessorRuntime implements AutoCloseable {
 
       Encoder enc = new Encoder();
       long restartDeadlineMs = resolveRestartDeadlineMs(cfg);
+      // The shmem Channel is single-producer (see Channel javadoc). Under T63 sharing the same
+      // CoprocessorRuntime is fed by hook threads from N regions concurrently, so we serialize
+      // every send through this lock — the ring stays effectively SPSC from the producer's view.
+      final Object sendLock = new Object();
+      final Channel javaToGoRef = javaToGo;
       mux =
-          Multiplexer.builder(msg -> sendOnChannel(javaToGo, enc, msg))
+          Multiplexer.builder(
+                  msg -> {
+                    synchronized (sendLock) {
+                      sendOnChannel(javaToGoRef, enc, msg);
+                    }
+                  })
               .restartDeadlineMs(restartDeadlineMs)
               .scheduler(watchdogScheduler)
               .build();

@@ -325,6 +325,23 @@ test-integration: counter-observer-jar ## T27: full IT — bring up HBase, run P
 	  exit $$status
 
 # ---------------------------------------------------------------------------
+# Integration (T63): refcounted SharedRuntime — N regions share one Go process.
+# ---------------------------------------------------------------------------
+
+.PHONY: test-integration-shared
+test-integration-shared: counter-observer-jar ## T63: full IT — bring up HBase, run SharedRegionProcessIT (4-way pre-split, expect one Go pid), tear down.
+	@mkdir -p test/integration/coproc-jars
+	cp $(COUNTER_OBSERVER_DIR)/target/counter-observer.jar $(COPROC_JAR_STAGED)
+	$(HBASE_COMPOSE_CMD) up -d --build
+	./test/integration/scripts/wait-master-status.sh
+	@set +e; \
+	  $(MVN) $(MVN_FLAGS) test -Dtest=SharedRegionProcessIT -DfailIfNoTests=false; \
+	  status=$$?; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-shared.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
+
+# ---------------------------------------------------------------------------
 # Integration (T36): fault-injection matrix on real HBase.
 # ---------------------------------------------------------------------------
 
