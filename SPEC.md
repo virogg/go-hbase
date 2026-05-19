@@ -244,5 +244,12 @@ GitHub Actions: lint → unit → contract → integration (only on PR to main +
    `CoprocessorRuntime` → свой `GoProcess` → свой shmem pair (через
    `Files.createTempDirectory`), но formal cross-coproc isolation не валидируется
    тестами в MVP. Defer to post-v0.1.0.
-2. Hot reload Go-binary без рестарта RS?
-3. Подпись/checksum Go-бинаря в jar — MVP или не сейчас?
+2. ~~Hot reload Go-binary без рестарта RS?~~ **Closed at CP-ε3 (2026-05-19):
+   defer post-MVP.** Обновление = `disable/alterTable/enable` цикл (полный
+   teardown coproc-jar). SIGHUP-flow рассмотрим post-v0.1.0 если будет запрос.
+3. ~~Подпись/checksum Go-бинаря в jar — MVP или не сейчас?~~ **Closed at
+   CP-ε3 (2026-05-19): SHA-256 checksum в MVP.** `hbasecop-build` (T71)
+   записывает `SHA-256` ELF в manifest (`HbaseCop-Go-Bin-SHA256`); supervisor
+   (`GoProcess.start`) валидирует digest при extract из jar resource — mismatch
+   → fail-fast с ясным сообщением. Защита от corruption/wrong-arch, не от
+   threat-actor (полноценный GPG signing — post-MVP).

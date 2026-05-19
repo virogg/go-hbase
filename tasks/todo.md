@@ -62,7 +62,7 @@
 - [x] T61 Region-scoped routing in mux (region_id in header)
 - [x] T62 Concurrent inflight from N regions stress test
 - [x] T63 Lifecycle refcount on Observer start/stop
-- [ ] **CP-ε3:** N regions per RS sharing one Go process; **gate:** Open Q #2 (hot reload), #3 (signing)
+- [x] **CP-ε3:** N regions per RS sharing one Go process; Open Q #2 (hot reload) → defer post-MVP; Open Q #3 → SHA-256 checksum in manifest (T71)
 
 ## Phase 7 — DX: CLI, examples, docs
 - [ ] T71 `hbasecop-build` CLI
