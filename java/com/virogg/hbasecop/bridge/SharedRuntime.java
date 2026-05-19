@@ -37,10 +37,45 @@ public final class SharedRuntime {
 
   private SharedRuntime() {}
 
-  /** Supplier of a {@link CoprocessorRuntime.Config}; only called on first acquire for a key. */
+  /**
+   * Supplier of a {@link Spec} (config + optional cleanup); only invoked when this acquire is the
+   * one that creates the registry entry — i.e. the first acquire for the key.
+   */
   @FunctionalInterface
   public interface ConfigSupplier {
-    CoprocessorRuntime.Config get() throws IOException;
+    Spec get() throws IOException;
+  }
+
+  /**
+   * A {@link CoprocessorRuntime.Config} bundled with an optional cleanup callback invoked after the
+   * runtime has been stopped (i.e. on the {@link Handle#release} that brings the refcount to zero).
+   * Typical use: a coprocessor wrapper creates a temp directory for the shmem files in its supplier
+   * and registers a {@code Runnable} that removes that directory once the shared runtime is gone.
+   */
+  public static final class Spec {
+    private final CoprocessorRuntime.Config config;
+    private final Runnable onStop;
+
+    private Spec(CoprocessorRuntime.Config config, Runnable onStop) {
+      this.config = Objects.requireNonNull(config, "config");
+      this.onStop = Objects.requireNonNull(onStop, "onStop");
+    }
+
+    public static Spec of(CoprocessorRuntime.Config config) {
+      return new Spec(config, () -> {});
+    }
+
+    public static Spec of(CoprocessorRuntime.Config config, Runnable onStop) {
+      return new Spec(config, onStop);
+    }
+
+    public CoprocessorRuntime.Config config() {
+      return config;
+    }
+
+    public Runnable onStop() {
+      return onStop;
+    }
   }
 
   /**
@@ -60,25 +95,35 @@ public final class SharedRuntime {
     synchronized (LOCK) {
       entry = ENTRIES.get(key);
       if (entry == null) {
-        CoprocessorRuntime.Config cfg = supplier.get();
-        CoprocessorRuntime rt = new CoprocessorRuntime(cfg);
+        Spec spec = supplier.get();
+        CoprocessorRuntime rt = new CoprocessorRuntime(spec.config());
         boolean ok = false;
         try {
           rt.start();
-          entry = new Entry(rt);
+          entry = new Entry(rt, spec.onStop());
           ENTRIES.put(key, entry);
           ok = true;
           created = true;
         } finally {
           if (!ok) {
             // start() already cleaned up its own partial state; swallow any close errors so the
-            // original IOException from start() reaches the caller unwrapped.
+            // original IOException from start() reaches the caller unwrapped. Also run the
+            // caller-supplied onStop so e.g. tmpdirs created in the supplier don't leak.
             try {
               rt.close();
             } catch (IOException | InterruptedException ignored) {
               if (ignored instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
               }
+            }
+            try {
+              spec.onStop().run();
+            } catch (RuntimeException cleanupErr) {
+              LOG.log(
+                  Level.WARNING,
+                  "SharedRuntime: onStop cleanup after failed start threw for key={0}",
+                  key,
+                  cleanupErr);
             }
           }
         }
@@ -113,7 +158,7 @@ public final class SharedRuntime {
   }
 
   private static void release(String key) {
-    CoprocessorRuntime toStop = null;
+    Entry toStop = null;
     synchronized (LOCK) {
       Entry e = ENTRIES.get(key);
       if (e == null) {
@@ -122,12 +167,12 @@ public final class SharedRuntime {
       e.refcount--;
       if (e.refcount <= 0) {
         ENTRIES.remove(key);
-        toStop = e.runtime;
+        toStop = e;
       }
     }
     if (toStop != null) {
       try {
-        toStop.stop();
+        toStop.runtime.stop();
         LOG.log(Level.INFO, "SharedRuntime: stopped runtime for key={0}", key);
       } catch (IOException e) {
         LOG.log(Level.WARNING, "SharedRuntime: stop failed for key={0}", key, e);
@@ -135,15 +180,22 @@ public final class SharedRuntime {
         Thread.currentThread().interrupt();
         LOG.log(Level.WARNING, "SharedRuntime: stop interrupted for key={0}", key, e);
       }
+      try {
+        toStop.onStop.run();
+      } catch (RuntimeException e) {
+        LOG.log(Level.WARNING, "SharedRuntime: onStop cleanup threw for key={0}", key, e);
+      }
     }
   }
 
   private static final class Entry {
     final CoprocessorRuntime runtime;
+    final Runnable onStop;
     int refcount;
 
-    Entry(CoprocessorRuntime runtime) {
+    Entry(CoprocessorRuntime runtime, Runnable onStop) {
       this.runtime = runtime;
+      this.onStop = onStop;
     }
   }
 

@@ -34,14 +34,16 @@ final class SharedRuntimeTest {
     Path out = tmp.resolve("out.mmap");
     String key = "shared-rt-share-" + System.nanoTime();
 
-    SharedRuntime.Handle h1 = SharedRuntime.acquire(key, () -> baseConfig(in, out));
+    SharedRuntime.Handle h1 =
+        SharedRuntime.acquire(key, () -> SharedRuntime.Spec.of(baseConfig(in, out)));
     try {
       assertEquals(1, SharedRuntime.refcountForTesting(key));
       assertNotNull(h1.getRegionObserver(), "handle must expose RegionObserver");
       assertTrue(h1.runtimeForTesting().isAlive(), "Go process must be alive after first acquire");
       long pid1 = h1.runtimeForTesting().goProcessPidForTesting();
 
-      SharedRuntime.Handle h2 = SharedRuntime.acquire(key, () -> baseConfig(in, out));
+      SharedRuntime.Handle h2 =
+          SharedRuntime.acquire(key, () -> SharedRuntime.Spec.of(baseConfig(in, out)));
       try {
         assertEquals(2, SharedRuntime.refcountForTesting(key));
         assertSame(
@@ -73,8 +75,11 @@ final class SharedRuntimeTest {
     Path sysTmp = Path.of(System.getProperty("java.io.tmpdir"));
     Set<Path> before = elfFingerprint(sysTmp);
 
+    int[] cleanupCalls = {0};
     for (int i = 0; i < 5; i++) {
-      SharedRuntime.Handle h = SharedRuntime.acquire(key, () -> baseConfig(in, out));
+      SharedRuntime.Handle h =
+          SharedRuntime.acquire(
+              key, () -> SharedRuntime.Spec.of(baseConfig(in, out), () -> cleanupCalls[0]++));
       assertTrue(h.runtimeForTesting().isAlive(), "iteration " + i + ": process must be alive");
       h.release();
       assertEquals(
@@ -89,6 +94,7 @@ final class SharedRuntimeTest {
     assertTrue(
         after.isEmpty(),
         "ELF-leak: extracted runtime binaries left over after 5 start/stop cycles: " + after);
+    assertEquals(5, cleanupCalls[0], "Spec.onStop must run once per refcount→0 transition");
   }
 
   @Test
@@ -96,7 +102,9 @@ final class SharedRuntimeTest {
     String key = "shared-rt-idem-" + System.nanoTime();
     SharedRuntime.Handle h =
         SharedRuntime.acquire(
-            key, () -> baseConfig(tmp.resolve("in.mmap"), tmp.resolve("out.mmap")));
+            key,
+            () ->
+                SharedRuntime.Spec.of(baseConfig(tmp.resolve("in.mmap"), tmp.resolve("out.mmap"))));
     h.release();
     h.release(); // must be a no-op, must not double-stop the runtime or NPE
     assertEquals(0, SharedRuntime.refcountForTesting(key));
@@ -120,7 +128,9 @@ final class SharedRuntimeTest {
 
     SharedRuntime.Handle h =
         SharedRuntime.acquire(
-            key, () -> baseConfig(tmp.resolve("in.mmap"), tmp.resolve("out.mmap")));
+            key,
+            () ->
+                SharedRuntime.Spec.of(baseConfig(tmp.resolve("in.mmap"), tmp.resolve("out.mmap"))));
     try {
       assertTrue(h.runtimeForTesting().isAlive());
     } finally {
