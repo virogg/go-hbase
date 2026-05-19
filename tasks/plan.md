@@ -328,6 +328,14 @@ External dep: `github.com/virogg/java-go-shmem` (Go pkg + Java jar). Lock вер
 - Verify: JUnit: 5×start/stop циклов, процесс корректно живёт/умирает; нет ELF-leak в `tmpdir`.
 
 > **Checkpoint ε3:** один Go-процесс обслуживает все регионы. Решение: open question #2 (hot reload), #3 (binary signing). Нужно ли в MVP — gate перед P7.
+>
+> **Closed 2026-05-19:** один Go pid обслуживает N регионов (T61–T63 + 4-region IT
+> `MultiRegionSharedRuntimeIT`, refcounted `CoprocessorRuntime`, throughput bench).
+> **Open Q #2 (hot reload):** defer post-MVP — обновление через
+> `disable/alterTable/enable` достаточно для v0.1.0.
+> **Open Q #3 (binary signing):** SHA-256 checksum в manifest. `hbasecop-build`
+> (T71) пишет `HbaseCop-Go-Bin-SHA256`; supervisor валидирует при extract из jar.
+> Full GPG signing — post-MVP. P7 not blocked.
 
 ### Phase 7 — DX: build CLI, examples, docs
 
