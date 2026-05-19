@@ -22,6 +22,9 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -197,7 +200,75 @@ public final class GoProcess implements AutoCloseable {
       }
       Path tmp = Files.createTempFile("hbasecop-runtime-", "");
       Files.copy(in, tmp, StandardCopyOption.REPLACE_EXISTING);
+      String expected = cfg.expectedBinarySha256();
+      if (expected != null) {
+        try {
+          verifyChecksum(tmp, expected);
+        } catch (IOException e) {
+          // Don't leave a corrupted/wrong-arch binary lying around in tmp.
+          try {
+            Files.deleteIfExists(tmp);
+          } catch (IOException suppressed) {
+            e.addSuppressed(suppressed);
+          }
+          throw e;
+        }
+      }
       return tmp;
+    }
+  }
+
+  /**
+   * Compute the SHA-256 digest of {@code file} as 64 lower-case hex characters. Package-private so
+   * the supervisor test suite (and a future {@code hbasecop-build} verifier) can exercise it
+   * directly without spawning a Go process.
+   */
+  static String computeSha256Hex(Path file) throws IOException {
+    MessageDigest md;
+    try {
+      md = MessageDigest.getInstance("SHA-256");
+    } catch (NoSuchAlgorithmException e) {
+      // SHA-256 is mandated by every JRE since 7 — surface clearly if the impossible happens.
+      throw new IOException("SHA-256 not available on this JRE", e);
+    }
+    byte[] buf = new byte[8192];
+    try (InputStream in = Files.newInputStream(file)) {
+      int n;
+      while ((n = in.read(buf)) > 0) {
+        md.update(buf, 0, n);
+      }
+    }
+    return toLowerHex(md.digest());
+  }
+
+  private static final char[] HEX = "0123456789abcdef".toCharArray();
+
+  private static String toLowerHex(byte[] bytes) {
+    char[] out = new char[bytes.length * 2];
+    for (int i = 0; i < bytes.length; i++) {
+      int b = bytes[i] & 0xFF;
+      out[i * 2] = HEX[b >>> 4];
+      out[i * 2 + 1] = HEX[b & 0x0F];
+    }
+    return new String(out);
+  }
+
+  /**
+   * Verify that {@code file}'s SHA-256 matches {@code expectedHex} (case-insensitive on input).
+   * Throws {@link IOException} on mismatch with a message that names both digests so operators can
+   * triage a corrupted-jar vs wrong-binary failure from the supervisor log alone.
+   */
+  static void verifyChecksum(Path file, String expectedHex) throws IOException {
+    String expected = expectedHex.toLowerCase(Locale.ROOT);
+    String actual = computeSha256Hex(file);
+    if (!expected.equals(actual)) {
+      throw new IOException(
+          "GoProcess: ELF SHA-256 mismatch for "
+              + file
+              + " — expected="
+              + expected
+              + " actual="
+              + actual);
     }
   }
 

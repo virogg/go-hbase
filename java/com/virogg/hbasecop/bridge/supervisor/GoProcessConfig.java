@@ -23,6 +23,7 @@ public final class GoProcessConfig {
   private final long heartbeatPeriodMs;
   private final Duration gracefulShutdownTimeout;
   private final Map<String, String> extraEnv;
+  private final String expectedBinarySha256;
 
   private GoProcessConfig(Builder b) {
     this.binaryResourcePath = b.binaryResourcePath;
@@ -36,6 +37,7 @@ public final class GoProcessConfig {
         b.extraEnv.isEmpty()
             ? Collections.emptyMap()
             : Collections.unmodifiableMap(new LinkedHashMap<>(b.extraEnv));
+    this.expectedBinarySha256 = b.expectedBinarySha256;
   }
 
   public String binaryResourcePath() {
@@ -78,6 +80,16 @@ public final class GoProcessConfig {
     return extraEnv;
   }
 
+  /**
+   * Lower-case 64-hex SHA-256 of the embedded ELF, when known (typically read from {@code
+   * HbaseCop-Go-Bin-SHA256} in the coproc-jar manifest by {@link ManifestBinaryDescriptor}).
+   * Non-null → {@link GoProcess#start()} fails fast on digest mismatch before forking the child;
+   * null → checksum step is skipped (legacy/uninstrumented jars).
+   */
+  public String expectedBinarySha256() {
+    return expectedBinarySha256;
+  }
+
   public static Builder builder() {
     return new Builder();
   }
@@ -92,6 +104,7 @@ public final class GoProcessConfig {
     private long heartbeatPeriodMs;
     private Duration gracefulShutdownTimeout = Duration.ofSeconds(1);
     private Map<String, String> extraEnv = new LinkedHashMap<>();
+    private String expectedBinarySha256;
 
     public Builder binaryResourcePath(String s) {
       this.binaryResourcePath = s;
@@ -138,6 +151,16 @@ public final class GoProcessConfig {
      */
     public Builder extraEnv(Map<String, String> env) {
       this.extraEnv = env == null ? new LinkedHashMap<>() : new LinkedHashMap<>(env);
+      return this;
+    }
+
+    /**
+     * Expected ELF SHA-256 (64-hex, case-insensitive) — when set, {@link GoProcess#start()}
+     * computes the digest of the extracted binary and aborts on mismatch. {@code null} → skip.
+     * Typically populated from the coproc-jar manifest by {@link ManifestBinaryDescriptor}.
+     */
+    public Builder expectedBinarySha256(String hex) {
+      this.expectedBinarySha256 = hex;
       return this;
     }
 
