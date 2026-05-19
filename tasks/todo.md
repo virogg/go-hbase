@@ -61,7 +61,7 @@
 ## Phase 6 — Multi-region multiplexing
 - [x] T61 Region-scoped routing in mux (region_id in header)
 - [x] T62 Concurrent inflight from N regions stress test
-- [ ] T63 Lifecycle refcount on Observer start/stop
+- [x] T63 Lifecycle refcount on Observer start/stop
 - [ ] **CP-ε3:** N regions per RS sharing one Go process; **gate:** Open Q #2 (hot reload), #3 (signing)
 
 ## Phase 7 — DX: CLI, examples, docs
