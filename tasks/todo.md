@@ -65,7 +65,7 @@
 - [x] **CP-ε3:** N regions per RS sharing one Go process; Open Q #2 (hot reload) → defer post-MVP; Open Q #3 → SHA-256 checksum in manifest (T71)
 
 ## Phase 7 — DX: CLI, examples, docs
-- [ ] T71 `hbasecop-build` CLI
+- [x] T71 `hbasecop-build` CLI (Java ManifestBinaryDescriptor + GoProcess SHA-256 validation + Go CLI emitting coproc-jar)
 - [ ] T72 examples/audit-observer
 - [ ] T73 examples/ttl-validator
 - [ ] T74 Top-level README + getting started
