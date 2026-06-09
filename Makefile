@@ -38,6 +38,12 @@ MASTER_POLICY_OUT := $(MASTER_POLICY_DIR)/src/main/resources/bin/linux-amd64/hba
 RS_POLICY_DIR := examples/rs-policy-observer
 RS_POLICY_OUT := $(RS_POLICY_DIR)/src/main/resources/bin/linux-amd64/hbasecop-runtime
 
+AUDIT_OBSERVER_DIR := examples/audit-observer
+AUDIT_OBSERVER_OUT := $(AUDIT_OBSERVER_DIR)/src/main/resources/bin/linux-amd64/hbasecop-runtime
+
+TTL_VALIDATOR_DIR := examples/ttl-validator
+TTL_VALIDATOR_OUT := $(TTL_VALIDATOR_DIR)/src/main/resources/bin/linux-amd64/hbasecop-runtime
+
 # ---------------------------------------------------------------------------
 # Aggregates
 # ---------------------------------------------------------------------------
@@ -308,6 +314,54 @@ rs-policy-observer-jar: go-build-rs-policy ## T52: build rs-policy-observer copr
 	@echo "OK: rs-policy-observer.jar -- bridge shaded, Go ELF embedded"
 
 # ---------------------------------------------------------------------------
+# Examples (T72): post-hook audit coproc-jar.
+# ---------------------------------------------------------------------------
+
+.PHONY: go-build-audit
+go-build-audit: ## T72: build audit-observer Go ELF into example resources (Linux x86-64).
+	@mkdir -p $(dir $(AUDIT_OBSERVER_OUT))
+	GOOS=linux GOARCH=amd64 $(GO) build $(GO_BUILD_FLAGS) -o $(AUDIT_OBSERVER_OUT) ./$(AUDIT_OBSERVER_DIR)
+
+.PHONY: audit-observer-jar
+audit-observer-jar: go-build-audit ## T72: build audit-observer coproc-jar (installs bridge into ~/.m2 first).
+	$(MVN) $(MVN_FLAGS) install -DskipTests
+	$(MVN) $(MVN_FLAGS) -f $(AUDIT_OBSERVER_DIR)/pom.xml package
+	@unzip -l $(AUDIT_OBSERVER_DIR)/target/audit-observer.jar | \
+	  grep -q 'bin/linux-amd64/hbasecop-runtime' || \
+	  { echo "ERROR: Go ELF missing from audit-observer.jar" >&2; exit 1; }
+	@unzip -l $(AUDIT_OBSERVER_DIR)/target/audit-observer.jar | \
+	  grep -q 'com/virogg/hbasecop/examples/audit/AuditRegionObserver.class' || \
+	  { echo "ERROR: AuditRegionObserver class missing from coproc-jar" >&2; exit 1; }
+	@unzip -l $(AUDIT_OBSERVER_DIR)/target/audit-observer.jar | \
+	  grep -q 'com/virogg/hbasecop/bridge/observer/RegionObserverAdapter.class' || \
+	  { echo "ERROR: bridge classes not shaded into coproc-jar" >&2; exit 1; }
+	@echo "OK: audit-observer.jar -- bridge shaded, Go ELF embedded"
+
+# ---------------------------------------------------------------------------
+# Examples (T73): pre-hook TTL-validation coproc-jar.
+# ---------------------------------------------------------------------------
+
+.PHONY: go-build-ttl
+go-build-ttl: ## T73: build ttl-validator Go ELF into example resources (Linux x86-64).
+	@mkdir -p $(dir $(TTL_VALIDATOR_OUT))
+	GOOS=linux GOARCH=amd64 $(GO) build $(GO_BUILD_FLAGS) -o $(TTL_VALIDATOR_OUT) ./$(TTL_VALIDATOR_DIR)
+
+.PHONY: ttl-validator-jar
+ttl-validator-jar: go-build-ttl ## T73: build ttl-validator coproc-jar (installs bridge into ~/.m2 first).
+	$(MVN) $(MVN_FLAGS) install -DskipTests
+	$(MVN) $(MVN_FLAGS) -f $(TTL_VALIDATOR_DIR)/pom.xml package
+	@unzip -l $(TTL_VALIDATOR_DIR)/target/ttl-validator.jar | \
+	  grep -q 'bin/linux-amd64/hbasecop-runtime' || \
+	  { echo "ERROR: Go ELF missing from ttl-validator.jar" >&2; exit 1; }
+	@unzip -l $(TTL_VALIDATOR_DIR)/target/ttl-validator.jar | \
+	  grep -q 'com/virogg/hbasecop/examples/ttl/TtlValidatorRegionObserver.class' || \
+	  { echo "ERROR: TtlValidatorRegionObserver class missing from coproc-jar" >&2; exit 1; }
+	@unzip -l $(TTL_VALIDATOR_DIR)/target/ttl-validator.jar | \
+	  grep -q 'com/virogg/hbasecop/bridge/observer/RegionObserverAdapter.class' || \
+	  { echo "ERROR: bridge classes not shaded into coproc-jar" >&2; exit 1; }
+	@echo "OK: ttl-validator.jar -- bridge shaded, Go ELF embedded"
+
+# ---------------------------------------------------------------------------
 # Integration (T26): HBase 2.5 standalone dev cluster.
 # ---------------------------------------------------------------------------
 
@@ -497,6 +551,40 @@ test-integration-rs: rs-policy-observer-jar ## T52: full IT — bring up HBase w
 	  $(MVN) $(MVN_FLAGS) test -Dtest=RegionServerPolicyIT -DfailIfNoTests=false; \
 	  status=$$?; \
 	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-rs.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
+
+# ---------------------------------------------------------------------------
+# Integration (T72): post-hook audit on real HBase.
+# ---------------------------------------------------------------------------
+
+.PHONY: test-integration-audit
+test-integration-audit: audit-observer-jar ## T72: full IT — bring up HBase, run AuditObserverIT (50 ops → 50 audit records), tear down.
+	@mkdir -p test/integration/coproc-jars
+	cp $(AUDIT_OBSERVER_DIR)/target/audit-observer.jar test/integration/coproc-jars/audit-observer.jar
+	$(HBASE_COMPOSE_CMD) up -d --build
+	./test/integration/scripts/wait-master-status.sh
+	@set +e; \
+	  $(MVN) $(MVN_FLAGS) test -Dtest=AuditObserverIT -DfailIfNoTests=false; \
+	  status=$$?; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-audit.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
+
+# ---------------------------------------------------------------------------
+# Integration (T73): pre-hook TTL validation (strict mode) on real HBase.
+# ---------------------------------------------------------------------------
+
+.PHONY: test-integration-ttl
+test-integration-ttl: ttl-validator-jar ## T73: full IT — bring up HBase, run TtlValidatorIT (valid → success, invalid → IOException), tear down.
+	@mkdir -p test/integration/coproc-jars
+	cp $(TTL_VALIDATOR_DIR)/target/ttl-validator.jar test/integration/coproc-jars/ttl-validator.jar
+	$(HBASE_COMPOSE_CMD) up -d --build
+	./test/integration/scripts/wait-master-status.sh
+	@set +e; \
+	  $(MVN) $(MVN_FLAGS) test -Dtest=TtlValidatorIT -DfailIfNoTests=false; \
+	  status=$$?; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-ttl.log 2>&1 || true; \
 	  $(HBASE_COMPOSE_CMD) down; \
 	  exit $$status
 
