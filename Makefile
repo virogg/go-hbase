@@ -123,13 +123,11 @@ fuzz: ## T83: run the wire-codec fuzzer (override duration with FUZZTIME=...).
 # Coverage gate set excludes generated protobuf, thin mains, and examples —
 # the gate measures hand-written, testable code.
 GO_COVER_PKGS := $(shell $(GO) list ./... | grep -vE '/(examples|internal/wire/hbasepb|internal/wire/hookpb|internal/wire/wirepb|internal/wiregolden|cmd/wire-golden|cmd/hbasecop-runtime)$$')
-# SPEC §7 target is 80% line; the codebase is currently ~57.6% (pkg/hbasecop's
-# RunX entrypoints + observer surfaces are integration-tested, not unit-tested).
-# This gate is a RATCHET at the current floor — it prevents regression and is
-# real. Raise GO_COVER_MIN toward 80 as unit tests land (tasks/RELEASE-BLOCKERS.md).
-GO_COVER_MIN  ?= 55.0
+# SPEC §7 gate: Go hand-written line coverage ≥80% (generated protobuf, thin
+# mains and examples excluded above). Met as of the Phase-7 coverage work.
+GO_COVER_MIN  ?= 80.0
 .PHONY: go-cover
-go-cover: ## Coverage gate (ratchet; SPEC §7 target 80%): fail if Go line coverage drops below the floor.
+go-cover: ## SPEC §7 gate: fail if Go line coverage (hand-written) drops below 80%.
 	$(GO) test -race -covermode=atomic -coverprofile=coverage.out $(GO_COVER_PKGS)
 	@total=$$($(GO) tool cover -func=coverage.out | awk '/^total:/ {print $$3}'); \
 	  echo "Go line coverage (excl. generated): $$total (gate: $(GO_COVER_MIN)%)"; \
