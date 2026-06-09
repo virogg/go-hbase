@@ -64,7 +64,7 @@ type stubActions struct {
 func (s *stubActions) Kill9()       { s.kill9++ }
 func (s *stubActions) Exit1()       { s.exit1++ }
 func (s *stubActions) AllocateOOM() { s.oom++ }
-func (s *stubActions) Hang(ctx context.Context) {
+func (s *stubActions) Hang(_ context.Context) {
 	s.hang++
 	if s.hangChan != nil {
 		s.hangChan <- struct{}{}

@@ -248,6 +248,13 @@ message HookResponse {
   bool bypass = 1;
   HookError error = 2;
   repeated uint32 blocked_indices = 3;
+  // Substitute Result cells for value-returning bypass hooks
+  // (preAppend / preIncrement and their after-row-lock variants). When
+  // bypass = true on one of those hooks, these cells are returned to the
+  // client as the operation's Result (an empty list yields an empty
+  // Result). Ignored by every other hook. Additive (field 4) — minor
+  // version compatible; older peers simply don't read it.
+  repeated virogg.hbasecop.hbase.v1.Cell result = 4;
 }
 
 // PrePutRequest is the inbound payload for prePut. Phase-2 message,

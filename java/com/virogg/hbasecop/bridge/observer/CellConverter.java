@@ -7,6 +7,7 @@ import com.google.protobuf.ByteString;
 import com.virogg.hbasecop.hbase.v1.CellProtos;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.PrivateCellUtil;
 
 /**
@@ -33,6 +34,39 @@ final class CellConverter {
       }
     }
     return b.build();
+  }
+
+  /**
+   * Reverse of {@link #toProto}: build an HBase {@link Cell} (a {@link KeyValue}) from the vendored
+   * proto envelope. Used to materialize the substitute Result an observer supplies on a
+   * value-returning bypass (preAppend / preIncrement). Cell-level tags are not reconstructed —
+   * observer-authored substitute values do not carry server-side tags.
+   */
+  static Cell fromProto(CellProtos.Cell c) {
+    return new KeyValue(
+        c.getRow().toByteArray(),
+        c.getFamily().toByteArray(),
+        c.getQualifier().toByteArray(),
+        c.getTimestamp(),
+        fromProtoType(c.getCellType()),
+        c.getValue().toByteArray());
+  }
+
+  private static KeyValue.Type fromProtoType(CellProtos.CellType type) {
+    switch (type) {
+      case DELETE:
+        return KeyValue.Type.Delete;
+      case DELETE_FAMILY_VERSION:
+        return KeyValue.Type.DeleteFamilyVersion;
+      case DELETE_COLUMN:
+        return KeyValue.Type.DeleteColumn;
+      case DELETE_FAMILY:
+        return KeyValue.Type.DeleteFamily;
+      case PUT:
+      default:
+        // Substitute Result cells are observer-authored values → Put.
+        return KeyValue.Type.Put;
+    }
   }
 
   private static CellProtos.CellType toProtoType(Cell.Type type) {

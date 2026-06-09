@@ -22,7 +22,7 @@ This branch (`fix/v0.1.0-blockers`) addresses the must-fix set. Status legend:
 | H5 | High | `hbasecop-build` emitted structurally broken coproc-jars (`path.Clean` stripped directory markers). | **FIXED** — entry names preserved verbatim in `cmd/hbasecop-build/build.go`. Regression: `TestBuild_PreservesDirectoryEntries`. |
 | H7 | High | cpruntime reader hard-error returned without cancelling the run context → writer/heartbeat hang, `Run()` never returns. | **FIXED** — `runReader` cancels ctx on transport error (`internal/cpruntime/loop.go`). |
 | H10 | High | `c.bypass()` called unguarded in Master/RegionServer/WAL/BulkLoad adapters → a bypass on a non-bypassable hook throws and aborts the host op. | **FIXED** — shared guarded `ObserverBypass.tryBypass` used by all four adapters. |
-| H12 | High | Bypassed `preAppend`/`preIncrement` returned `null` Result (HookResponse carries no value), silently dropping a value-substituting bypass. | **PARTIAL** — made explicit (WARN) and documented via `applyValueReturningHookResponse`. Follow-up: add a result payload to `HookResponse` to actually support value-substituting bypass. |
+| H12 | High | Bypassed `preAppend`/`preIncrement` returned `null` Result (HookResponse carries no value), silently dropping a value-substituting bypass. | **FIXED** — `HookResponse.result` (repeated Cell, proto field 4, additive); Go `HookResult.ResultCells`; `CellConverter.fromProto`; the adapter returns a substitute `Result` built from those cells on bypass. Regression: `TestDispatchPreAppendResultBypass` (Go) + `preAppendBypassReturnsSubstituteResultFromHookResponseCells` (Java). |
 | H6 | High | CI enforced none of SPEC §7's gates. | **CONFIG** — see below. |
 
 ## CI gates made real (H6)

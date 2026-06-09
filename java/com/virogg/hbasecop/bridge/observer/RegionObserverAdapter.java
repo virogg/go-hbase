@@ -81,11 +81,13 @@ import com.virogg.hbasecop.bridge.wire.pb.PreStoreFileReaderOpenRequest;
 import com.virogg.hbasecop.bridge.wire.pb.PreStoreScannerOpenRequest;
 import com.virogg.hbasecop.bridge.wire.pb.PreWALAppendRequest;
 import com.virogg.hbasecop.bridge.wire.pb.PreWALRestoreRequest;
+import com.virogg.hbasecop.hbase.v1.CellProtos;
 import com.virogg.hbasecop.hbase.v1.ClientProtos.MutationProto;
 import com.virogg.hbasecop.hbase.v1.HBaseProtos;
 import java.io.IOException;
 import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -1020,8 +1022,7 @@ public final class RegionObserverAdapter implements RegionObserver {
             .build()
             .toByteArray();
     HookResponse resp = dispatch(regionIdFor(c), HookId.PRE_APPEND.value(), reqBytes);
-    applyValueReturningHookResponse(HookId.PRE_APPEND.value(), resp);
-    return null;
+    return valueReturningResult(resp);
   }
 
   @Override
@@ -1052,8 +1053,7 @@ public final class RegionObserverAdapter implements RegionObserver {
             .toByteArray();
     HookResponse resp =
         dispatch(regionIdFor(c), HookId.PRE_APPEND_AFTER_ROW_LOCK.value(), reqBytes);
-    applyValueReturningHookResponse(HookId.PRE_APPEND_AFTER_ROW_LOCK.value(), resp);
-    return null;
+    return valueReturningResult(resp);
   }
 
   // --- Increment (T42 Wave 2: bodies populated) -------------------------
@@ -1069,8 +1069,7 @@ public final class RegionObserverAdapter implements RegionObserver {
             .build()
             .toByteArray();
     HookResponse resp = dispatch(regionIdFor(c), HookId.PRE_INCREMENT.value(), reqBytes);
-    applyValueReturningHookResponse(HookId.PRE_INCREMENT.value(), resp);
-    return null;
+    return valueReturningResult(resp);
   }
 
   @Override
@@ -1103,8 +1102,7 @@ public final class RegionObserverAdapter implements RegionObserver {
             .toByteArray();
     HookResponse resp =
         dispatch(regionIdFor(c), HookId.PRE_INCREMENT_AFTER_ROW_LOCK.value(), reqBytes);
-    applyValueReturningHookResponse(HookId.PRE_INCREMENT_AFTER_ROW_LOCK.value(), resp);
-    return null;
+    return valueReturningResult(resp);
   }
 
   // --- Scanner (T42 Wave 1: bodies populated) ---------------------------
@@ -1763,23 +1761,25 @@ public final class RegionObserverAdapter implements RegionObserver {
   }
 
   /**
-   * Apply a HookResponse for a value-returning pre-hook: {@code preAppend} / {@code preIncrement}
-   * and their after-row-lock variants. In HBase 2.5 the bypass mechanism for these hooks is "return
-   * a non-null {@link Result} to substitute for the operation", <em>not</em> {@link
-   * ObserverContext#bypass()}. The wire {@code HookResponse} carries no result value, so an
-   * observer cannot supply that replacement — a requested bypass cannot be honored. Rather than
-   * silently returning {@code null} (proceed normally), surface it as a WARN so the limitation is
-   * visible in the RegionServer log. Tracked follow-up: add a result payload to HookResponse to
-   * support value-substituting bypass on these hooks.
+   * Build the substitute {@link Result} for a value-returning pre-hook: {@code preAppend} / {@code
+   * preIncrement} and their after-row-lock variants. In HBase 2.5 the bypass mechanism for these
+   * hooks is "return a non-null {@link Result} to substitute for the operation", <em>not</em>
+   * {@link ObserverContext#bypass()}.
+   *
+   * <p>Returns {@code null} when the observer did not bypass (HBase then runs the operation
+   * normally). On bypass, returns a Result assembled from the cells the observer supplied in {@code
+   * HookResponse.result} — an empty list yields an empty Result — which HBase returns to the client
+   * in place of the operation.
    */
-  private static void applyValueReturningHookResponse(byte hookId, HookResponse resp) {
-    if (resp != null && resp.getBypass()) {
-      LOG.log(
-          Level.WARNING,
-          "hbasecop: hook {0} requested bypass with a replacement value, which is unsupported "
-              + "(HookResponse carries no result) — proceeding with normal processing",
-          hookId);
+  private static Result valueReturningResult(HookResponse resp) {
+    if (resp == null || !resp.getBypass()) {
+      return null;
     }
+    List<Cell> cells = new ArrayList<>(resp.getResultCount());
+    for (CellProtos.Cell c : resp.getResultList()) {
+      cells.add(CellConverter.fromProto(c));
+    }
+    return Result.create(cells);
   }
 
   /**
