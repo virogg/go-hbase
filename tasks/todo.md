@@ -75,11 +75,11 @@
 
 ## Phase 7 — DX: CLI, examples, docs
 - [x] T71 `hbasecop-build` CLI (Java ManifestBinaryDescriptor + GoProcess SHA-256 validation + Go CLI emitting coproc-jar)
-- [ ] T72 examples/audit-observer
-- [ ] T73 examples/ttl-validator
-- [ ] T74 Top-level README + getting started
-- [ ] T75 Architecture doc
-- [ ] **CP-ε4:** release candidate ready
+- [x] T72 examples/audit-observer (post-hook audit, row-digest privacy, AuditObserverIT 50 ops → 50 records)
+- [x] T73 examples/ttl-validator (strict PrePut validation, TtlValidatorIT invalid → IOException)
+- [x] T74 Top-level README + getting started (quick start, config-defaults reference, FAQ)
+- [x] T75 Architecture doc (docs/architecture.md — as-built flow; concurrency.md marked future-design)
+- [ ] **CP-ε4:** release candidate ready — gated on tasks/RELEASE-BLOCKERS.md (coverage gates at ratchet, not yet at SPEC targets)
 
 ## Phase 8 — Bench, harden, release
 - [ ] T81 Bench harness latency overhead (target: <100µs p50 prePut)

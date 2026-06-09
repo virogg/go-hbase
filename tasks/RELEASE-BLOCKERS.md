@@ -64,5 +64,5 @@ for a blocked release.
 - Missing `TestHookIDMatchesProtoEnum` Go↔proto parity guard; no full-coverage parity test for Master/RegionServer/WAL/BulkLoad surfaces.
 - post-hooks block synchronously (SPEC §3 fire-and-forget) — design change.
 - `MutationConverter` drops mutation-level attributes (cellVisibility/ACL/TTL); Get/Scan drop per-CF time ranges.
-- Docs: README still "bootstrap"; `docs/architecture.md` missing; `concurrency.md` documents an unbuilt actor model; examples mismatch (T72–T75).
+- ~~Docs: README still "bootstrap"; `docs/architecture.md` missing; `concurrency.md` documents an unbuilt actor model; examples mismatch (T72–T75).~~ **Resolved:** T72 (audit-observer) + T73 (ttl-validator) shipped with ITs; T74 README rewritten with the config-defaults reference (SPEC §8); T75 `docs/architecture.md` describes the as-built flow and `concurrency.md` is banner-marked as future design.
 - Busy-spin in the Go reader/writer; latency/WAL bench targets (T81/T82) not asserted; soak (T84).
