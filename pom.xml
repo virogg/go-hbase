@@ -226,6 +226,15 @@
         <groupId>org.jacoco</groupId>
         <artifactId>jacoco-maven-plugin</artifactId>
         <version>${plugin.jacoco.version}</version>
+        <configuration>
+          <!-- Exclude generated protobuf classes from coverage analysis: they
+               are emitted by protoc, not hand-written, and (50k+ lines) would
+               otherwise dominate the BUNDLE ratio and make the gate meaningless. -->
+          <excludes>
+            <exclude>com/virogg/hbasecop/hbase/v1/**</exclude>
+            <exclude>com/virogg/hbasecop/bridge/wire/pb/**</exclude>
+          </excludes>
+        </configuration>
         <executions>
           <execution>
             <id>jacoco-prepare</id>
@@ -246,10 +255,11 @@
                   <element>BUNDLE</element>
                   <limits>
                     <limit>
+                      <!-- SPEC §7: Java ≥75% line coverage. Now enforced
+                           (was a no-op 0.00 placeholder through T71). -->
                       <counter>LINE</counter>
                       <value>COVEREDRATIO</value>
-                      <!-- TODO(T23): bump to 0.75 once real bridge code lands. -->
-                      <minimum>0.00</minimum>
+                      <minimum>0.75</minimum>
                     </limit>
                   </limits>
                 </rule>

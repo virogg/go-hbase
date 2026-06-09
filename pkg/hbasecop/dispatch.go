@@ -5,7 +5,9 @@ package hbasecop
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"runtime/debug"
 
 	"google.golang.org/protobuf/proto"
 
@@ -117,6 +119,24 @@ func (d *dispatcher) dispatch(ctx context.Context, req *wire.Message) *wire.Mess
 	return d.errorFrame(req, errCodeUnknownHook, "unknown hook")
 }
 
+// recoverInvoke runs one observer-method invocation and converts a panic
+// from user callback code into an error. SPEC §6 requires that a panic in
+// a user observer never escape to crash the long-lived per-RegionServer Go
+// process — it must become an Error travelling back to the Java side, which
+// then applies the configured failure policy (strict → IOException to the
+// client; best-effort → WARN + no-op). The recovered error flows through
+// responseFrame as HookResponse.error.
+func recoverInvoke(logger *slog.Logger, hookName string, reqID uint64, fn func() (HookResult, error)) (result HookResult, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error("hbasecop: observer panic recovered",
+				"hook", hookName, "req_id", reqID, "panic", r, "stack", string(debug.Stack()))
+			err = fmt.Errorf("observer panic in %s: %v", hookName, r)
+		}
+	}()
+	return fn()
+}
+
 func (d *dispatcher) dispatchRegion(ctx context.Context, req *wire.Message, wireReq *wirepb.Request, entry hookEntry) *wire.Message {
 	inner := entry.decode()
 	if err := proto.Unmarshal(wireReq.GetHookCtx(), inner); err != nil {
@@ -126,7 +146,9 @@ func (d *dispatcher) dispatchRegion(ctx context.Context, req *wire.Message, wire
 			"invalid "+entry.name+"Request: "+err.Error())
 	}
 	env := envFromHookContext(req.RegionID, extractHookCtx(inner))
-	result, callErr := entry.invoke(d.observer, ctx, env, inner)
+	result, callErr := recoverInvoke(d.logger, entry.name, req.ReqID, func() (HookResult, error) {
+		return entry.invoke(d.observer, ctx, env, inner)
+	})
 	return d.responseFrame(req, result, callErr)
 }
 
@@ -139,7 +161,9 @@ func (d *dispatcher) dispatchMaster(ctx context.Context, req *wire.Message, wire
 			"invalid "+entry.name+"Request: "+err.Error())
 	}
 	env := envFromHookContext(req.RegionID, extractHookCtx(inner))
-	result, callErr := entry.invoke(d.master, ctx, env, inner)
+	result, callErr := recoverInvoke(d.logger, entry.name, req.ReqID, func() (HookResult, error) {
+		return entry.invoke(d.master, ctx, env, inner)
+	})
 	return d.responseFrame(req, result, callErr)
 }
 
@@ -152,7 +176,9 @@ func (d *dispatcher) dispatchRegionServer(ctx context.Context, req *wire.Message
 			"invalid "+entry.name+"Request: "+err.Error())
 	}
 	env := envFromHookContext(req.RegionID, extractHookCtx(inner))
-	result, callErr := entry.invoke(d.regionServer, ctx, env, inner)
+	result, callErr := recoverInvoke(d.logger, entry.name, req.ReqID, func() (HookResult, error) {
+		return entry.invoke(d.regionServer, ctx, env, inner)
+	})
 	return d.responseFrame(req, result, callErr)
 }
 
@@ -165,7 +191,9 @@ func (d *dispatcher) dispatchWAL(ctx context.Context, req *wire.Message, wireReq
 			"invalid "+entry.name+"Request: "+err.Error())
 	}
 	env := envFromHookContext(req.RegionID, extractHookCtx(inner))
-	result, callErr := entry.invoke(d.wal, ctx, env, inner)
+	result, callErr := recoverInvoke(d.logger, entry.name, req.ReqID, func() (HookResult, error) {
+		return entry.invoke(d.wal, ctx, env, inner)
+	})
 	return d.responseFrame(req, result, callErr)
 }
 
@@ -178,7 +206,9 @@ func (d *dispatcher) dispatchBulkLoad(ctx context.Context, req *wire.Message, wi
 			"invalid "+entry.name+"Request: "+err.Error())
 	}
 	env := envFromHookContext(req.RegionID, extractHookCtx(inner))
-	result, callErr := entry.invoke(d.bulkLoad, ctx, env, inner)
+	result, callErr := recoverInvoke(d.logger, entry.name, req.ReqID, func() (HookResult, error) {
+		return entry.invoke(d.bulkLoad, ctx, env, inner)
+	})
 	return d.responseFrame(req, result, callErr)
 }
 

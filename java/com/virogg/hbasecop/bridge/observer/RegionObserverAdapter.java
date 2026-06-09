@@ -1020,7 +1020,7 @@ public final class RegionObserverAdapter implements RegionObserver {
             .build()
             .toByteArray();
     HookResponse resp = dispatch(regionIdFor(c), HookId.PRE_APPEND.value(), reqBytes);
-    applyHookResponse(c, resp);
+    applyValueReturningHookResponse(HookId.PRE_APPEND.value(), resp);
     return null;
   }
 
@@ -1052,7 +1052,7 @@ public final class RegionObserverAdapter implements RegionObserver {
             .toByteArray();
     HookResponse resp =
         dispatch(regionIdFor(c), HookId.PRE_APPEND_AFTER_ROW_LOCK.value(), reqBytes);
-    applyHookResponse(c, resp);
+    applyValueReturningHookResponse(HookId.PRE_APPEND_AFTER_ROW_LOCK.value(), resp);
     return null;
   }
 
@@ -1069,7 +1069,7 @@ public final class RegionObserverAdapter implements RegionObserver {
             .build()
             .toByteArray();
     HookResponse resp = dispatch(regionIdFor(c), HookId.PRE_INCREMENT.value(), reqBytes);
-    applyHookResponse(c, resp);
+    applyValueReturningHookResponse(HookId.PRE_INCREMENT.value(), resp);
     return null;
   }
 
@@ -1103,7 +1103,7 @@ public final class RegionObserverAdapter implements RegionObserver {
             .toByteArray();
     HookResponse resp =
         dispatch(regionIdFor(c), HookId.PRE_INCREMENT_AFTER_ROW_LOCK.value(), reqBytes);
-    applyHookResponse(c, resp);
+    applyValueReturningHookResponse(HookId.PRE_INCREMENT_AFTER_ROW_LOCK.value(), resp);
     return null;
   }
 
@@ -1759,6 +1759,26 @@ public final class RegionObserverAdapter implements RegionObserver {
           Level.WARNING,
           "hbasecop: observer requested bypass on a hook that does not support it — ignored",
           e);
+    }
+  }
+
+  /**
+   * Apply a HookResponse for a value-returning pre-hook: {@code preAppend} / {@code preIncrement}
+   * and their after-row-lock variants. In HBase 2.5 the bypass mechanism for these hooks is "return
+   * a non-null {@link Result} to substitute for the operation", <em>not</em> {@link
+   * ObserverContext#bypass()}. The wire {@code HookResponse} carries no result value, so an
+   * observer cannot supply that replacement — a requested bypass cannot be honored. Rather than
+   * silently returning {@code null} (proceed normally), surface it as a WARN so the limitation is
+   * visible in the RegionServer log. Tracked follow-up: add a result payload to HookResponse to
+   * support value-substituting bypass on these hooks.
+   */
+  private static void applyValueReturningHookResponse(byte hookId, HookResponse resp) {
+    if (resp != null && resp.getBypass()) {
+      LOG.log(
+          Level.WARNING,
+          "hbasecop: hook {0} requested bypass with a replacement value, which is unsupported "
+              + "(HookResponse carries no result) — proceeding with normal processing",
+          hookId);
     }
   }
 

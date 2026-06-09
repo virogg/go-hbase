@@ -2,6 +2,15 @@
 
 > Источник: `tasks/plan.md`. Чекаем по мере готовности. Подробности (AC/verify) — в плане.
 
+> ⛔ **v0.1.0 RELEASE BLOCKED** (review, branch `fix/v0.1.0-blockers`). A
+> spec-driven review found 2 Critical + multiple High defects in shipped code
+> and CI gates that enforced nothing. Several tasks marked `[x]` did not meet
+> their AC: **T71** (SHA-256 checksum was dead code — never wired into the
+> runtime), **T05** (CI lint action incompatible; coverage gates 0.00/none; no
+> integration job), **T12/T13** (chunk_total OOM; chunking unreachable in prod),
+> **T17/T22** (reader-error hang; user-panic crashed the shared process). Fix
+> status + remaining work: [`tasks/RELEASE-BLOCKERS.md`](RELEASE-BLOCKERS.md).
+
 ## Phase 0 — Foundation
 - [x] T01 Repo skeleton (dirs, LICENSE Apache-2.0, .gitignore)
 - [x] T02 Go build (go.mod, golangci-lint, Makefile go-*)

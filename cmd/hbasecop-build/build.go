@@ -11,8 +11,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -255,11 +255,20 @@ func copyZipEntry(zw *zip.Writer, f *zip.File) error {
 }
 
 func writeWith(zw *zip.Writer, name string, body []byte, method uint16) error {
+	// Preserve the entry name VERBATIM. zip/jar names use forward slashes
+	// and a trailing slash marks a directory entry; path.Clean would strip
+	// that slash, demoting "META-INF/" → "META-INF" (a zero-length file
+	// colliding with its own directory) and producing a jar that `jar x`,
+	// unzip and the JVM classloader cannot extract.
 	hdr := &zip.FileHeader{
-		Name:   path.Clean(name),
+		Name:   name,
 		Method: method,
 	}
-	hdr.SetMode(0o644)
+	if strings.HasSuffix(name, "/") {
+		hdr.SetMode(fs.ModeDir | 0o755)
+	} else {
+		hdr.SetMode(0o644)
+	}
 	w, err := zw.CreateHeader(hdr)
 	if err != nil {
 		return err

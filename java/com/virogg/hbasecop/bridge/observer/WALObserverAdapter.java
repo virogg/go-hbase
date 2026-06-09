@@ -237,7 +237,7 @@ public final class WALObserverAdapter implements WALObserver {
       return;
     }
     if (resp.getBypass()) {
-      c.bypass();
+      ObserverBypass.tryBypass(c);
     }
   }
 }

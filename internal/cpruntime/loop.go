@@ -151,6 +151,11 @@ func (l *Loop) runReader(ctx context.Context, cancel context.CancelFunc) {
 		}
 		if err != nil {
 			l.cfg.Logger.Error("cpruntime: inbound recv failed", "err", err)
+			// Cancel the run context so the writer and heartbeat
+			// goroutines also exit; otherwise they block on ctx.Done()
+			// forever and Run() hangs on wg.Wait() (the SHUTDOWN path
+			// already cancels — a transport error must too).
+			cancel()
 			return
 		}
 
@@ -175,6 +180,17 @@ func (l *Loop) runReader(ctx context.Context, cancel context.CancelFunc) {
 }
 
 func (l *Loop) handle(ctx context.Context, req *wire.Message) {
+	defer func() {
+		// Backstop: a panic from a Handler (e.g. user observer code)
+		// must never escape this per-request goroutine and crash the
+		// shared Go process for every region on the RegionServer. The
+		// SDK dispatcher (pkg/hbasecop) recovers first and turns the
+		// panic into an Error frame; this catches any non-SDK Handler.
+		if r := recover(); r != nil {
+			l.cfg.Logger.Error("cpruntime: handler panic recovered",
+				"req_id", req.ReqID, "hook_id", req.HookID, "panic", r)
+		}
+	}()
 	resp := l.cfg.Handler(ctx, req)
 	if resp == nil {
 		return

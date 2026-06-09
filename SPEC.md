@@ -253,3 +253,11 @@ GitHub Actions: lint → unit → contract → integration (only on PR to main +
    (`GoProcess.start`) валидирует digest при extract из jar resource — mismatch
    → fail-fast с ясным сообщением. Защита от corruption/wrong-arch, не от
    threat-actor (полноценный GPG signing — post-MVP).
+
+   > **REOPENED then RE-CLOSED (review, fix/v0.1.0-blockers).** The CP-ε3
+   > closure was inaccurate: `GoProcess.verifyChecksum` existed but
+   > `CoprocessorRuntime.buildGoProcess()` never passed the expected digest, so
+   > the check was **dead code** — every real launch skipped verification. Fixed
+   > on `fix/v0.1.0-blockers`: the runtime now resolves
+   > `HbaseCop-Go-Bin-SHA256` from the coproc-jar manifest and validates it
+   > before exec. See [`tasks/RELEASE-BLOCKERS.md`](tasks/RELEASE-BLOCKERS.md).

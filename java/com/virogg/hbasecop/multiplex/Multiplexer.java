@@ -45,9 +45,17 @@ public final class Multiplexer implements AutoCloseable {
     void send(Message msg) throws Exception;
   }
 
+  /**
+   * Upper bound on concurrent in-flight (pending) calls. Defends memory against a pathological leak
+   * even if a caller ever forgets to {@link #cancel} a timed-out request. Far above any realistic
+   * inflight count (bounded in practice by the HBase RPC handler-thread pool).
+   */
+  public static final int DEFAULT_MAX_PENDING = 100_000;
+
   private final Sender sender;
   private final long restartDeadlineMs;
   private final ScheduledExecutorService scheduler;
+  private final int maxPending;
   private final AtomicLong nextId = new AtomicLong();
 
   private final Object lock = new Object();
@@ -58,16 +66,21 @@ public final class Multiplexer implements AutoCloseable {
   private Throwable pauseReason;
 
   public Multiplexer(Sender sender) {
-    this(sender, 0L, null);
+    this(sender, 0L, null, DEFAULT_MAX_PENDING);
   }
 
-  private Multiplexer(Sender sender, long restartDeadlineMs, ScheduledExecutorService scheduler) {
+  private Multiplexer(
+      Sender sender, long restartDeadlineMs, ScheduledExecutorService scheduler, int maxPending) {
     this.sender = Objects.requireNonNull(sender, "sender");
     if (restartDeadlineMs < 0L) {
       throw new IllegalArgumentException("restartDeadlineMs must be ≥ 0, got " + restartDeadlineMs);
     }
+    if (maxPending <= 0) {
+      throw new IllegalArgumentException("maxPending must be > 0, got " + maxPending);
+    }
     this.restartDeadlineMs = restartDeadlineMs;
     this.scheduler = scheduler;
+    this.maxPending = maxPending;
   }
 
   public static Builder builder(Sender sender) {
@@ -85,6 +98,16 @@ public final class Multiplexer implements AutoCloseable {
    * req_id and {@code REQUEST} type is forwarded to the sender.
    */
   public CompletableFuture<Message> call(Message request) {
+    return callTracked(request).future;
+  }
+
+  /**
+   * Like {@link #call(Message)} but returns the allocated req_id alongside the future so the caller
+   * can {@link #cancel(long)} it on timeout. The synchronous hook dispatcher uses this to drop a
+   * timed-out request from {@code pending} — otherwise the future and its map entry leak for the
+   * life of the channel (one per timed-out call).
+   */
+  public Call callTracked(Message request) {
     Objects.requireNonNull(request, "request");
 
     long id = nextId.incrementAndGet();
@@ -95,20 +118,30 @@ public final class Multiplexer implements AutoCloseable {
     synchronized (lock) {
       if (closed) {
         fut.completeExceptionally(new ChannelClosedException());
-        return fut;
+        return new Call(id, fut);
       }
       if (paused) {
         if (scheduler == null || restartDeadlineMs <= 0L) {
           // No deferred-wait wiring — fail fast with the pause reason.
           fut.completeExceptionally(
               pauseReason != null ? pauseReason : new GoSideCrashedException("multiplex: paused"));
-          return fut;
+          return new Call(id, fut);
+        }
+        if (deferred.size() + pending.size() >= maxPending) {
+          fut.completeExceptionally(
+              new GoSideCrashedException("multiplex: pending overflow (max=" + maxPending + ")"));
+          return new Call(id, fut);
         }
         Deferred d = new Deferred(id, outbound, fut);
         deferred.put(id, d);
         d.timeoutTask =
             scheduler.schedule(() -> failDeferred(id), restartDeadlineMs, TimeUnit.MILLISECONDS);
-        return fut;
+        return new Call(id, fut);
+      }
+      if (pending.size() >= maxPending) {
+        fut.completeExceptionally(
+            new GoSideCrashedException("multiplex: pending overflow (max=" + maxPending + ")"));
+        return new Call(id, fut);
       }
       pending.put(id, fut);
     }
@@ -121,7 +154,35 @@ public final class Multiplexer implements AutoCloseable {
       }
       fut.completeExceptionally(t);
     }
-    return fut;
+    return new Call(id, fut);
+  }
+
+  /**
+   * Stop tracking {@code reqId}: remove any pending or deferred waiter for it (cancelling a pending
+   * deadline timer). Called by the dispatcher when a {@link #call} times out, so the future and its
+   * map entry are reclaimed instead of leaking. A late RESPONSE for a cancelled id is then simply
+   * dropped by {@link #deliver} (no waiter found). Idempotent.
+   */
+  public void cancel(long reqId) {
+    Deferred d;
+    synchronized (lock) {
+      pending.remove(reqId);
+      d = deferred.remove(reqId);
+    }
+    if (d != null && d.timeoutTask != null) {
+      d.timeoutTask.cancel(false);
+    }
+  }
+
+  /** A dispatched call: the allocated req_id plus the future that completes on its RESPONSE. */
+  public static final class Call {
+    public final long reqId;
+    public final CompletableFuture<Message> future;
+
+    Call(long reqId, CompletableFuture<Message> future) {
+      this.reqId = reqId;
+      this.future = future;
+    }
   }
 
   /**
@@ -276,9 +337,16 @@ public final class Multiplexer implements AutoCloseable {
     private final Sender sender;
     private long restartDeadlineMs;
     private ScheduledExecutorService scheduler;
+    private int maxPending = DEFAULT_MAX_PENDING;
 
     private Builder(Sender sender) {
       this.sender = Objects.requireNonNull(sender, "sender");
+    }
+
+    /** Override the maximum number of concurrent in-flight calls. Must be {@code > 0}. */
+    public Builder maxPending(int n) {
+      this.maxPending = n;
+      return this;
     }
 
     /**
@@ -300,7 +368,7 @@ public final class Multiplexer implements AutoCloseable {
     }
 
     public Multiplexer build() {
-      return new Multiplexer(sender, restartDeadlineMs, scheduler);
+      return new Multiplexer(sender, restartDeadlineMs, scheduler, maxPending);
     }
   }
 }

@@ -471,7 +471,7 @@ public final class MasterObserverAdapter implements MasterObserver {
       return;
     }
     if (resp.getBypass()) {
-      c.bypass();
+      ObserverBypass.tryBypass(c);
     }
   }
 }

@@ -98,6 +98,35 @@ hbasecop-build: ## T71: build the coproc-jar packaging CLI (host arch, target/bi
 go-test: ## Run Go tests with the race detector.
 	$(GO) test -race -count=1 $(GO_PKGS)
 
+# SPEC §5 documents `test-go`/`test-java`/`test-bench`; keep the language-first
+# names canonical and provide these as aliases so the spec commands work.
+.PHONY: test-go
+test-go: go-test ## SPEC §5 alias for go-test.
+
+.PHONY: test-java
+test-java: java-test ## SPEC §5 alias for java-test.
+
+.PHONY: test-bench
+test-bench: bench-region-concurrency ## SPEC §5 alias for the throughput bench.
+
+FUZZTIME ?= 30s
+.PHONY: fuzz
+fuzz: ## T83: run the wire-codec fuzzer (override duration with FUZZTIME=...).
+	$(GO) test ./internal/wire/ -run '^$$' -fuzz '^FuzzDecode$$' -fuzztime $(FUZZTIME)
+
+# Coverage gate set excludes generated protobuf, thin mains, and examples —
+# the gate measures hand-written, testable code.
+GO_COVER_PKGS := $(shell $(GO) list ./... | grep -vE '/(examples|internal/wire/hbasepb|internal/wire/hookpb|internal/wire/wirepb|internal/wiregolden|cmd/wire-golden|cmd/hbasecop-runtime)$$')
+GO_COVER_MIN  ?= 80.0
+.PHONY: go-cover
+go-cover: ## SPEC §7 gate: Go line coverage (hand-written code) must be ≥80%; fails otherwise.
+	$(GO) test -race -covermode=atomic -coverprofile=coverage.out $(GO_COVER_PKGS)
+	@total=$$($(GO) tool cover -func=coverage.out | awk '/^total:/ {print $$3}'); \
+	  echo "Go line coverage (excl. generated): $$total (gate: $(GO_COVER_MIN)%)"; \
+	  pct=$$(printf '%s' "$$total" | tr -d '%'); \
+	  awk "BEGIN { exit !($$pct >= $(GO_COVER_MIN)) }" \
+	    || { echo "FAIL: Go line coverage $$total < $(GO_COVER_MIN)% (SPEC §7)"; exit 1; }
+
 .PHONY: go-lint
 go-lint: ## Run golangci-lint on every Go package.
 	$(GOLANGCILINT) run $(GO_PKGS)
