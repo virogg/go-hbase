@@ -17,6 +17,7 @@ import com.virogg.hbasecop.bridge.shmem.ShmemException;
 import com.virogg.hbasecop.bridge.supervisor.GoProcess;
 import com.virogg.hbasecop.bridge.supervisor.GoProcessConfig;
 import com.virogg.hbasecop.bridge.supervisor.HeartbeatWatchdog;
+import com.virogg.hbasecop.bridge.supervisor.ManifestBinaryDescriptor;
 import com.virogg.hbasecop.bridge.supervisor.RestartConfig;
 import com.virogg.hbasecop.bridge.supervisor.RestartController;
 import com.virogg.hbasecop.bridge.wire.Decoder;
@@ -28,6 +29,9 @@ import com.virogg.hbasecop.multiplex.Multiplexer;
 import java.io.IOException;
 import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
+import java.net.JarURLConnection;
+import java.net.URL;
+import java.net.URLConnection;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -41,6 +45,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.jar.Manifest;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 
@@ -72,6 +77,12 @@ public final class CoprocessorRuntime implements AutoCloseable {
 
   /** Default miss threshold for the watchdog. */
   public static final int DEFAULT_HEARTBEAT_MISS_THRESHOLD = 3;
+
+  /**
+   * Tick cadence for the supervisor scheduler when heartbeats are disabled. Crash detection and
+   * restart still run at this interval so disabling heartbeats never disables auto-restart.
+   */
+  private static final long DEFAULT_CRASH_PROBE_MS = 500L;
 
   /** Configuration key: max consecutive restart failures before declaring the runtime unhealthy. */
   public static final String KEY_RESTART_MAX_FAILS = "hbasecop.restart.max-fails";
@@ -142,19 +153,25 @@ public final class CoprocessorRuntime implements AutoCloseable {
 
       watchdog = maybeBuildWatchdog(cfg, effectiveHeartbeatMs);
       restartController = buildRestartController(cfg);
-      if (watchdog != null) {
-        watchdogScheduler =
-            Executors.newSingleThreadScheduledExecutor(
-                r -> {
-                  Thread t = new Thread(r, "hbasecop-watchdog");
-                  t.setDaemon(true);
-                  return t;
-                });
-        long tickMs = watchdog.period().toMillis();
-        watchdogTask =
-            watchdogScheduler.scheduleAtFixedRate(
-                this::tickSchedulerTask, tickMs, tickMs, TimeUnit.MILLISECONDS);
-      }
+      // The supervisor scheduler drives crash detection (detectExitedGoProcess)
+      // AND restart (restartController.tick); the heartbeat watchdog tick is an
+      // optional add-on layered on top. These must run even when heartbeats are
+      // DISABLED — otherwise a crashed or exit()ed Go process is never detected
+      // and never restarted, silently disabling the entire supervisor (strict
+      // hooks would then fail forever). So the scheduler is created
+      // unconditionally; when there is no watchdog it ticks at a crash-probe
+      // cadence. tickSchedulerTask() null-checks the watchdog.
+      long tickMs = effectiveHeartbeatMs > 0 ? effectiveHeartbeatMs : DEFAULT_CRASH_PROBE_MS;
+      watchdogScheduler =
+          Executors.newSingleThreadScheduledExecutor(
+              r -> {
+                Thread t = new Thread(r, "hbasecop-supervisor");
+                t.setDaemon(true);
+                return t;
+              });
+      watchdogTask =
+          watchdogScheduler.scheduleAtFixedRate(
+              this::tickSchedulerTask, tickMs, tickMs, TimeUnit.MILLISECONDS);
 
       Encoder enc = new Encoder();
       long restartDeadlineMs = resolveRestartDeadlineMs(cfg);
@@ -501,9 +518,62 @@ public final class CoprocessorRuntime implements AutoCloseable {
             .maxObjectSize(cfg.ringMaxObjectSize())
             .heartbeatPeriodMs(effectiveHeartbeatMs)
             .gracefulShutdownTimeout(cfg.gracefulShutdownTimeout())
+            // T71/CP-ε3: pass the manifest's HbaseCop-Go-Bin-SHA256 so GoProcess
+            // validates the extracted ELF BEFORE exec and fails closed on a
+            // corrupt/wrong-arch/tampered binary. Without this the checksum the
+            // hbasecop-build CLI writes is never actually verified at runtime.
+            .expectedBinarySha256(resolveExpectedBinarySha256())
             .extraEnv(cfg.extraEnv())
             .build();
     return new GoProcess(procCfg, javaToGo);
+  }
+
+  /**
+   * Resolve the expected SHA-256 of the embedded Go ELF. Precedence: an explicit override on the
+   * {@link Config}, else the {@code HbaseCop-Go-Bin-SHA256} attribute from the manifest of the
+   * <em>same</em> jar that provides {@link Config#binaryResourcePath()} (so the digest is bound to
+   * the same artifact as the ELF). Returns {@code null} — checksum skipped, with a WARN — only for
+   * uninstrumented/dev classpaths (e.g. {@code target/classes}) that carry no HbaseCop manifest
+   * attributes; production coproc-jars built by {@code hbasecop-build} always carry the attribute.
+   */
+  private String resolveExpectedBinarySha256() {
+    String override = cfg.expectedBinarySha256();
+    if (override != null && !override.isEmpty()) {
+      return override;
+    }
+    String resourcePath = cfg.binaryResourcePath();
+    try {
+      ClassLoader cl = Thread.currentThread().getContextClassLoader();
+      if (cl == null) {
+        cl = CoprocessorRuntime.class.getClassLoader();
+      }
+      URL res = cl.getResource(resourcePath);
+      if (res != null) {
+        URLConnection conn = res.openConnection();
+        if (conn instanceof JarURLConnection) {
+          Manifest mf = ((JarURLConnection) conn).getManifest();
+          if (mf != null) {
+            ManifestBinaryDescriptor d =
+                ManifestBinaryDescriptor.fromAttributes(mf.getMainAttributes());
+            if (d != null && d.binarySha256() != null) {
+              return d.binarySha256();
+            }
+          }
+        }
+      }
+    } catch (IOException e) {
+      LOG.log(
+          Level.WARNING,
+          "CoprocessorRuntime: failed to read coproc-jar manifest for ELF checksum; skipping verification",
+          e);
+      return null;
+    }
+    LOG.log(
+        Level.WARNING,
+        "CoprocessorRuntime: no HbaseCop-Go-Bin-SHA256 manifest attribute for resource {0}; "
+            + "ELF checksum verification skipped (expected only for dev/uninstrumented classpaths)",
+        resourcePath);
+    return null;
   }
 
   private RestartController buildRestartController(Config cfg) {
@@ -701,6 +771,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
   public static final class Config {
 
     private final String binaryResourcePath;
+    private final String expectedBinarySha256;
     private final Path javaToGoFile;
     private final Path goToJavaFile;
     private final int ringCapacity;
@@ -715,6 +786,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
 
     private Config(Builder b) {
       this.binaryResourcePath = b.binaryResourcePath;
+      this.expectedBinarySha256 = b.expectedBinarySha256;
       this.javaToGoFile = Objects.requireNonNull(b.javaToGoFile, "javaToGoFile");
       this.goToJavaFile = Objects.requireNonNull(b.goToJavaFile, "goToJavaFile");
       if (b.ringCapacity <= 0) {
@@ -740,6 +812,14 @@ public final class CoprocessorRuntime implements AutoCloseable {
 
     public String binaryResourcePath() {
       return binaryResourcePath;
+    }
+
+    /**
+     * Optional explicit override for the expected ELF SHA-256. When unset, the runtime resolves it
+     * from the coproc-jar manifest ({@code HbaseCop-Go-Bin-SHA256}).
+     */
+    public String expectedBinarySha256() {
+      return expectedBinarySha256;
     }
 
     public Path javaToGoFile() {
@@ -813,6 +893,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
     /** Mutable builder; not thread-safe. */
     public static final class Builder {
       private String binaryResourcePath = "bin/linux-amd64/hbasecop-runtime";
+      private String expectedBinarySha256;
       private Path javaToGoFile;
       private Path goToJavaFile;
       private int ringCapacity = 16;
@@ -827,6 +908,16 @@ public final class CoprocessorRuntime implements AutoCloseable {
 
       public Builder binaryResourcePath(String s) {
         this.binaryResourcePath = s;
+        return this;
+      }
+
+      /**
+       * Override the expected ELF SHA-256 (64 lower-case hex chars). Normally left unset so the
+       * runtime reads it from the coproc-jar manifest; useful for tests and embedders that supply
+       * the digest out of band.
+       */
+      public Builder expectedBinarySha256(String hex) {
+        this.expectedBinarySha256 = hex;
         return this;
       }
 

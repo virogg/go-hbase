@@ -12,8 +12,8 @@ services:
     build:
       context: ./hbase
       args:
-        HBASE_VERSION: "2.5.11"
-    image: go-hbase/hbase-dev:2.5.11
+        HBASE_VERSION: "${HBASE_VERSION:-2.5.11}"
+    image: "go-hbase/hbase-dev:${HBASE_VERSION:-2.5.11}"
     container_name: go-hbase-dev
     hostname: hbase-dev
     # We use explicit port forwards (not network_mode=host) so this works under

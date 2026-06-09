@@ -49,11 +49,20 @@ public final class MuxHookDispatcher implements HookDispatcher {
     // regionId is the T61 multi-region routing key, allocated by the adapter
     // via RegionIdAllocator on RegionObserver.start(env). 0 = no region scope.
     Message req = new Message(FrameType.REQUEST, 0L, regionId, hookId, requestPayload);
-    CompletableFuture<Message> fut = mux.call(req);
+    Multiplexer.Call call = mux.callTracked(req);
+    CompletableFuture<Message> fut = call.future;
 
     final Message resp;
     try {
       resp = fut.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+    } catch (TimeoutException e) {
+      // Drop the waiter so its future + pending-map entry are reclaimed.
+      // CompletableFuture.get(timeout) does NOT remove the registration; without
+      // this, every timed-out hook leaks one entry in Multiplexer.pending for the
+      // life of the channel. A late RESPONSE for this id is then ignored.
+      fut.cancel(false);
+      mux.cancel(call.reqId);
+      throw e;
     } catch (ExecutionException e) {
       Throwable cause = e.getCause();
       if (cause instanceof ChannelClosedException) {

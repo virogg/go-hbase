@@ -92,6 +92,12 @@ func (d *Decoder) readChunk() (*Message, error) {
 	if chunkTotal == 0 || chunkIdx >= chunkTotal {
 		return nil, fmt.Errorf("%w: idx=%d total=%d", ErrInvalidChunk, chunkIdx, chunkTotal)
 	}
+	// Bound chunk_total BEFORE any allocation keyed off it: chunkTotal is
+	// peer-controlled (raw u32), so an unbounded value would make the
+	// make([][]byte, chunkTotal) below request gigabytes and OOM us.
+	if chunkTotal > MaxChunks {
+		return nil, fmt.Errorf("%w: %d > %d", ErrTooManyChunks, chunkTotal, MaxChunks)
+	}
 
 	if chunkTotal == 1 {
 		// Single-chunk fast path; copy out of buf so callers may
@@ -112,6 +118,11 @@ func (d *Decoder) readChunk() (*Message, error) {
 
 	re, ok := d.pending[reqID]
 	if !ok {
+		// Cap concurrent in-progress reassemblies so abandoned req_ids
+		// (final chunk never arrives) cannot grow the map without bound.
+		if len(d.pending) >= MaxPendingReassemblies {
+			return nil, fmt.Errorf("%w: %d", ErrTooManyPending, len(d.pending))
+		}
 		re = &reassembly{
 			typ: typ, regionID: regionID, hookID: hookID, total: chunkTotal,
 			chunks: make([][]byte, chunkTotal),

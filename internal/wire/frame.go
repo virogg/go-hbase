@@ -32,6 +32,22 @@ const (
 	// single chunk. Payloads larger than this must be split by the
 	// Encoder into multiple chunks sharing the same req_id.
 	MaxPayloadBytes = MaxFrameSize - 4 - headerSize
+
+	// MaxChunks bounds chunk_total: the largest number of chunks a
+	// single message may legitimately be split into. chunk_total is
+	// read straight off the wire as a u32, so without this cap a
+	// hostile or corrupt frame (chunk_total up to ~4.29e9) would make
+	// the decoder pre-allocate a multi-GiB chunk slice and OOM the
+	// process. 1024 chunks × MaxPayloadBytes ≈ 64 MiB max message,
+	// far above any real hook payload. Defended in both the Go and
+	// Java decoders (kept in lockstep; see WireFormat.MAX_CHUNKS).
+	MaxChunks = 1024
+
+	// MaxPendingReassemblies bounds the number of concurrent
+	// in-progress multi-chunk reassemblies a Decoder will track,
+	// capping memory from abandoned req_ids whose final chunk never
+	// arrives (e.g. across a Go-side crash).
+	MaxPendingReassemblies = 4096
 )
 
 // Type is the on-wire payload discriminator (the `type` byte). Field
@@ -88,4 +104,14 @@ var (
 	// ErrControlMultiChunk — Heartbeat/Shutdown/Log arrived with
 	// chunk_total > 1. Control frames are required to be single-chunk.
 	ErrControlMultiChunk = errors.New("wire: control frame must be single-chunk")
+
+	// ErrTooManyChunks — chunk_total exceeds MaxChunks. Guards against
+	// unbounded reassembly-slice allocation from a peer-controlled
+	// chunk_total.
+	ErrTooManyChunks = errors.New("wire: chunk_total exceeds MaxChunks")
+
+	// ErrTooManyPending — the Decoder is already tracking
+	// MaxPendingReassemblies distinct in-progress multi-chunk
+	// reassemblies; a new req_id would exceed the cap.
+	ErrTooManyPending = errors.New("wire: too many pending reassemblies")
 )

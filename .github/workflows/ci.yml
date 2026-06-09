@@ -8,6 +8,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  schedule:
+    # Nightly (03:17 UTC) — runs the heavier integration + bench jobs that are
+    # skipped on ordinary pushes. SPEC §7: integration on PR-to-main + nightly,
+    # bench nightly with a regression alert.
+    - cron: "17 3 * * *"
 
 permissions:
   contents: read
@@ -30,7 +35,7 @@ jobs:
         run: ./tools/license-header.sh --check
 
   go:
-    name: Go (lint + build + test)
+    name: Go (lint + build + test + coverage + fuzz)
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -41,7 +46,9 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        # action v7+ is required for golangci-lint v2 / the v2 .golangci.yml schema
+        # (action v6 only supports golangci-lint v1).
+        uses: golangci/golangci-lint-action@v7
         with:
           version: v2.10.1
           args: --timeout=5m
@@ -49,6 +56,11 @@ jobs:
         run: make go-build
       - name: go test (race)
         run: make go-test
+      - name: go coverage gate (SPEC §7 ≥80% line, hand-written code)
+        run: make go-cover
+      - name: wire-codec fuzz (smoke; T83)
+        # Short smoke run on every CI; the nightly job fuzzes longer.
+        run: make fuzz FUZZTIME=30s
 
   java:
     name: Java (lint + test + jacoco)
@@ -66,7 +78,7 @@ jobs:
         run: make deps-shmem
       - name: spotless:check
         run: make java-lint
-      - name: mvn verify
+      - name: mvn verify (tests + JaCoCo ≥75% line gate + spotless)
         run: make java-test
       - name: Upload JaCoCo report
         if: always()
@@ -96,3 +108,97 @@ jobs:
         run: go run ./cmd/wire-golden -out test/golden/wire/v1
       - name: Verify corpus is reproducible
         run: git diff --exit-code test/golden/wire/v1
+
+  integration:
+    name: Integration (HBase ${{ matrix.hbase }})
+    runs-on: ubuntu-22.04
+    # SPEC §7: integration runs on PR targeting main, on push to main, on the
+    # nightly schedule, and on manual dispatch — not on every feature-branch push.
+    if: >-
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && github.base_ref == 'main')
+    strategy:
+      fail-fast: false
+      matrix:
+        # Risk table: cover the pinned 2.5.x and a newer 2.5 patch so a
+        # RegionObserver-signature change between patches is caught.
+        hbase: ["2.5.0", "2.5.11"]
+    env:
+      HBASE_VERSION: ${{ matrix.hbase }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+          cache: maven
+      - name: Install java-go-shmem to ~/.m2
+        run: make deps-shmem
+      - name: Build Go runtime ELF
+        run: make go-build-runtime
+      # Each target brings up the HBase container, runs its IT, and tears down.
+      - name: PrePut counter IT (T27)
+        run: make test-integration
+      - name: Shared-process / multi-region IT (T63)
+        run: make test-integration-shared
+      - name: Read-path filter IT (T43)
+        run: make test-integration-read
+      - name: Batch partial-block IT (T44)
+        run: make test-integration-batch
+      - name: Storage hooks IT (T45)
+        run: make test-integration-storage
+      - name: Master policy IT (T51)
+        run: make test-integration-master
+      - name: RegionServer policy IT (T52)
+        run: make test-integration-rs
+      - name: Fault-injection matrix IT (T36)
+        run: make test-fault
+      - name: Upload HBase logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hbase-logs-${{ matrix.hbase }}
+          path: test/integration/coproc-jars/*.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  fuzz-nightly:
+    name: Fuzz (nightly, extended)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Fuzz wire codec (10m)
+        run: make fuzz FUZZTIME=10m
+
+  bench:
+    name: Bench (nightly, regression alert)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Region-concurrency throughput bench (T62)
+        run: make bench-region-concurrency
+      # TODO(T81/T82): once the latency/WAL benches assert SPEC targets
+      # (<100µs p50 prePut; WAL regression <50%), compare against a stored
+      # baseline here and fail on >20% degradation.

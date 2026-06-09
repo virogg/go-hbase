@@ -238,7 +238,7 @@ public final class RegionServerObserverAdapter implements RegionServerObserver {
       return;
     }
     if (resp.getBypass()) {
-      c.bypass();
+      ObserverBypass.tryBypass(c);
     }
   }
 }

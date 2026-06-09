@@ -142,7 +142,7 @@ public final class BulkLoadObserverAdapter implements BulkLoadObserver {
       return;
     }
     if (resp.getBypass()) {
-      c.bypass();
+      ObserverBypass.tryBypass(c);
     }
   }
 }
