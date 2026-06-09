@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/virogg/go-hbase/internal/wire"
+	"github.com/virogg/go-hbase/internal/wire/hbasepb"
 	"github.com/virogg/go-hbase/internal/wire/hookpb"
 	"github.com/virogg/go-hbase/internal/wire/wirepb"
 )
@@ -253,6 +254,9 @@ func (d *dispatcher) responseFrame(req *wire.Message, result HookResult, callErr
 	hookResp := &hookpb.HookResponse{Bypass: result.Bypass}
 	if len(result.BlockedIndices) > 0 {
 		hookResp.BlockedIndices = append([]uint32(nil), result.BlockedIndices...)
+	}
+	if len(result.ResultCells) > 0 {
+		hookResp.Result = append([]*hbasepb.Cell(nil), result.ResultCells...)
 	}
 	if callErr != nil {
 		hookResp.Error = &hookpb.HookError{Code: 1, Message: callErr.Error()}

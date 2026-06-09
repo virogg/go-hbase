@@ -6,6 +6,8 @@ package com.virogg.hbasecop.bridge.observer;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -18,19 +20,25 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.google.protobuf.ByteString;
 import com.virogg.hbasecop.bridge.config.PolicyConfig;
 import com.virogg.hbasecop.bridge.wire.pb.HookError;
 import com.virogg.hbasecop.bridge.wire.pb.HookResponse;
 import com.virogg.hbasecop.bridge.wire.pb.PrePutRequest;
+import com.virogg.hbasecop.hbase.v1.CellProtos;
 import com.virogg.hbasecop.hbase.v1.ClientProtos.MutationProto;
 import com.virogg.hbasecop.multiplex.RegionIdAllocator;
 import java.io.IOException;
 import java.time.Duration;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Append;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -130,6 +138,46 @@ class RegionObserverAdapterTest {
     adapter.prePut(ctx, samplePut(), walEdit, Durability.USE_DEFAULT);
 
     verify(ctx, times(1)).bypass();
+  }
+
+  @Test
+  void preAppendBypassReturnsSubstituteResultFromHookResponseCells() throws Exception {
+    // H12 full fix: a value-returning bypass on preAppend carries the
+    // observer's substitute cells in HookResponse.result; the adapter must
+    // return them to the client as a Result (which bypasses the Append).
+    CellProtos.Cell cell =
+        CellProtos.Cell.newBuilder()
+            .setRow(ByteString.copyFromUtf8("row-9"))
+            .setFamily(ByteString.copyFromUtf8("cf"))
+            .setQualifier(ByteString.copyFromUtf8("q"))
+            .setTimestamp(123L)
+            .setCellType(CellProtos.CellType.PUT)
+            .setValue(ByteString.copyFromUtf8("appended"))
+            .build();
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any()))
+        .thenReturn(
+            HookResponse.newBuilder().setBypass(true).addResult(cell).build().toByteArray());
+
+    Append append =
+        new Append("row-9".getBytes()).addColumn("cf".getBytes(), "q".getBytes(), "x".getBytes());
+    Result r = adapter.preAppend(ctx, append);
+
+    assertNotNull(r, "bypass must return a substitute Result, not null");
+    assertEquals(1, r.rawCells().length);
+    Cell got = r.rawCells()[0];
+    assertEquals("row-9", new String(CellUtil.cloneRow(got)));
+    assertEquals("q", new String(CellUtil.cloneQualifier(got)));
+    assertEquals("appended", new String(CellUtil.cloneValue(got)));
+  }
+
+  @Test
+  void preAppendNoBypassReturnsNullSoOperationProceeds() throws Exception {
+    when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any()))
+        .thenReturn(HookResponse.newBuilder().build().toByteArray());
+
+    Append append =
+        new Append("row-9".getBytes()).addColumn("cf".getBytes(), "q".getBytes(), "x".getBytes());
+    assertNull(adapter.preAppend(ctx, append), "no bypass → null → HBase runs the Append");
   }
 
   @Test
