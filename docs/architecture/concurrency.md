@@ -1,5 +1,14 @@
 # Concurrency model: reader → router → per-region actor
 
+> ⚠️ **FUTURE DESIGN — NOT IMPLEMENTED.** The router / per-region actor /
+> lifecycle-barrier model below was planned for T41 but **was not built**.
+> The shipped runtime is a flat reader + writer + heartbeat with one
+> goroutine per request and **no per-region ordering or lifecycle barrier**
+> — observer state must be safe for fully concurrent invocation. For the
+> as-built model see [`docs/architecture.md`](../architecture.md)
+> §"Concurrency model (as built)". Keep this document only as a design
+> sketch for a possible post-v0.1.0 ordering layer.
+
 > **Status.** Foundation in place via T17 (`internal/cpruntime.Loop`).
 > Full enforcement — including the lifecycle barrier — lands in T41 when
 > the RegionObserver hook surface fills in.
