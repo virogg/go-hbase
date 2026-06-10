@@ -1,9 +1,24 @@
-# v0.1.0 — RELEASE BLOCKED
+# v0.1.0 — RELEASE: CONDITIONAL
 
-> Status: **BLOCKED.** A specification-driven review found two Critical and a
-> set of High defects in shipped code, plus CI quality gates that enforced
-> nothing. T85 (release) must not proceed until the items below are resolved
-> and re-verified with integration + fuzz actually running.
+> Status: **CONDITIONAL.** The blockers a specification-driven review found —
+> two Critical and a set of High defects in shipped code, plus CI quality gates
+> that enforced nothing — are all **resolved**: the 9 must-fix items are fixed
+> with regression tests, the CI gates are real, both SPEC §7 coverage gates are
+> met (Go 82.5% ≥ 80%, Java 87.8% ≥ 0.75) and verified, and the full
+> integration matrix + the wire fuzzer run green. CP-ε4 (release candidate) is
+> closed.
+>
+> **Remaining before T85 (tag) — not blockers, tracked as Phase 8 + follow-ups:**
+> - Phase 8: T81 latency bench asserting the <100µs p50 prePut target, T82 WAL
+>   throughput regression gate, T83 extended (nightly) fuzz, T84 1h soak/chaos.
+> - Non-blocker review findings (enhancements, not correctness blockers):
+>   post-hooks dispatch synchronously rather than fire-and-forget (SPEC §3);
+>   `MutationConverter` drops mutation-level attributes (cellVisibility/ACL/TTL);
+>   no cross-language *byte-parity* contract test for the 143 hook messages.
+>
+> These do not gate correctness or safety; they gate the performance claims and
+> polish that a 0.1.0 tag should carry. Decide per item whether each blocks the
+> tag or ships as a documented known-limitation.
 
 This branch (`fix/v0.1.0-blockers`) addresses the must-fix set. Status legend:
 **FIXED** (done + regression test), **CONFIG** (gate/CI made real), **PARTIAL**
