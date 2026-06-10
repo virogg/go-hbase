@@ -41,17 +41,17 @@ func TestUnimplementedObserversAreNoOps(t *testing.T) {
 				t.Fatalf("%s exposes %d methods, expected %d (update the test when the surface changes)",
 					s.name, vt.NumMethod(), s.want)
 			}
-			for i := 0; i < vt.NumMethod(); i++ {
+			for i := range vt.NumMethod() {
 				method := vt.Method(i)
 				fn := v.Method(i)
 				ft := fn.Type()
 
 				args := make([]reflect.Value, ft.NumIn())
-				for j := 0; j < ft.NumIn(); j++ {
+				for j := range ft.NumIn() {
 					in := ft.In(j)
 					switch {
 					case in.Implements(ctxType):
-						args[j] = reflect.ValueOf(context.Background())
+						args[j] = reflect.ValueOf(t.Context())
 					case in.Kind() == reflect.Pointer:
 						// Non-nil pointer to a zero-value request; no-ops ignore it.
 						args[j] = reflect.New(in.Elem())

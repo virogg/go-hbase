@@ -255,18 +255,13 @@
                   <element>BUNDLE</element>
                   <limits>
                     <limit>
-                      <!-- Coverage gate, now ENFORCED (was a no-op 0.00
-                           placeholder through T71; generated protobuf excluded
-                           above). SPEC §7 target is 0.75 line; the codebase is
-                           currently ~0.57 because the observer adapters are
-                           integration-tested, not unit-tested, so this is a
-                           RATCHET at the current floor — it prevents regression
-                           and unblocks the jar/integration build. Raise toward
-                           0.75 as adapter/RunX unit tests land. See
-                           tasks/RELEASE-BLOCKERS.md. -->
+                      <!-- SPEC §7 gate: Java ≥75% line coverage (generated
+                           protobuf excluded above). Met as of the Phase-7
+                           coverage work (actual ≈0.88). Was a no-op 0.00
+                           placeholder through T71, then a 0.55 ratchet. -->
                       <counter>LINE</counter>
                       <value>COVEREDRATIO</value>
-                      <minimum>0.55</minimum>
+                      <minimum>0.75</minimum>
                     </limit>
                   </limits>
                 </rule>
