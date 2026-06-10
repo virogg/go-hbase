@@ -2,14 +2,16 @@
 
 > Источник: `tasks/plan.md`. Чекаем по мере готовности. Подробности (AC/verify) — в плане.
 
-> ⛔ **v0.1.0 RELEASE BLOCKED** (review, branch `fix/v0.1.0-blockers`). A
-> spec-driven review found 2 Critical + multiple High defects in shipped code
-> and CI gates that enforced nothing. Several tasks marked `[x]` did not meet
-> their AC: **T71** (SHA-256 checksum was dead code — never wired into the
-> runtime), **T05** (CI lint action incompatible; coverage gates 0.00/none; no
-> integration job), **T12/T13** (chunk_total OOM; chunking unreachable in prod),
-> **T17/T22** (reader-error hang; user-panic crashed the shared process). Fix
-> status + remaining work: [`tasks/RELEASE-BLOCKERS.md`](RELEASE-BLOCKERS.md).
+> 🟡 **v0.1.0 RELEASE: CONDITIONAL** (review → fixes, branch `fix/v0.1.0-blockers`).
+> A spec-driven review found 2 Critical + multiple High defects in shipped code
+> and CI gates that enforced nothing — all now **resolved** (9 must-fix items
+> fixed with regression tests; CI gates real; SPEC §7 coverage met: Go 82.5%,
+> Java 87.8%; integration matrix + fuzz green). Tasks whose AC had been
+> overstated are corrected: **T71** (SHA-256 now wired into the runtime), **T05**
+> (lint action v7, coverage gates enforced, integration + bench + nightly jobs),
+> **T12/T13** (chunk_total bounded; chunking limits documented), **T17/T22**
+> (reader cancels ctx; user-panic recovered). Remaining before the T85 tag is
+> Phase 8 + documented non-blocker findings: [`tasks/RELEASE-BLOCKERS.md`](RELEASE-BLOCKERS.md).
 
 ## Phase 0 — Foundation
 - [x] T01 Repo skeleton (dirs, LICENSE Apache-2.0, .gitignore)
@@ -79,7 +81,7 @@
 - [x] T73 examples/ttl-validator (strict PrePut validation, TtlValidatorIT invalid → IOException)
 - [x] T74 Top-level README + getting started (quick start, config-defaults reference, FAQ)
 - [x] T75 Architecture doc (docs/architecture.md — as-built flow; concurrency.md marked future-design)
-- [ ] **CP-ε4:** release candidate ready — gated on tasks/RELEASE-BLOCKERS.md (coverage gates at ratchet, not yet at SPEC targets)
+- [x] **CP-ε4:** release candidate ready — all 9 review must-fix items fixed (regression-tested), CI gates real, SPEC §7 coverage met (Go 82.5%, Java 87.8%), integration matrix + fuzz green. Remaining work is Phase 8 + documented non-blocker findings; see tasks/RELEASE-BLOCKERS.md (status: CONDITIONAL).
 
 ## Phase 8 — Bench, harden, release
 - [ ] T81 Bench harness latency overhead (target: <100µs p50 prePut)
