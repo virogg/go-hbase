@@ -181,10 +181,17 @@ final class CoprocessorRuntimeTest {
       // backoff.
       rt.crashGoProcessForTesting();
 
+      // Await the TERMINAL restart state, not the intermediate observable:
+      // attemptRestart() swaps in the fresh GoProcess (pid changes, isAlive
+      // flips true) before tick() stores state=HEALTHY, so polling on the pid
+      // alone races the final state transition on slow runners.
       long deadline = System.currentTimeMillis() + 5_000L;
       while (System.currentTimeMillis() < deadline) {
         long pid = rt.goProcessPidForTesting();
-        if (rt.isAlive() && pid != origPid && pid != -1L) {
+        if (rt.isAlive()
+            && pid != origPid
+            && pid != -1L
+            && rt.restartControllerForTesting().state() == RestartController.State.HEALTHY) {
           break;
         }
         Thread.sleep(20);
