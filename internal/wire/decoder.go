@@ -20,6 +20,10 @@ type Decoder struct {
 	r        io.Reader
 	pending  map[uint64]*reassembly
 	maxFrame int
+	// pendingBytes is the payload total retained across all entries in
+	// pending, bounded by MaxPendingBytes (the entry-count cap alone
+	// would still permit hundreds of GiB of near-complete reassemblies).
+	pendingBytes int
 }
 
 type reassembly struct {
@@ -135,10 +139,14 @@ func (d *Decoder) readChunk() (*Message, error) {
 		return nil, fmt.Errorf("%w: duplicate chunk_idx %d for req_id %d", ErrInvalidChunk, chunkIdx, reqID)
 	}
 
+	if d.pendingBytes+len(payload) > MaxPendingBytes {
+		return nil, fmt.Errorf("%w: %d + %d > %d", ErrTooManyPendingBytes, d.pendingBytes, len(payload), MaxPendingBytes)
+	}
 	chunkCopy := append([]byte(nil), payload...)
 	re.chunks[chunkIdx] = chunkCopy
 	re.received++
 	re.size += len(chunkCopy)
+	d.pendingBytes += len(chunkCopy)
 
 	if re.received < re.total {
 		return nil, nil
@@ -149,6 +157,7 @@ func (d *Decoder) readChunk() (*Message, error) {
 		out = append(out, c...)
 	}
 	delete(d.pending, reqID)
+	d.pendingBytes -= re.size
 	return &Message{
 		Type: re.typ, ReqID: reqID, RegionID: re.regionID, HookID: re.hookID,
 		Payload: out,

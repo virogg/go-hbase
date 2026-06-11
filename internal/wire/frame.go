@@ -48,6 +48,16 @@ const (
 	// capping memory from abandoned req_ids whose final chunk never
 	// arrives (e.g. across a Go-side crash).
 	MaxPendingReassemblies = 4096
+
+	// MaxPendingBytes bounds the TOTAL payload bytes retained across
+	// all in-progress reassemblies. The entry-count cap alone is not
+	// enough: each abandoned near-complete reassembly may hold up to
+	// (MaxChunks-1)×MaxPayloadBytes ≈ 67 MB, so 4096 entries would
+	// permit ~256 GiB of retained heap — an OOM long before the count
+	// cap fires. One max-size message (64 MiB) plus headroom; in the
+	// current transport a ring slot carries a complete encoded
+	// message, so cross-call pending bytes are already anomalous.
+	MaxPendingBytes = 96 << 20
 )
 
 // Type is the on-wire payload discriminator (the `type` byte). Field
@@ -114,4 +124,10 @@ var (
 	// MaxPendingReassemblies distinct in-progress multi-chunk
 	// reassemblies; a new req_id would exceed the cap.
 	ErrTooManyPending = errors.New("wire: too many pending reassemblies")
+
+	// ErrTooManyPendingBytes — storing this chunk would push the total
+	// payload bytes retained across all in-progress reassemblies over
+	// MaxPendingBytes. Caps heap from abandoned near-complete
+	// reassemblies, which the entry-count cap alone does not bound.
+	ErrTooManyPendingBytes = errors.New("wire: too many pending reassembly bytes")
 )
