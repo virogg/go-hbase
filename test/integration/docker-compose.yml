@@ -13,6 +13,9 @@ services:
       context: ./hbase
       args:
         HBASE_VERSION: "${HBASE_VERSION:-2.5.11}"
+        # Must match HBASE_VERSION; default pairs with 2.5.11. CI matrix legs
+        # export both (see ci.yml integration job).
+        HBASE_SHA512: "${HBASE_SHA512:-BAD94B693C2F3013F91FB50BF8678D48C749815A8CA335531E85C0B62BFC18D34DF253A43B50AA66B7ED5C1FF379E8EA0213B4A6F21441F93DD83EB21DEC473C}"
     image: "go-hbase/hbase-dev:${HBASE_VERSION:-2.5.11}"
     container_name: go-hbase-dev
     hostname: hbase-dev

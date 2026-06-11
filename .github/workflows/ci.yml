@@ -123,10 +123,17 @@ jobs:
       fail-fast: false
       matrix:
         # Risk table: cover the pinned 2.5.x and a newer 2.5 patch so a
-        # RegionObserver-signature change between patches is caught.
-        hbase: ["2.5.0", "2.5.11"]
+        # RegionObserver-signature change between patches is caught. Each
+        # version carries its official dist sha512 — the Dockerfile verifies
+        # the tarball, so the digest must travel with the version.
+        include:
+          - hbase: "2.5.0"
+            hbase_sha512: "1E0EBF9A457A8ED59A0E1EA06EAA6019F63575C317588175F18EE2506CF0E527516952CB026DB84D4AF890BE35F74C29F8E87C41E0DCF99393C09BD48668E16F"
+          - hbase: "2.5.11"
+            hbase_sha512: "BAD94B693C2F3013F91FB50BF8678D48C749815A8CA335531E85C0B62BFC18D34DF253A43B50AA66B7ED5C1FF379E8EA0213B4A6F21441F93DD83EB21DEC473C"
     env:
       HBASE_VERSION: ${{ matrix.hbase }}
+      HBASE_SHA512: ${{ matrix.hbase_sha512 }}
     steps:
       - uses: actions/checkout@v4
         with:
