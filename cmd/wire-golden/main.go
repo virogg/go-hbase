@@ -43,7 +43,7 @@ func main() {
 
 	for _, fx := range fixtures {
 		var buf bytes.Buffer
-		opts := []wire.EncoderOption{}
+		var opts []wire.EncoderOption
 		if fx.ChunkSize > 0 {
 			opts = append(opts, wire.WithChunkSize(fx.ChunkSize))
 		}

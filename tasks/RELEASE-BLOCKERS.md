@@ -8,17 +8,25 @@
 > integration matrix + the wire fuzzer run green. CP-ε4 (release candidate) is
 > closed.
 >
-> **Remaining before T85 (tag) — not blockers, tracked as Phase 8 + follow-ups:**
-> - Phase 8: T81 latency bench asserting the <100µs p50 prePut target, T82 WAL
->   throughput regression gate, T83 extended (nightly) fuzz, T84 1h soak/chaos.
-> - Non-blocker review findings (enhancements, not correctness blockers):
+> **Phase 8 is done (2026-06-10), all gates green:**
+> - T81 latency bench: prePut p50 overhead 72–78µs < 100µs target
+>   (docs/bench/t81-latency.md; production fix: spin-before-park in
+>   `MuxHookDispatcher`).
+> - T82 WAL throughput: 15.4% regression < 50% gate (docs/bench/t82-wal.md).
+> - T83 fuzz: Go 20m + Java jazzer 10m clean; found + fixed the missing Java
+>   H2/H4 bounds AND a both-sides retained-bytes gap (docs/bench/t83-fuzz.md).
+> - T84 soak: 1h @1000 ops/s, 12 kill -9s — 2.84M acked puts, 0 lost, RSS
+>   flat, restart accounting exact, 0 zombies (docs/bench/t84-soak.md).
+>
+> **Remaining before T85 (tag) — non-blocker review findings (enhancements,
+> not correctness blockers):**
 >   post-hooks dispatch synchronously rather than fire-and-forget (SPEC §3);
 >   `MutationConverter` drops mutation-level attributes (cellVisibility/ACL/TTL);
 >   no cross-language *byte-parity* contract test for the 143 hook messages.
 >
-> These do not gate correctness or safety; they gate the performance claims and
-> polish that a 0.1.0 tag should carry. Decide per item whether each blocks the
-> tag or ships as a documented known-limitation.
+> These ship as documented known-limitations (CHANGELOG.md) unless decided
+> otherwise. Release machinery is ready: `make release VERSION=0.1.0`
+> validated, release workflow on `v*` tags, CHANGELOG section in place.
 
 This branch (`fix/v0.1.0-blockers`) addresses the must-fix set. Status legend:
 **FIXED** (done + regression test), **CONFIG** (gate/CI made real), **PARTIAL**
@@ -31,8 +39,8 @@ This branch (`fix/v0.1.0-blockers`) addresses the must-fix set. Status legend:
 | C1 | Critical | User-observer panic was never `recover()`ed → crashed the shared Go process for **all regions** on the RegionServer (SPEC §6). | **FIXED** — `recoverInvoke` in `pkg/hbasecop/dispatch.go` turns a panic into `HookResponse.error`; backstop recover in `internal/cpruntime/loop.go`. Regression: `TestDispatchRecoversObserverPanic`. |
 | C2 | Critical | Disabling heartbeats silently disabled **all crash detection + auto-restart** (the supervisor scheduler was only started when a watchdog existed). | **FIXED** — `CoprocessorRuntime` now always starts the supervisor scheduler (crash-probe cadence when heartbeats off); watchdog tick is optional. |
 | H1 | High | T71/CP-ε3 SHA-256 ELF checksum was **dead code** — `CoprocessorRuntime.buildGoProcess()` never passed the digest, so it was never verified at runtime. | **FIXED** — runtime resolves `HbaseCop-Go-Bin-SHA256` from the coproc-jar manifest and passes it to `GoProcessConfig`; `GoProcess` fails closed on mismatch. |
-| H2 | High | Wire-decoder OOM DoS: unbounded peer-controlled `chunk_total` pre-allocated a multi-GiB chunk slice (Go + Java). | **FIXED** — `MaxChunks` bound in `internal/wire/decoder.go` and `bridge/wire/Decoder.java`. Regression: `TestDecodeRejectsHugeChunkTotal` + `FuzzDecode`. |
-| H4 | High | Decoder reassembly map unbounded / never evicted (abandoned req_ids). | **FIXED** — `MaxPendingReassemblies` cap, both decoders. Regression: `TestDecodeCapsPendingReassemblies`. |
+| H2 | High | Wire-decoder OOM DoS: unbounded peer-controlled `chunk_total` pre-allocated a multi-GiB chunk slice (Go + Java). | **FIXED** — `MaxChunks` bound in `internal/wire/decoder.go` (regression: `TestDecodeRejectsHugeChunkTotal` + `FuzzDecode`). The Java half of this fix turned out to be missing — caught during T83 fuzz-target prep; `WireFormat.MAX_CHUNKS` is now enforced in `bridge/wire/Decoder.java` (regression: `DecoderBoundsTest`, fuzz: `DecoderFuzzTest`). |
+| H4 | High | Decoder reassembly map unbounded / never evicted (abandoned req_ids). | **FIXED** — `MaxPendingReassemblies` cap in the Go decoder (regression: `TestDecodeCapsPendingReassemblies`); Java cap (`WireFormat.MAX_PENDING_REASSEMBLIES`) landed with T83 alongside H2's Java half (regression: `DecoderBoundsTest`). T83 review then found the count cap alone still permitted ~256 GiB of retained near-complete reassemblies; both decoders now also bound cumulative retained bytes (`MaxPendingBytes` 96 MiB; regressions `TestDecodeCapsPendingBytes` / `capsPendingBytesBeforeEntryCap`). |
 | H3 | High | `Multiplexer` pending future/map leaked on every hook timeout. | **FIXED** — `Multiplexer.cancel(reqId)` + `callTracked`; `MuxHookDispatcher` cancels on `TimeoutException`. Pending-count cap added. |
 | H5 | High | `hbasecop-build` emitted structurally broken coproc-jars (`path.Clean` stripped directory markers). | **FIXED** — entry names preserved verbatim in `cmd/hbasecop-build/build.go`. Regression: `TestBuild_PreservesDirectoryEntries`. |
 | H7 | High | cpruntime reader hard-error returned without cancelling the run context → writer/heartbeat hang, `Run()` never returns. | **FIXED** — `runReader` cancels ctx on transport error (`internal/cpruntime/loop.go`). |
