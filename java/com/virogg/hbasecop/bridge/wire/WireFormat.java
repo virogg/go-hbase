@@ -27,5 +27,29 @@ public final class WireFormat {
   /** Maximum payload bytes carryable in a single chunk. */
   public static final int MAX_PAYLOAD_BYTES = MAX_FRAME_SIZE - 4 - HEADER_SIZE;
 
+  /**
+   * Maximum {@code chunk_total} a peer may declare for one message. {@code chunk_total} is a raw,
+   * peer-controlled u32 that sizes the reassembly chunk array, so it must be bounded before any
+   * allocation keyed off it; 1024 chunks × {@link #MAX_PAYLOAD_BYTES} ≈ 64 MiB, far above any
+   * legitimate hook message. Mirrors {@code wire.MaxChunks}.
+   */
+  public static final int MAX_CHUNKS = 1024;
+
+  /**
+   * Maximum concurrent in-progress multi-chunk reassemblies. Abandoned req_ids (final chunk never
+   * arrives) must not grow the pending map without bound. Mirrors {@code
+   * wire.MaxPendingReassemblies}.
+   */
+  public static final int MAX_PENDING_REASSEMBLIES = 4096;
+
+  /**
+   * Maximum TOTAL payload bytes retained across all in-progress reassemblies. The entry-count cap
+   * alone is not enough: each abandoned near-complete reassembly may hold up to (MAX_CHUNKS−1) ×
+   * {@link #MAX_PAYLOAD_BYTES} ≈ 67 MB, so 4096 entries would permit ~256 GiB of retained heap — an
+   * OOM long before the count cap fires. One max-size message (64 MiB) plus headroom. Mirrors
+   * {@code wire.MaxPendingBytes}.
+   */
+  public static final int MAX_PENDING_BYTES = 96 << 20;
+
   private WireFormat() {}
 }
