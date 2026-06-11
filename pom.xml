@@ -35,21 +35,73 @@
     <hbase.version>2.5.10</hbase.version>
     <junit.version>5.10.2</junit.version>
     <mockito.version>5.11.0</mockito.version>
+    <!-- Keep protobuf-java in lockstep with protoc, see proto-gen.sh / CI. -->
+    <protobuf.version>3.25.5</protobuf.version>
+    <!--
+      java-go-shmem is not on Maven Central; carried as a git submodule
+      under third_party/ and installed locally via `make deps-shmem`
+      (CI runs the same target). See docs/dep-shmem.md for the pin.
+    -->
+    <shmem.version>1.0.0-SNAPSHOT</shmem.version>
+
+    <jazzer.version>0.30.0</jazzer.version>
 
     <plugin.compiler.version>3.13.0</plugin.compiler.version>
     <plugin.surefire.version>3.2.5</plugin.surefire.version>
+
+    <!--
+      JDK module flags required by java-go-shmem (SharedMemory pokes
+      sun.nio.ch.FileChannelImpl + java.nio direct buffers via reflection).
+      Composed with JaCoCo's prepare-agent argLine via @{argLine}.
+    -->
+    <jdk.module.args>--add-exports java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.base/java.nio=ALL-UNNAMED --add-opens java.base/java.io=ALL-UNNAMED</jdk.module.args>
     <plugin.spotless.version>2.43.0</plugin.spotless.version>
     <plugin.jacoco.version>0.8.12</plugin.jacoco.version>
+    <plugin.protobuf.version>0.6.1</plugin.protobuf.version>
+    <plugin.os.version>1.7.1</plugin.os.version>
     <google-java-format.version>1.22.0</google-java-format.version>
   </properties>
 
   <!--
     HBase does not publish a bom artifact, so we pin the version via the
-    `hbase.version` property and reference it directly when concrete deps
-    (hbase-client, hbase-server, hbase-protocol-shaded) land in T21/T23.
+    `hbase.version` property and reference each artifact directly.
+    hbase-server is the only one carrying RegionObserver/ObserverContext;
+    the others (hbase-client, hbase-common) come in transitively but we
+    declare them explicitly so the compile path stays explicit.
+
+    Scope is `provided`: the RegionServer already exposes the HBase jars
+    on its classpath, so the produced coproc-jar must not shade them in.
   -->
 
   <dependencies>
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java</artifactId>
+      <version>${protobuf.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-common</artifactId>
+      <version>${hbase.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-client</artifactId>
+      <version>${hbase.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-server</artifactId>
+      <version>${hbase.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.jgshmem</groupId>
+      <artifactId>java-go-shmem</artifactId>
+      <version>${shmem.version}</version>
+    </dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter-api</artifactId>
@@ -59,6 +111,12 @@
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter-engine</artifactId>
+      <version>${junit.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-params</artifactId>
       <version>${junit.version}</version>
       <scope>test</scope>
     </dependency>
@@ -74,12 +132,64 @@
       <version>${mockito.version}</version>
       <scope>test</scope>
     </dependency>
+    <!--
+      T83: coverage-guided fuzzing for the wire decoder. jazzer-junit is
+      JUnit5-native (the plan's jqf is JUnit4-runner based and would drag
+      junit4 + vintage-engine into this Jupiter-only build). Without
+      JAZZER_FUZZ=1 a @FuzzTest only replays the seed corpus — a fast
+      regression that rides along in every `mvn verify`; `make java-fuzz`
+      opts into real fuzzing.
+    -->
+    <dependency>
+      <groupId>com.code-intelligence</groupId>
+      <artifactId>jazzer-junit</artifactId>
+      <version>${jazzer.version}</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
     <!-- Layout follows SPEC.md §4: top-level java/ for production, test/java/ for tests. -->
     <sourceDirectory>java</sourceDirectory>
     <testSourceDirectory>test/java</testSourceDirectory>
+
+    <!--
+      Map the golden wire corpus into jazzer-junit's seed-corpus location
+      for DecoderFuzzTest (classpath resource <ClassName>Inputs next to the
+      test class). Sourced from test/golden directly so the seeds can never
+      drift from the corpus the golden round-trip tests pin.
+    -->
+    <testResources>
+      <testResource>
+        <directory>test/golden/wire/v1</directory>
+        <targetPath>com/virogg/hbasecop/bridge/wire/DecoderFuzzTestInputs</targetPath>
+        <includes>
+          <include>*.bin</include>
+        </includes>
+      </testResource>
+      <!--
+        T81: the no-op bench observer ELF (built by `make go-build-bench-noop`)
+        rides the test classpath so GoProcess can extract it via
+        binaryResourcePath("bench/linux-amd64/noop-runtime"). Absent unless the
+        bench target has staged it — regular `mvn test` is unaffected.
+      -->
+      <testResource>
+        <directory>test/bench/bin</directory>
+        <targetPath>bench</targetPath>
+      </testResource>
+    </testResources>
+
+    <!--
+      os-maven-plugin exposes ${os.detected.classifier} so protobuf-maven-plugin
+      can pick the right native protoc artifact for the build host.
+    -->
+    <extensions>
+      <extension>
+        <groupId>kr.motd.maven</groupId>
+        <artifactId>os-maven-plugin</artifactId>
+        <version>${plugin.os.version}</version>
+      </extension>
+    </extensions>
 
     <plugins>
       <plugin>
@@ -88,10 +198,41 @@
         <version>${plugin.compiler.version}</version>
       </plugin>
 
+      <!--
+        Generates Java classes from ../proto/*.proto into
+        target/generated-sources/protobuf/java/ (added automatically to the
+        compile path by the plugin). Output is gitignored; regenerate via
+        `mvn generate-sources` or as part of `mvn compile`.
+      -->
+      <plugin>
+        <groupId>org.xolstice.maven.plugins</groupId>
+        <artifactId>protobuf-maven-plugin</artifactId>
+        <version>${plugin.protobuf.version}</version>
+        <configuration>
+          <protocArtifact>com.google.protobuf:protoc:${protobuf.version}:exe:${os.detected.classifier}</protocArtifact>
+          <protoSourceRoot>${project.basedir}/proto</protoSourceRoot>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>compile</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <version>${plugin.surefire.version}</version>
+        <configuration>
+          <!--
+            @{argLine} preserves the JaCoCo prepare-agent javaagent flag
+            so coverage instrumentation survives the JPMS opens below.
+          -->
+          <argLine>@{argLine} ${jdk.module.args}</argLine>
+          <useModulePath>false</useModulePath>
+        </configuration>
       </plugin>
 
       <plugin>
@@ -127,6 +268,15 @@
         <groupId>org.jacoco</groupId>
         <artifactId>jacoco-maven-plugin</artifactId>
         <version>${plugin.jacoco.version}</version>
+        <configuration>
+          <!-- Exclude generated protobuf classes from coverage analysis: they
+               are emitted by protoc, not hand-written, and (50k+ lines) would
+               otherwise dominate the BUNDLE ratio and make the gate meaningless. -->
+          <excludes>
+            <exclude>com/virogg/hbasecop/hbase/v1/**</exclude>
+            <exclude>com/virogg/hbasecop/bridge/wire/pb/**</exclude>
+          </excludes>
+        </configuration>
         <executions>
           <execution>
             <id>jacoco-prepare</id>
@@ -147,10 +297,13 @@
                   <element>BUNDLE</element>
                   <limits>
                     <limit>
+                      <!-- SPEC §7 gate: Java ≥75% line coverage (generated
+                           protobuf excluded above). Met as of the Phase-7
+                           coverage work (actual ≈0.88). Was a no-op 0.00
+                           placeholder through T71, then a 0.55 ratchet. -->
                       <counter>LINE</counter>
                       <value>COVEREDRATIO</value>
-                      <!-- TODO(T23): bump to 0.75 once real bridge code lands. -->
-                      <minimum>0.00</minimum>
+                      <minimum>0.75</minimum>
                     </limit>
                   </limits>
                 </rule>

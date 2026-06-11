@@ -1,0 +1,59 @@
+# Copyright 2026 The go-hbase Authors
+# SPDX-License-Identifier: Apache-2.0
+
+# T85: release pipeline. Fires on a v* tag push, stamps the Maven build with
+# the tag version, assembles the two distributable artifacts (bridge jar +
+# hbasecop-build CLI), and publishes a GitHub release with the matching
+# CHANGELOG section as its body.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build artifacts + GitHub release
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+          cache: maven
+      - name: Install java-go-shmem to ~/.m2
+        run: make deps-shmem
+      - name: Assemble release artifacts
+        run: make release VERSION=${GITHUB_REF_NAME#v}
+      - name: Extract changelog section for this version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v ver="$version" '
+            $0 ~ "^## \\[" ver "\\]" { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > target/release/notes.md
+          if ! [ -s target/release/notes.md ]; then
+            echo "CHANGELOG.md has no section for ${version}" >&2
+            exit 1
+          fi
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file target/release/notes.md \
+            target/release/hbasecop-bridge-*.jar \
+            target/release/hbasecop-build-linux-amd64

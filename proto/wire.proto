@@ -6,7 +6,8 @@
 // Carries Request/Response/Heartbeat/Error/Shutdown/Log between the Java
 // RegionServer-side adapter and the Go runtime over a shared-memory ring.
 //
-// Stability: alpha. Real definitions land in T11.
+// Stability: alpha (v1). Header layout is frozen for Phase 1; payload
+// messages may grow new fields but field numbers will not be reused.
 
 syntax = "proto3";
 
@@ -15,7 +16,83 @@ package virogg.hbasecop.v1;
 option go_package = "github.com/virogg/go-hbase/internal/wire/wirepb";
 option java_package = "com.virogg.hbasecop.bridge.wire.pb";
 option java_multiple_files = true;
+option java_outer_classname = "WireProto";
 
-// Frame is the placeholder root message; T11 replaces this with the real
-// envelope (oneof Request/Response/Heartbeat/Error/Shutdown/Log).
-message Frame {}
+// FrameHeader is the routing metadata carried on every frame.
+//
+//   req_id      — caller-assigned request id; correlates Request↔Response
+//                 (and Error responses). Heartbeats carry req_id=0.
+//   region_id   — HBase region identifier for routing on the Go side.
+//                 Always 0 in Phase 1 (single-region E2E); real values
+//                 land in T61.
+//   hook_id     — Observer-method discriminator (T41 hook table).
+//                 0 means "no hook" (control frames: Heartbeat/Shutdown/Log).
+//   chunk_idx   — 0-based index of this chunk in a multi-chunk message.
+//   chunk_total — total number of chunks (>=1). =1 for single-chunk.
+message FrameHeader {
+  uint64 req_id = 1;
+  uint32 region_id = 2;
+  uint32 hook_id = 3;
+  uint32 chunk_idx = 4;
+  uint32 chunk_total = 5;
+}
+
+// Request carries the PB-encoded HookContext (typed by FrameHeader.hook_id).
+// Per-hook context shapes land in T22+ when HBase .proto is vendored.
+message Request {
+  bytes hook_ctx = 1;
+}
+
+// Response carries the PB-encoded HookResponse, or is empty for void hooks.
+message Response {
+  bytes hook_resp = 1;
+}
+
+// Heartbeat is emitted by the Go runtime on a fixed cadence; supervisor
+// uses it for liveness (T33 watchdog). Header.req_id=0 by convention.
+message Heartbeat {
+  // Sender monotonic clock reading in nanoseconds.
+  uint64 monotonic_nanos = 1;
+}
+
+// Error replaces Response when a hook invocation fails on the Go side.
+// Final routing (strict vs best-effort) is T32.
+message Error {
+  // Numeric class of the failure. 0 reserved for "unspecified".
+  uint32 code = 1;
+  // Human-readable detail; surfaced in IOException message in strict mode.
+  string message = 2;
+}
+
+// Shutdown is the Java-side signal to drain and exit.
+message Shutdown {
+  string reason = 1;
+}
+
+// Log is a structured log line forwarded from the Go runtime to the Java
+// supervisor; supervisor relays to the HBase log subsystem.
+message Log {
+  enum Level {
+    LEVEL_UNSPECIFIED = 0;
+    DEBUG = 1;
+    INFO = 2;
+    WARN = 3;
+    ERROR = 4;
+  }
+  Level level = 1;
+  string message = 2;
+}
+
+// Frame is the wire envelope. Every frame on the ring carries a header
+// and exactly one payload.
+message Frame {
+  FrameHeader header = 1;
+  oneof payload {
+    Request request = 2;
+    Response response = 3;
+    Heartbeat heartbeat = 4;
+    Error error = 5;
+    Shutdown shutdown = 6;
+    Log log = 7;
+  }
+}

@@ -45,6 +45,7 @@ REQUIRED_DIRS=(
   "test/java/com/virogg/hbasecop"
   "test/integration"
   "test/e2e"
+  "test/bench"
 )
 
 for f in "${REQUIRED_FILES[@]}"; do

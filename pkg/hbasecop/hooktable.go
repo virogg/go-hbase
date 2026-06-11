@@ -1,0 +1,197 @@
+// Copyright 2026 The go-hbase Authors
+// SPDX-License-Identifier: Apache-2.0
+
+package hbasecop
+
+import (
+	"context"
+
+	"google.golang.org/protobuf/proto"
+
+	"github.com/virogg/go-hbase/internal/wire/hookpb"
+)
+
+// hookEntry is one row of the T41 dispatch table: how to decode an
+// inbound Request payload, how to invoke the matching RegionObserver
+// method, and its name (mirrored by the Go interface method and the
+// Java HookId enum). The table is iterated at startup to build
+// hooksByID and consulted in TestHookTableIsCanonical / the
+// interface-coverage test to keep the three sides (proto enum, Go
+// interface, Java HookId) in lockstep.
+type hookEntry struct {
+	id     HookID
+	name   string
+	decode func() proto.Message
+	invoke hookInvoker
+}
+
+// hookInvoker is the type-erased entrypoint. The closure dispatches to
+// one RegionObserver method, type-asserts the decoded Request and
+// normalises Post-* methods (which return only error) into the
+// (HookResult, error) shape used by Pre-* methods.
+type hookInvoker func(observer RegionObserver, ctx context.Context, env ObserverEnv, req proto.Message) (HookResult, error)
+
+// newReq returns a zero-valued proto.Message for the type parameter so
+// the dispatch table rows stay one-liner. The pointer-constraint trick
+// keeps PT = *T addressable for proto.Unmarshal.
+func newReq[T any, PT interface {
+	*T
+	proto.Message
+}]() proto.Message {
+	return PT(new(T))
+}
+
+// preHook boxes a RegionObserver Pre-* method expression so the table
+// can store it behind the type-erased hookInvoker. Method expressions
+// on interfaces yield func(RegionObserver, …); the closure type-asserts
+// the decoded payload to the per-hook Request type.
+func preHook[Req proto.Message](method func(RegionObserver, context.Context, ObserverEnv, Req) (HookResult, error)) hookInvoker {
+	return func(o RegionObserver, ctx context.Context, env ObserverEnv, req proto.Message) (HookResult, error) {
+		return method(o, ctx, env, req.(Req))
+	}
+}
+
+// postHook boxes a RegionObserver Post-* method expression. Post-hooks
+// return only error; HookResult{} is returned so Bypass stays false.
+func postHook[Req proto.Message](method func(RegionObserver, context.Context, ObserverEnv, Req) error) hookInvoker {
+	return func(o RegionObserver, ctx context.Context, env ObserverEnv, req proto.Message) (HookResult, error) {
+		return HookResult{}, method(o, ctx, env, req.(Req))
+	}
+}
+
+// hookTable is the canonical T41 dispatch table. The order matches
+// proto/hooks.proto's HookId enum so a reader can scan it top-to-bottom
+// against the .proto. Adding a new HBase RegionObserver method means
+// appending one row here, one method to the RegionObserver interface,
+// one no-op on UnimplementedRegionObserver, and one entry in the Java
+// HookId enum + RegionObserverAdapter override — the hooks_test
+// reflection checks pin the parity.
+var hookTable = []hookEntry{
+	// Lifecycle.
+	{HookIDPreOpen, "PreOpen", newReq[hookpb.PreOpenRequest], preHook(RegionObserver.PreOpen)},
+	{HookIDPostOpen, "PostOpen", newReq[hookpb.PostOpenRequest], postHook(RegionObserver.PostOpen)},
+	{HookIDPreClose, "PreClose", newReq[hookpb.PreCloseRequest], preHook(RegionObserver.PreClose)},
+	{HookIDPostClose, "PostClose", newReq[hookpb.PostCloseRequest], postHook(RegionObserver.PostClose)},
+
+	// Flush.
+	{HookIDPreFlush, "PreFlush", newReq[hookpb.PreFlushRequest], preHook(RegionObserver.PreFlush)},
+	{HookIDPreFlushScannerOpen, "PreFlushScannerOpen", newReq[hookpb.PreFlushScannerOpenRequest], preHook(RegionObserver.PreFlushScannerOpen)},
+	{HookIDPostFlush, "PostFlush", newReq[hookpb.PostFlushRequest], postHook(RegionObserver.PostFlush)},
+
+	// MemStore compaction.
+	{HookIDPreMemStoreCompaction, "PreMemStoreCompaction", newReq[hookpb.PreMemStoreCompactionRequest], preHook(RegionObserver.PreMemStoreCompaction)},
+	{HookIDPreMemStoreCompactionCompactScannerOpen, "PreMemStoreCompactionCompactScannerOpen", newReq[hookpb.PreMemStoreCompactionCompactScannerOpenRequest], preHook(RegionObserver.PreMemStoreCompactionCompactScannerOpen)},
+	{HookIDPreMemStoreCompactionCompact, "PreMemStoreCompactionCompact", newReq[hookpb.PreMemStoreCompactionCompactRequest], preHook(RegionObserver.PreMemStoreCompactionCompact)},
+	{HookIDPostMemStoreCompaction, "PostMemStoreCompaction", newReq[hookpb.PostMemStoreCompactionRequest], postHook(RegionObserver.PostMemStoreCompaction)},
+
+	// Compaction.
+	{HookIDPreCompactSelection, "PreCompactSelection", newReq[hookpb.PreCompactSelectionRequest], preHook(RegionObserver.PreCompactSelection)},
+	{HookIDPostCompactSelection, "PostCompactSelection", newReq[hookpb.PostCompactSelectionRequest], postHook(RegionObserver.PostCompactSelection)},
+	{HookIDPreCompactScannerOpen, "PreCompactScannerOpen", newReq[hookpb.PreCompactScannerOpenRequest], preHook(RegionObserver.PreCompactScannerOpen)},
+	{HookIDPreCompact, "PreCompact", newReq[hookpb.PreCompactRequest], preHook(RegionObserver.PreCompact)},
+	{HookIDPostCompact, "PostCompact", newReq[hookpb.PostCompactRequest], postHook(RegionObserver.PostCompact)},
+
+	// Read path.
+	{HookIDPreGetOp, "PreGetOp", newReq[hookpb.PreGetOpRequest], preHook(RegionObserver.PreGetOp)},
+	{HookIDPostGetOp, "PostGetOp", newReq[hookpb.PostGetOpRequest], postHook(RegionObserver.PostGetOp)},
+	{HookIDPreExists, "PreExists", newReq[hookpb.PreExistsRequest], preHook(RegionObserver.PreExists)},
+	{HookIDPostExists, "PostExists", newReq[hookpb.PostExistsRequest], postHook(RegionObserver.PostExists)},
+
+	// Write path — Put (frozen Phase-2 signatures: take *MutationProto direct).
+	{
+		HookIDPrePut, "PrePut",
+		newReq[hookpb.PrePutRequest],
+		func(o RegionObserver, ctx context.Context, env ObserverEnv, req proto.Message) (HookResult, error) {
+			return o.PrePut(ctx, env, req.(*hookpb.PrePutRequest).GetMutation())
+		},
+	},
+	{
+		HookIDPostPut, "PostPut",
+		newReq[hookpb.PostPutRequest],
+		func(o RegionObserver, ctx context.Context, env ObserverEnv, req proto.Message) (HookResult, error) {
+			return HookResult{}, o.PostPut(ctx, env, req.(*hookpb.PostPutRequest).GetMutation())
+		},
+	},
+
+	// Write path — Delete + version timestamp.
+	{HookIDPreDelete, "PreDelete", newReq[hookpb.PreDeleteRequest], preHook(RegionObserver.PreDelete)},
+	{HookIDPostDelete, "PostDelete", newReq[hookpb.PostDeleteRequest], postHook(RegionObserver.PostDelete)},
+	{HookIDPrePrepareTimeStampForDeleteVersion, "PrePrepareTimeStampForDeleteVersion", newReq[hookpb.PrePrepareTimeStampForDeleteVersionRequest], preHook(RegionObserver.PrePrepareTimeStampForDeleteVersion)},
+
+	// Batch mutate + region operation envelope.
+	{HookIDPreBatchMutate, "PreBatchMutate", newReq[hookpb.PreBatchMutateRequest], preHook(RegionObserver.PreBatchMutate)},
+	{HookIDPostBatchMutate, "PostBatchMutate", newReq[hookpb.PostBatchMutateRequest], postHook(RegionObserver.PostBatchMutate)},
+	{HookIDPostBatchMutateIndispensably, "PostBatchMutateIndispensably", newReq[hookpb.PostBatchMutateIndispensablyRequest], postHook(RegionObserver.PostBatchMutateIndispensably)},
+	{HookIDPostStartRegionOperation, "PostStartRegionOperation", newReq[hookpb.PostStartRegionOperationRequest], postHook(RegionObserver.PostStartRegionOperation)},
+	{HookIDPostCloseRegionOperation, "PostCloseRegionOperation", newReq[hookpb.PostCloseRegionOperationRequest], postHook(RegionObserver.PostCloseRegionOperation)},
+
+	// Check-and-Put.
+	{HookIDPreCheckAndPut, "PreCheckAndPut", newReq[hookpb.PreCheckAndPutRequest], preHook(RegionObserver.PreCheckAndPut)},
+	{HookIDPostCheckAndPut, "PostCheckAndPut", newReq[hookpb.PostCheckAndPutRequest], postHook(RegionObserver.PostCheckAndPut)},
+	{HookIDPreCheckAndPutAfterRowLock, "PreCheckAndPutAfterRowLock", newReq[hookpb.PreCheckAndPutAfterRowLockRequest], preHook(RegionObserver.PreCheckAndPutAfterRowLock)},
+
+	// Check-and-Delete.
+	{HookIDPreCheckAndDelete, "PreCheckAndDelete", newReq[hookpb.PreCheckAndDeleteRequest], preHook(RegionObserver.PreCheckAndDelete)},
+	{HookIDPostCheckAndDelete, "PostCheckAndDelete", newReq[hookpb.PostCheckAndDeleteRequest], postHook(RegionObserver.PostCheckAndDelete)},
+	{HookIDPreCheckAndDeleteAfterRowLock, "PreCheckAndDeleteAfterRowLock", newReq[hookpb.PreCheckAndDeleteAfterRowLockRequest], preHook(RegionObserver.PreCheckAndDeleteAfterRowLock)},
+
+	// Check-and-Mutate.
+	{HookIDPreCheckAndMutate, "PreCheckAndMutate", newReq[hookpb.PreCheckAndMutateRequest], preHook(RegionObserver.PreCheckAndMutate)},
+	{HookIDPostCheckAndMutate, "PostCheckAndMutate", newReq[hookpb.PostCheckAndMutateRequest], postHook(RegionObserver.PostCheckAndMutate)},
+	{HookIDPreCheckAndMutateAfterRowLock, "PreCheckAndMutateAfterRowLock", newReq[hookpb.PreCheckAndMutateAfterRowLockRequest], preHook(RegionObserver.PreCheckAndMutateAfterRowLock)},
+
+	// Append.
+	{HookIDPreAppend, "PreAppend", newReq[hookpb.PreAppendRequest], preHook(RegionObserver.PreAppend)},
+	{HookIDPostAppend, "PostAppend", newReq[hookpb.PostAppendRequest], postHook(RegionObserver.PostAppend)},
+	{HookIDPreAppendAfterRowLock, "PreAppendAfterRowLock", newReq[hookpb.PreAppendAfterRowLockRequest], preHook(RegionObserver.PreAppendAfterRowLock)},
+
+	// Increment.
+	{HookIDPreIncrement, "PreIncrement", newReq[hookpb.PreIncrementRequest], preHook(RegionObserver.PreIncrement)},
+	{HookIDPostIncrement, "PostIncrement", newReq[hookpb.PostIncrementRequest], postHook(RegionObserver.PostIncrement)},
+	{HookIDPreIncrementAfterRowLock, "PreIncrementAfterRowLock", newReq[hookpb.PreIncrementAfterRowLockRequest], preHook(RegionObserver.PreIncrementAfterRowLock)},
+
+	// Scanner.
+	{HookIDPreScannerOpen, "PreScannerOpen", newReq[hookpb.PreScannerOpenRequest], preHook(RegionObserver.PreScannerOpen)},
+	{HookIDPostScannerOpen, "PostScannerOpen", newReq[hookpb.PostScannerOpenRequest], postHook(RegionObserver.PostScannerOpen)},
+	{HookIDPreScannerNext, "PreScannerNext", newReq[hookpb.PreScannerNextRequest], preHook(RegionObserver.PreScannerNext)},
+	{HookIDPostScannerNext, "PostScannerNext", newReq[hookpb.PostScannerNextRequest], postHook(RegionObserver.PostScannerNext)},
+	{HookIDPostScannerFilterRow, "PostScannerFilterRow", newReq[hookpb.PostScannerFilterRowRequest], postHook(RegionObserver.PostScannerFilterRow)},
+	{HookIDPreScannerClose, "PreScannerClose", newReq[hookpb.PreScannerCloseRequest], preHook(RegionObserver.PreScannerClose)},
+	{HookIDPostScannerClose, "PostScannerClose", newReq[hookpb.PostScannerCloseRequest], postHook(RegionObserver.PostScannerClose)},
+	{HookIDPreStoreScannerOpen, "PreStoreScannerOpen", newReq[hookpb.PreStoreScannerOpenRequest], preHook(RegionObserver.PreStoreScannerOpen)},
+
+	// WAL replay/restore.
+	{HookIDPreReplayWALs, "PreReplayWALs", newReq[hookpb.PreReplayWALsRequest], preHook(RegionObserver.PreReplayWALs)},
+	{HookIDPostReplayWALs, "PostReplayWALs", newReq[hookpb.PostReplayWALsRequest], postHook(RegionObserver.PostReplayWALs)},
+	{HookIDPreWALRestore, "PreWALRestore", newReq[hookpb.PreWALRestoreRequest], preHook(RegionObserver.PreWALRestore)},
+	{HookIDPostWALRestore, "PostWALRestore", newReq[hookpb.PostWALRestoreRequest], postHook(RegionObserver.PostWALRestore)},
+
+	// Bulk load + store-file commit.
+	{HookIDPreBulkLoadHFile, "PreBulkLoadHFile", newReq[hookpb.PreBulkLoadHFileRequest], preHook(RegionObserver.PreBulkLoadHFile)},
+	{HookIDPostBulkLoadHFile, "PostBulkLoadHFile", newReq[hookpb.PostBulkLoadHFileRequest], postHook(RegionObserver.PostBulkLoadHFile)},
+	{HookIDPreCommitStoreFile, "PreCommitStoreFile", newReq[hookpb.PreCommitStoreFileRequest], preHook(RegionObserver.PreCommitStoreFile)},
+	{HookIDPostCommitStoreFile, "PostCommitStoreFile", newReq[hookpb.PostCommitStoreFileRequest], postHook(RegionObserver.PostCommitStoreFile)},
+
+	// Store-file reader.
+	{HookIDPreStoreFileReaderOpen, "PreStoreFileReaderOpen", newReq[hookpb.PreStoreFileReaderOpenRequest], preHook(RegionObserver.PreStoreFileReaderOpen)},
+	{HookIDPostStoreFileReaderOpen, "PostStoreFileReaderOpen", newReq[hookpb.PostStoreFileReaderOpenRequest], postHook(RegionObserver.PostStoreFileReaderOpen)},
+
+	// Before-WAL hooks.
+	{HookIDPostMutationBeforeWAL, "PostMutationBeforeWAL", newReq[hookpb.PostMutationBeforeWALRequest], postHook(RegionObserver.PostMutationBeforeWAL)},
+	{HookIDPostIncrementBeforeWAL, "PostIncrementBeforeWAL", newReq[hookpb.PostIncrementBeforeWALRequest], postHook(RegionObserver.PostIncrementBeforeWAL)},
+	{HookIDPostAppendBeforeWAL, "PostAppendBeforeWAL", newReq[hookpb.PostAppendBeforeWALRequest], postHook(RegionObserver.PostAppendBeforeWAL)},
+
+	// Delete tracker, WAL append.
+	{HookIDPostInstantiateDeleteTracker, "PostInstantiateDeleteTracker", newReq[hookpb.PostInstantiateDeleteTrackerRequest], postHook(RegionObserver.PostInstantiateDeleteTracker)},
+	{HookIDPreWALAppend, "PreWALAppend", newReq[hookpb.PreWALAppendRequest], preHook(RegionObserver.PreWALAppend)},
+}
+
+// hooksByID indexes the dispatch table for O(1) lookup on the
+// inbound-frame hot path. Built once at package init.
+var hooksByID = func() map[HookID]hookEntry {
+	m := make(map[HookID]hookEntry, len(hookTable))
+	for _, h := range hookTable {
+		m[h.id] = h
+	}
+	return m
+}()

@@ -239,6 +239,25 @@ GitHub Actions: lint → unit → contract → integration (only on PR to main +
 
 ## Open questions
 
-1. Multi-tenant (>1 Go-coproc разных jar'ов на одном RS) — MVP или потом?
-2. Hot reload Go-binary без рестарта RS?
-3. Подпись/checksum Go-бинаря в jar — MVP или не сейчас?
+1. ~~Multi-tenant (>1 Go-coproc разных jar'ов на одном RS) — MVP или потом?~~ **Closed at
+   CP-δ (2026-05-14): out of scope for MVP.** Каждый coproc-jar получает свой
+   `CoprocessorRuntime` → свой `GoProcess` → свой shmem pair (через
+   `Files.createTempDirectory`), но formal cross-coproc isolation не валидируется
+   тестами в MVP. Defer to post-v0.1.0.
+2. ~~Hot reload Go-binary без рестарта RS?~~ **Closed at CP-ε3 (2026-05-19):
+   defer post-MVP.** Обновление = `disable/alterTable/enable` цикл (полный
+   teardown coproc-jar). SIGHUP-flow рассмотрим post-v0.1.0 если будет запрос.
+3. ~~Подпись/checksum Go-бинаря в jar — MVP или не сейчас?~~ **Closed at
+   CP-ε3 (2026-05-19): SHA-256 checksum в MVP.** `hbasecop-build` (T71)
+   записывает `SHA-256` ELF в manifest (`HbaseCop-Go-Bin-SHA256`); supervisor
+   (`GoProcess.start`) валидирует digest при extract из jar resource — mismatch
+   → fail-fast с ясным сообщением. Защита от corruption/wrong-arch, не от
+   threat-actor (полноценный GPG signing — post-MVP).
+
+   > **REOPENED then RE-CLOSED (review, fix/v0.1.0-blockers).** The CP-ε3
+   > closure was inaccurate: `GoProcess.verifyChecksum` existed but
+   > `CoprocessorRuntime.buildGoProcess()` never passed the expected digest, so
+   > the check was **dead code** — every real launch skipped verification. Fixed
+   > on `fix/v0.1.0-blockers`: the runtime now resolves
+   > `HbaseCop-Go-Bin-SHA256` from the coproc-jar manifest and validates it
+   > before exec. See [`tasks/RELEASE-BLOCKERS.md`](tasks/RELEASE-BLOCKERS.md).

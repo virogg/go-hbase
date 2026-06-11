@@ -1,0 +1,19 @@
+# go-hbase wire-format golden corpus v1.
+# Shared by Go (internal/wire) and Java (com.virogg.hbasecop.bridge.wire) cross-language tests.
+# Lines starting with '#' or blank are ignored. Field separator is '|'.
+#
+# Columns: name | type | req_id | region | hook | payload_kind | payload | chunk_size
+#
+# payload_kind:
+#   HEX        - 'payload' is lower-case hex of the literal payload bytes
+#   ASCENDING  - 'payload' is the decimal byte length; bytes are (i % 251) for i in [0,n)
+#
+# chunk_size = 0 means default (WireFormat.MAX_PAYLOAD_BYTES); >0 overrides for compact multi-chunk fixtures.
+heartbeat_empty|HEARTBEAT|0|0|0|HEX||0
+request_hello|REQUEST|7|3|12|HEX|68656c6c6f|0
+response_two_bytes|RESPONSE|9|0|0|HEX|0102|0
+error_boom|ERROR|10|0|0|HEX|626f6f6d|0
+shutdown_rs|SHUTDOWN|0|0|0|HEX|72732d73746f70|0
+log_info|LOG|0|0|0|HEX|676f2072756e74696d652073746172746564|0
+request_two_chunks|REQUEST|42|1|5|ASCENDING|15|10
+request_three_chunks|REQUEST|99|7|3|ASCENDING|25|10
