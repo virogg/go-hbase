@@ -182,11 +182,20 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: Fuzz wire codec (10m)
-        run: make fuzz FUZZTIME=10m
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+          cache: maven
+      - name: Install java-go-shmem to ~/.m2
+        run: make deps-shmem
+      - name: Fuzz wire codec, Go (15m; T83)
+        run: make fuzz FUZZTIME=15m
+      - name: Fuzz wire decoder, Java (jazzer, 10m; T83)
+        run: make java-fuzz
 
   bench:
-    name: Bench (nightly, regression alert)
+    name: Bench (nightly, gates)
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-22.04
     steps:
@@ -197,8 +206,60 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+          cache: maven
+      - name: Install java-go-shmem to ~/.m2
+        run: make deps-shmem
       - name: Region-concurrency throughput bench (T62)
         run: make bench-region-concurrency
-      # TODO(T81/T82): once the latency/WAL benches assert SPEC targets
-      # (<100µs p50 prePut; WAL regression <50%), compare against a stored
-      # baseline here and fail on >20% degradation.
+      # Shared-runner latency is noisier than the local baseline; the absolute
+      # SPEC gate stays, but a miss here warrants a local re-run before action.
+      - name: Hook latency overhead bench + <100µs p50 gate (T81)
+        run: make bench-latency
+      - name: WAL throughput A/B bench + <50% regression gate (T82)
+        run: make bench-wal
+      - name: Upload bench logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-logs
+          path: test/integration/coproc-jars/wal-bench-*.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  soak:
+    name: Soak/chaos (nightly, 1h)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+          cache: maven
+      - name: Install java-go-shmem to ~/.m2
+        run: make deps-shmem
+      - name: Soak 1h, kill -9 chaos, RSS/zombie gates (T84)
+        run: make soak
+      - name: Upload soak artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: soak-report
+          path: |
+            test/integration/coproc-jars/soak-*.csv
+            test/integration/coproc-jars/soak-*.log
+            test/integration/coproc-jars/soak-*.txt
+          if-no-files-found: ignore
+          retention-days: 14

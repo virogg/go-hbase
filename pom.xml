@@ -44,6 +44,8 @@
     -->
     <shmem.version>1.0.0-SNAPSHOT</shmem.version>
 
+    <jazzer.version>0.30.0</jazzer.version>
+
     <plugin.compiler.version>3.13.0</plugin.compiler.version>
     <plugin.surefire.version>3.2.5</plugin.surefire.version>
 
@@ -130,12 +132,52 @@
       <version>${mockito.version}</version>
       <scope>test</scope>
     </dependency>
+    <!--
+      T83: coverage-guided fuzzing for the wire decoder. jazzer-junit is
+      JUnit5-native (the plan's jqf is JUnit4-runner based and would drag
+      junit4 + vintage-engine into this Jupiter-only build). Without
+      JAZZER_FUZZ=1 a @FuzzTest only replays the seed corpus — a fast
+      regression that rides along in every `mvn verify`; `make java-fuzz`
+      opts into real fuzzing.
+    -->
+    <dependency>
+      <groupId>com.code-intelligence</groupId>
+      <artifactId>jazzer-junit</artifactId>
+      <version>${jazzer.version}</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
     <!-- Layout follows SPEC.md §4: top-level java/ for production, test/java/ for tests. -->
     <sourceDirectory>java</sourceDirectory>
     <testSourceDirectory>test/java</testSourceDirectory>
+
+    <!--
+      Map the golden wire corpus into jazzer-junit's seed-corpus location
+      for DecoderFuzzTest (classpath resource <ClassName>Inputs next to the
+      test class). Sourced from test/golden directly so the seeds can never
+      drift from the corpus the golden round-trip tests pin.
+    -->
+    <testResources>
+      <testResource>
+        <directory>test/golden/wire/v1</directory>
+        <targetPath>com/virogg/hbasecop/bridge/wire/DecoderFuzzTestInputs</targetPath>
+        <includes>
+          <include>*.bin</include>
+        </includes>
+      </testResource>
+      <!--
+        T81: the no-op bench observer ELF (built by `make go-build-bench-noop`)
+        rides the test classpath so GoProcess can extract it via
+        binaryResourcePath("bench/linux-amd64/noop-runtime"). Absent unless the
+        bench target has staged it — regular `mvn test` is unaffected.
+      -->
+      <testResource>
+        <directory>test/bench/bin</directory>
+        <targetPath>bench</targetPath>
+      </testResource>
+    </testResources>
 
     <!--
       os-maven-plugin exposes ${os.detected.classifier} so protobuf-maven-plugin

@@ -57,5 +57,22 @@ if [ -n "${HBASECOP_RS_COPROC_CLASS:-}" ]; then
   echo "entrypoint: registered region-server coprocessor ${HBASECOP_RS_COPROC_CLASS} (jar ${jar})" >&2
 fi
 
+# T82 — WAL coprocessors are cluster-wide via `hbase.coprocessor.wal.classes`.
+# When HBASECOP_WAL_COPROC_CLASS is set, this entrypoint patches
+# hbase-site.xml + HBASE_CLASSPATH before launch; when unset it is a no-op,
+# so the shared image stays generic.
+if [ -n "${HBASECOP_WAL_COPROC_CLASS:-}" ]; then
+  jar="${HBASECOP_WAL_COPROC_JAR:-/coproc-jars/wal-observer.jar}"
+  if [ ! -r "${jar}" ]; then
+    echo "entrypoint: WAL coproc jar not readable: ${jar}" >&2
+    exit 1
+  fi
+  export HBASE_CLASSPATH="${jar}${HBASE_CLASSPATH:+:${HBASE_CLASSPATH}}"
+
+  inject="  <property><name>hbase.coprocessor.wal.classes</name><value>${HBASECOP_WAL_COPROC_CLASS}</value></property>"
+  sed -i "s#</configuration>#${inject}\n</configuration>#" "${SITE}"
+  echo "entrypoint: registered WAL coprocessor ${HBASECOP_WAL_COPROC_CLASS} (jar ${jar})" >&2
+fi
+
 # Standalone mode: master process spawns RS + embedded ZK in the same JVM.
 exec "${HBASE_HOME}/bin/hbase" master start

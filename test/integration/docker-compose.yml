@@ -42,6 +42,10 @@ services:
       HBASECOP_RS_COPROC_CLASS: "${HBASECOP_RS_COPROC_CLASS:-}"
       HBASECOP_RS_COPROC_JAR: "${HBASECOP_RS_COPROC_JAR:-}"
       HBASECOP_RS_POLICY_VETO_WAL_ROLL: "${HBASECOP_RS_POLICY_VETO_WAL_ROLL:-}"
+      # T82: WAL coprocessor registration; `make bench-wal` exports these for
+      # its coproc leg, empty (no-op) everywhere else.
+      HBASECOP_WAL_COPROC_CLASS: "${HBASECOP_WAL_COPROC_CLASS:-}"
+      HBASECOP_WAL_COPROC_JAR: "${HBASECOP_WAL_COPROC_JAR:-}"
     healthcheck:
       test:
         - "CMD-SHELL"

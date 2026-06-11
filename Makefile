@@ -44,6 +44,9 @@ AUDIT_OBSERVER_OUT := $(AUDIT_OBSERVER_DIR)/src/main/resources/bin/linux-amd64/h
 TTL_VALIDATOR_DIR := examples/ttl-validator
 TTL_VALIDATOR_OUT := $(TTL_VALIDATOR_DIR)/src/main/resources/bin/linux-amd64/hbasecop-runtime
 
+WAL_OBSERVER_DIR := examples/wal-observer
+WAL_OBSERVER_OUT := $(WAL_OBSERVER_DIR)/src/main/resources/bin/linux-amd64/hbasecop-runtime
+
 # ---------------------------------------------------------------------------
 # Aggregates
 # ---------------------------------------------------------------------------
@@ -113,16 +116,27 @@ test-go: go-test ## SPEC §5 alias for go-test.
 test-java: java-test ## SPEC §5 alias for java-test.
 
 .PHONY: test-bench
-test-bench: bench-region-concurrency ## SPEC §5 alias for the throughput bench.
+test-bench: bench-region-concurrency bench-latency ## SPEC §5 alias for the bench suite.
 
 FUZZTIME ?= 30s
 .PHONY: fuzz
 fuzz: ## T83: run the wire-codec fuzzer (override duration with FUZZTIME=...).
 	$(GO) test ./internal/wire/ -run '^$$' -fuzz '^FuzzDecode$$' -fuzztime $(FUZZTIME)
 
+# T83 Java side: jazzer (libFuzzer) over bridge/wire/Decoder, seeded with the
+# golden corpus. Without JAZZER_FUZZ=1 the same test replays seeds only and
+# rides along in every `mvn verify`. Fuzz duration is the @FuzzTest
+# maxDuration (10m); JAVA_FUZZ_RUNS repeats the run for longer campaigns.
+JAVA_FUZZ_RUNS ?= 1
+.PHONY: java-fuzz
+java-fuzz: ## T83: run the Java wire-decoder fuzzer (jazzer, 10m per run).
+	for i in $$(seq 1 $(JAVA_FUZZ_RUNS)); do \
+	  JAZZER_FUZZ=1 $(MVN) $(MVN_FLAGS) test -Dtest=DecoderFuzzTest -DfailIfNoTests=false || exit $$?; \
+	done
+
 # Coverage gate set excludes generated protobuf, thin mains, and examples —
 # the gate measures hand-written, testable code.
-GO_COVER_PKGS := $(shell $(GO) list ./... | grep -vE '/(examples|internal/wire/hbasepb|internal/wire/hookpb|internal/wire/wirepb|internal/wiregolden|cmd/wire-golden|cmd/hbasecop-runtime)$$')
+GO_COVER_PKGS := $(shell $(GO) list ./... | grep -vE '/(examples|internal/wire/hbasepb|internal/wire/hookpb|internal/wire/wirepb|internal/wiregolden|cmd/wire-golden|cmd/hbasecop-runtime|test/bench/noop-observer)$$')
 # SPEC §7 gate: Go hand-written line coverage ≥80% (generated protobuf, thin
 # mains and examples excluded above). Met as of the Phase-7 coverage work.
 GO_COVER_MIN  ?= 80.0
@@ -188,8 +202,31 @@ demo-ping: test-e2e-ping ## Public demo alias for the T19 ping/pong run.
 
 .PHONY: bench-region-concurrency
 bench-region-concurrency: ## T62: throughput bench across N regions × {1,2,4,8} cores.
-	go test -run='^$$' -bench=BenchmarkRegionConcurrencyThroughput \
+	$(GO) test -run='^$$' -bench=BenchmarkRegionConcurrencyThroughput \
 		-benchtime=1s -cpu=1,2,4,8 ./pkg/hbasecop/
+
+# ---------------------------------------------------------------------------
+# Bench (T81): per-hook latency overhead vs a Java-only no-op observer.
+# ---------------------------------------------------------------------------
+
+# Standalone bench ELF: a silent no-op RegionObserver. Staged outside
+# src/main/resources so it never leaks into the shipped bridge jar; the root
+# pom maps test/bench/bin onto the test classpath as bench/.
+BENCH_NOOP_OUT := test/bench/bin/linux-amd64/noop-runtime
+
+.PHONY: go-build-bench-noop
+go-build-bench-noop: ## T81: build the no-op bench observer ELF (Linux x86-64).
+	@mkdir -p $(dir $(BENCH_NOOP_OUT))
+	GOOS=linux GOARCH=amd64 $(GO) build $(GO_BUILD_FLAGS) -o $(BENCH_NOOP_OUT) ./test/bench/noop-observer
+
+# Gate (SPEC §7.6): prePut p50 overhead < BENCH_P50_MAX_US µs; asserted
+# inside LatencyBenchIT, so the mvn exit code is the gate. JaCoCo is skipped:
+# latency is measured uninstrumented.
+BENCH_P50_MAX_US ?= 100
+.PHONY: bench-latency
+bench-latency: go-build-bench-noop ## T81: p50/p95/p99 prePut/postPut overhead bench + gate.
+	$(MVN) $(MVN_FLAGS) test -Dtest=LatencyBenchIT -DfailIfNoTests=false \
+		-Djacoco.skip=true -Dbench.prePut.p50.max.us=$(BENCH_P50_MAX_US)
 
 # ---------------------------------------------------------------------------
 # Examples (T25): counter-observer reference coproc-jar.
@@ -358,6 +395,30 @@ ttl-validator-jar: go-build-ttl ## T73: build ttl-validator coproc-jar (installs
 	  grep -q 'com/virogg/hbasecop/bridge/observer/RegionObserverAdapter.class' || \
 	  { echo "ERROR: bridge classes not shaded into coproc-jar" >&2; exit 1; }
 	@echo "OK: ttl-validator.jar -- bridge shaded, Go ELF embedded"
+
+# ---------------------------------------------------------------------------
+# Examples (T82): no-op WAL-observer coproc-jar (bench support).
+# ---------------------------------------------------------------------------
+
+.PHONY: go-build-wal-observer
+go-build-wal-observer: ## T82: build wal-observer Go ELF into example resources (Linux x86-64).
+	@mkdir -p $(dir $(WAL_OBSERVER_OUT))
+	GOOS=linux GOARCH=amd64 $(GO) build $(GO_BUILD_FLAGS) -o $(WAL_OBSERVER_OUT) ./$(WAL_OBSERVER_DIR)
+
+.PHONY: wal-observer-jar
+wal-observer-jar: go-build-wal-observer ## T82: build wal-observer coproc-jar (installs bridge into ~/.m2 first).
+	$(MVN) $(MVN_FLAGS) install -DskipTests
+	$(MVN) $(MVN_FLAGS) -f $(WAL_OBSERVER_DIR)/pom.xml package
+	@unzip -l $(WAL_OBSERVER_DIR)/target/wal-observer.jar | \
+	  grep -q 'bin/linux-amd64/hbasecop-runtime' || \
+	  { echo "ERROR: Go ELF missing from wal-observer.jar" >&2; exit 1; }
+	@unzip -l $(WAL_OBSERVER_DIR)/target/wal-observer.jar | \
+	  grep -q 'com/virogg/hbasecop/examples/walbench/WalBenchWALCoprocessor.class' || \
+	  { echo "ERROR: WalBenchWALCoprocessor class missing from coproc-jar" >&2; exit 1; }
+	@unzip -l $(WAL_OBSERVER_DIR)/target/wal-observer.jar | \
+	  grep -q 'com/virogg/hbasecop/bridge/observer/WALObserverAdapter.class' || \
+	  { echo "ERROR: bridge classes not shaded into coproc-jar" >&2; exit 1; }
+	@echo "OK: wal-observer.jar -- bridge shaded, Go ELF embedded"
 
 # ---------------------------------------------------------------------------
 # Integration (T26): HBase 2.5 standalone dev cluster.
@@ -585,6 +646,104 @@ test-integration-ttl: ttl-validator-jar ## T73: full IT — bring up HBase, run 
 	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-ttl.log 2>&1 || true; \
 	  $(HBASE_COMPOSE_CMD) down; \
 	  exit $$status
+
+# ---------------------------------------------------------------------------
+# Bench (T82): WAL write throughput, WALObserver on vs off, live HBase.
+# ---------------------------------------------------------------------------
+
+# Gate (plan T82): throughput with the WAL coprocessor registered must not
+# regress more than BENCH_WAL_MAX_REGRESSION_PCT % vs the no-coproc baseline.
+# Two full compose cycles: WAL coprocessors are cluster-wide, so on/off needs
+# two cluster boots, A/B-measured by the same WalThroughputBenchIT.
+BENCH_WAL_MAX_REGRESSION_PCT ?= 50
+BENCH_WAL_OPS ?= 20000
+WAL_BENCH_CLASS := com.virogg.hbasecop.examples.walbench.WalBenchWALCoprocessor
+
+.PHONY: bench-wal
+bench-wal: wal-observer-jar ## T82: WAL throughput A/B bench (observer on/off) + regression gate.
+	@mkdir -p test/integration/coproc-jars
+	cp $(WAL_OBSERVER_DIR)/target/wal-observer.jar test/integration/coproc-jars/wal-observer.jar
+	@echo "== T82 cycle A: baseline (no WAL coprocessor) =="
+	$(HBASE_COMPOSE_CMD) up -d --build
+	./test/integration/scripts/wait-master-status.sh
+	@set +e; \
+	  $(MVN) $(MVN_FLAGS) test -Dtest=WalThroughputBenchIT -DfailIfNoTests=false \
+	    -Djacoco.skip=true -Dbench.wal.ops=$(BENCH_WAL_OPS) -Dbench.wal.expect.coproc=false \
+	    2>&1 | tee test/integration/coproc-jars/wal-bench-baseline.log; \
+	  status=$${PIPESTATUS[0]}; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-walbench-base.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
+	@echo "== T82 cycle B: WAL coprocessor registered =="
+	HBASECOP_WAL_COPROC_CLASS=$(WAL_BENCH_CLASS) \
+	HBASECOP_WAL_COPROC_JAR=/coproc-jars/wal-observer.jar \
+	  $(HBASE_COMPOSE_CMD) up -d --build
+	./test/integration/scripts/wait-master-status.sh
+	@set +e; \
+	  $(MVN) $(MVN_FLAGS) test -Dtest=WalThroughputBenchIT -DfailIfNoTests=false \
+	    -Djacoco.skip=true -Dbench.wal.ops=$(BENCH_WAL_OPS) -Dbench.wal.expect.coproc=true \
+	    2>&1 | tee test/integration/coproc-jars/wal-bench-coproc.log; \
+	  status=$${PIPESTATUS[0]}; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-walbench-coproc.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
+	@base=$$(grep -o 'ops_per_sec=[0-9.]*' test/integration/coproc-jars/wal-bench-baseline.log | head -1 | cut -d= -f2); \
+	  cop=$$(grep -o 'ops_per_sec=[0-9.]*' test/integration/coproc-jars/wal-bench-coproc.log | head -1 | cut -d= -f2); \
+	  [ -n "$$base" ] && [ -n "$$cop" ] || { echo "FAIL: WAL_BENCH_RESULT line missing from a cycle log" >&2; exit 1; }; \
+	  awk "BEGIN { reg = (1 - $$cop / $$base) * 100; \
+	    printf \"T82: baseline %.1f ops/s, coproc %.1f ops/s, regression %.1f%% (gate < $(BENCH_WAL_MAX_REGRESSION_PCT)%%)\n\", $$base, $$cop, reg; \
+	    exit !(reg < $(BENCH_WAL_MAX_REGRESSION_PCT)) }" \
+	  || { echo "FAIL: WAL throughput regression exceeds $(BENCH_WAL_MAX_REGRESSION_PCT)% (plan T82)"; exit 1; }
+
+# ---------------------------------------------------------------------------
+# Soak (T84): sustained load + kill -9 chaos + RSS sampling, live HBase.
+# ---------------------------------------------------------------------------
+
+# Defaults: 1h at 1000 ops/s with a kill every 120-300s (see soak.sh for all
+# knobs). Smoke run: make soak SOAK_DURATION_S=120 SOAK_KILL_MIN_S=30 SOAK_KILL_MAX_S=60
+SOAK_DURATION_S ?= 3600
+SOAK_RATE ?= 1000
+SOAK_KILL_MIN_S ?= 120
+SOAK_KILL_MAX_S ?= 300
+
+.PHONY: soak
+soak: counter-observer-jar ## T84: soak/chaos run — load + kill -9 + RSS/zombie gates.
+	@mkdir -p test/integration/coproc-jars
+	cp $(COUNTER_OBSERVER_DIR)/target/counter-observer.jar test/integration/coproc-jars/counter-observer.jar
+	$(HBASE_COMPOSE_CMD) up -d --build
+	./test/integration/scripts/wait-master-status.sh
+	@set +e; \
+	  SOAK_DURATION_S=$(SOAK_DURATION_S) SOAK_RATE=$(SOAK_RATE) \
+	  SOAK_KILL_MIN_S=$(SOAK_KILL_MIN_S) SOAK_KILL_MAX_S=$(SOAK_KILL_MAX_S) \
+	    bash test/integration/scripts/soak.sh; \
+	  status=$$?; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-soak.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
+
+# ---------------------------------------------------------------------------
+# Release (T85): assemble distributable artifacts into target/release/.
+# ---------------------------------------------------------------------------
+
+# Stamps the Maven build with VERSION (the repo pom stays SNAPSHOT — the
+# stamp lives only in the produced artifact) and builds the release-mode
+# hbasecop-build CLI for the supported platform. Tagging and publishing are
+# the release workflow's job (.github/workflows/release.yml).
+.PHONY: release
+release: go-build-runtime ## T85: build release artifacts (make release VERSION=0.1.0).
+	@[ -n "$(VERSION)" ] || { echo "usage: make release VERSION=0.1.0" >&2; exit 1; }
+	@mkdir -p target/release
+	$(MVN) $(MVN_FLAGS) versions:set -DnewVersion=$(VERSION) -DgenerateBackupPoms=false
+	@set +e; \
+	  $(MVN) $(MVN_FLAGS) package -DskipTests; \
+	  status=$$?; \
+	  $(MVN) $(MVN_FLAGS) versions:set -DnewVersion=0.0.1-SNAPSHOT -DgenerateBackupPoms=false; \
+	  exit $$status
+	cp target/hbasecop-bridge-$(VERSION).jar target/release/
+	GOOS=linux GOARCH=amd64 $(GO) build $(GO_BUILD_FLAGS) -ldflags "-s -w" \
+		-o target/release/hbasecop-build-linux-amd64 ./cmd/hbasecop-build
+	@echo "release artifacts in target/release/:"
+	@ls -l target/release/
 
 # ---------------------------------------------------------------------------
 # Misc

@@ -22,6 +22,22 @@ HBase client ──RPC──▶ RegionServer
 - Full spec: [`SPEC.md`](SPEC.md) · architecture: [`docs/architecture.md`](docs/architecture.md)
 - IPC primitive: [`virogg/java-go-shmem`](https://github.com/virogg/java-go-shmem)
 
+## Install from a release
+
+Each [GitHub release](https://github.com/virogg/go-hbase/releases) ships two
+artifacts:
+
+- `hbasecop-bridge-<version>.jar` — the Java bridge your coproc-jar shades in
+  (install into your Maven repo: `mvn install:install-file
+  -Dfile=hbasecop-bridge-<version>.jar -DgroupId=com.virogg
+  -DartifactId=hbasecop-bridge -Dversion=<version> -Dpackaging=jar`).
+- `hbasecop-build-linux-amd64` — the packaging CLI; `chmod +x` and use it as
+  `hbasecop-build` in step 3 below.
+
+The Go SDK is fetched as a normal module:
+`go get github.com/virogg/go-hbase/pkg/hbasecop@v<version>`. To build
+everything from source instead, follow the quick start.
+
 ## Quick start — your first observer in ~5 minutes
 
 Prereqs: Go ≥ 1.24, JDK 11, Maven, Docker (for the dev cluster), Linux x86-64.

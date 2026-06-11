@@ -84,9 +84,9 @@
 - [x] **CP-ε4:** release candidate ready — all 9 review must-fix items fixed (regression-tested), CI gates real, SPEC §7 coverage met (Go 82.5%, Java 87.8%), integration matrix + fuzz green. Remaining work is Phase 8 + documented non-blocker findings; see tasks/RELEASE-BLOCKERS.md (status: CONDITIONAL).
 
 ## Phase 8 — Bench, harden, release
-- [ ] T81 Bench harness latency overhead (target: <100µs p50 prePut)
-- [ ] T82 Bench WAL/flush throughput
-- [ ] T83 Fuzz wire codec (Go + Java)
-- [ ] T84 Soak 1h kill-9 chaos
-- [ ] T85 v0.1.0 release (tag, changelog, artifacts)
+- [x] T81 Bench harness latency overhead (gate PASS: 72–78µs p50 < 100µs after spin-before-park fix; docs/bench/t81-latency.md)
+- [x] T82 Bench WAL/flush throughput (gate PASS: 15.4% regression < 50%; docs/bench/t82-wal.md)
+- [x] T83 Fuzz wire codec (Go 20m + Java jazzer 10m, clean; found+fixed missing Java decoder H2/H4 bounds; docs/bench/t83-fuzz.md)
+- [x] T84 Soak 1h kill-9 chaos (all gates PASS: 2.84M acked puts / 0 lost across 12 kill -9s, Go RSS flat, RS RSS +6.5% post-ramp, 13 restarts = 1+12 exact, 0 zombies; docs/bench/t84-soak.md)
+- [ ] T85 v0.1.0 release (tag, changelog, artifacts) — machinery ready: CHANGELOG.md, `make release` validated (hbasecop-bridge-0.1.0.jar + hbasecop-build-linux-amd64), .github/workflows/release.yml on v* tag, README install-from-release. Remaining: user decision on non-blocker findings + push tag.
 - [ ] **CP-ζ:** v0.1.0 released

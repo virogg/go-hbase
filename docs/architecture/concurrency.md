@@ -35,14 +35,14 @@
 ## Topology
 
 ```
-            ┌──────────────────────────────────────────────────────┐
+            ┌───────────────────────────────────────────────────────┐
             │                       Go runtime                      │
             │                                                       │
-shmem in ──►│  reader gr ──► routing chan(buf=1024) ──► router gr ─┼─► actor[regionID].inbox
-            │                                                       │       │       │
-            │                          actor[1] ◄──────────────────┘       │       │
-            │                          actor[2] ◄──────────────────────────┘       │
-            │                          actor[N] ◄──────────────────────────────────┘
+shmem in ──►│  reader gr ──► routing chan(buf=1024) ──► router gr ──┼─► actor[regionID].inbox
+            │                                                       │      │       │
+            │                          actor[1] ◄───────────────────┘      │       │
+            │                          actor[2] ◄───────────────────┼──────┘       │
+            │                          actor[N] ◄───────────────────┼──────────────┘
             │                                                       │
             │   actor.run():                                        │
             │     for msg := range inbox {                          │
@@ -56,7 +56,7 @@ shmem in ──►│  reader gr ──► routing chan(buf=1024) ──► rout
             │     }                                                 │
             │                                                       │
             │   handlers emit → outbound chan(buf=256) → writer gr ─┼─► shmem out
-            └──────────────────────────────────────────────────────┘
+            └───────────────────────────────────────────────────────┘
 ```
 
 Three goroutines own I/O:
