@@ -13,6 +13,15 @@ target/
 .mvn/wrapper/maven-wrapper.jar
 dependency-reduced-pom.xml
 
+# Go runtime ELF staged for jar packaging (built by `make go-build-runtime`).
+src/main/resources/bin/
+examples/*/src/main/resources/bin/
+# Bench no-op ELF staged for the test classpath (built by `make go-build-bench-noop`).
+test/bench/bin/
+
+# Jazzer fuzzing corpus (T83); regenerated every run, golden seeds live in test/golden.
+.cifuzz-corpus/
+
 # IDE
 .idea/
 .vscode/

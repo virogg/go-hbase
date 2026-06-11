@@ -239,6 +239,18 @@ External dep: `github.com/virogg/java-go-shmem` (Go pkg + Java jar). Lock вер
 
 > **Checkpoint δ:** production-grade семантика. SDK contract зафиксирован. Решение: open question
 > #1 (multi-tenant) — нужно ли в MVP? Это блокатор для P6.
+>
+> **Closed 2026-05-14:** Phase 3 (T31–T36) shipped. Strict/best-effort семантика
+> валидирована unit-тестами (`PolicyConfigTest`, `RegionObserverAdapterTest`,
+> `MultiplexerTest` pause/resume, `RestartControllerTest`) и matrix-IT
+> (`FaultMatrixIT`, 10 кейсов). SDK contract: `pkg/hbasecop.RegionObserver`
+> {`PrePut`, `PostPut`} + `hbasecop.Run(...)` frozen — расширяется только
+> аддитивно (T41 добавит no-op методы через `UnimplementedRegionObserver`).
+> **Open Q #1 decision:** multi-tenant out of scope для MVP — текущий
+> per-coproc-instance изоляция (свой tmpdir/shmem) считается достаточной;
+> formal multi-jar IT откладывается на post-v0.1.0. P6 (T61 multi-region) не
+> заблокирован: он про region-scoping в одном Go-процессе, что ортогонально
+> multi-tenant.
 
 ### Phase 4 — Full RegionObserver
 
@@ -316,6 +328,14 @@ External dep: `github.com/virogg/java-go-shmem` (Go pkg + Java jar). Lock вер
 - Verify: JUnit: 5×start/stop циклов, процесс корректно живёт/умирает; нет ELF-leak в `tmpdir`.
 
 > **Checkpoint ε3:** один Go-процесс обслуживает все регионы. Решение: open question #2 (hot reload), #3 (binary signing). Нужно ли в MVP — gate перед P7.
+>
+> **Closed 2026-05-19:** один Go pid обслуживает N регионов (T61–T63 + 4-region IT
+> `MultiRegionSharedRuntimeIT`, refcounted `CoprocessorRuntime`, throughput bench).
+> **Open Q #2 (hot reload):** defer post-MVP — обновление через
+> `disable/alterTable/enable` достаточно для v0.1.0.
+> **Open Q #3 (binary signing):** SHA-256 checksum в manifest. `hbasecop-build`
+> (T71) пишет `HbaseCop-Go-Bin-SHA256`; supervisor валидирует при extract из jar.
+> Full GPG signing — post-MVP. P7 not blocked.
 
 ### Phase 7 — DX: build CLI, examples, docs
 

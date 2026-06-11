@@ -5,7 +5,9 @@ version: "2"
 
 run:
   timeout: 5m
-  go: "1.22"
+  # Match go.mod's toolchain so the linter reasons about the language/stdlib
+  # the build actually uses (was "1.22", two minors behind go.mod's 1.24).
+  go: "1.24"
 
 linters:
   default: none
@@ -14,6 +16,8 @@ linters:
     - govet
     - ineffassign
     - revive
+    # gosimple (SPEC §6) was folded into staticcheck in golangci-lint v2;
+    # staticcheck below carries its checks.
     - staticcheck
     - unused
 

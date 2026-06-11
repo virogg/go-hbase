@@ -3,21 +3,973 @@
 
 // Per-hook request/response messages for HBase Observer coprocessors.
 //
-// One message pair per Observer method (PrePut/PostPut/PreGet/...). Concrete
-// shapes land in T21+ once HBase .proto types are vendored.
+// Each Observer method maps to one HookId value (T41 dispatch table) and
+// one concrete Request message. Both sides agree on the HookId enum and
+// the per-hook envelope shapes; the Go SDK and the Java RegionObserver
+// adapter share this proto as their single source of truth.
 //
-// Stability: alpha. Empty placeholders for T01.
+// Phase 2 wired PrePut/PostPut end-to-end with real HBase types
+// (vendored under proto/hbase/). T41 extends the surface to every
+// RegionObserver hook from HBase 2.5 — the messages other than
+// Pre/PostPutRequest carry only HookContext for now; T42 grows each
+// stub with its per-hook payload (Cell, Get, Scan, …).
+//
+// Stability: alpha.
 
 syntax = "proto3";
 
 package virogg.hbasecop.v1;
 
+import "hbase/Cell.proto";
+import "hbase/Client.proto";
+import "hbase/HBase.proto";
+
 option go_package = "github.com/virogg/go-hbase/internal/wire/hookpb";
 option java_package = "com.virogg.hbasecop.bridge.wire.pb";
 option java_multiple_files = true;
+option java_outer_classname = "HooksProto";
 
-// HookContext is the placeholder shared context; T22 fills it in.
-message HookContext {}
+// HookId is the on-wire discriminator that selects a RegionObserver
+// method on the Go side. Values are stable across versions; both
+// FrameHeader.hook_id and the Go-side dispatch table key on this enum.
+//
+// The wire frame layout uses a single byte for hook_id (see
+// internal/wire), so values must fit in uint8 (<=255). 68 RegionObserver
+// hooks today; well under the cap.
+enum HookId {
+  HOOK_ID_UNSPECIFIED = 0;
 
-// HookResponse is the placeholder response envelope.
-message HookResponse {}
+  // Lifecycle.
+  HOOK_ID_PRE_OPEN = 1;
+  HOOK_ID_POST_OPEN = 2;
+  HOOK_ID_PRE_CLOSE = 3;
+  HOOK_ID_POST_CLOSE = 4;
+
+  // Flush.
+  HOOK_ID_PRE_FLUSH = 5;
+  HOOK_ID_PRE_FLUSH_SCANNER_OPEN = 6;
+  HOOK_ID_POST_FLUSH = 7;
+
+  // MemStore compaction.
+  HOOK_ID_PRE_MEM_STORE_COMPACTION = 8;
+  HOOK_ID_PRE_MEM_STORE_COMPACTION_COMPACT_SCANNER_OPEN = 9;
+  HOOK_ID_PRE_MEM_STORE_COMPACTION_COMPACT = 10;
+  HOOK_ID_POST_MEM_STORE_COMPACTION = 11;
+
+  // Compaction.
+  HOOK_ID_PRE_COMPACT_SELECTION = 12;
+  HOOK_ID_POST_COMPACT_SELECTION = 13;
+  HOOK_ID_PRE_COMPACT_SCANNER_OPEN = 14;
+  HOOK_ID_PRE_COMPACT = 15;
+  HOOK_ID_POST_COMPACT = 16;
+
+  // Read path.
+  HOOK_ID_PRE_GET_OP = 17;
+  HOOK_ID_POST_GET_OP = 18;
+  HOOK_ID_PRE_EXISTS = 19;
+  HOOK_ID_POST_EXISTS = 20;
+
+  // Write path (single-row).
+  HOOK_ID_PRE_PUT = 21;
+  HOOK_ID_POST_PUT = 22;
+  HOOK_ID_PRE_DELETE = 23;
+  HOOK_ID_POST_DELETE = 24;
+  HOOK_ID_PRE_PREPARE_TIME_STAMP_FOR_DELETE_VERSION = 25;
+
+  // Batch mutate + region operation envelope.
+  HOOK_ID_PRE_BATCH_MUTATE = 26;
+  HOOK_ID_POST_BATCH_MUTATE = 27;
+  HOOK_ID_POST_BATCH_MUTATE_INDISPENSABLY = 28;
+  HOOK_ID_POST_START_REGION_OPERATION = 29;
+  HOOK_ID_POST_CLOSE_REGION_OPERATION = 30;
+
+  // Check-and-Put family.
+  HOOK_ID_PRE_CHECK_AND_PUT = 31;
+  HOOK_ID_POST_CHECK_AND_PUT = 32;
+  HOOK_ID_PRE_CHECK_AND_PUT_AFTER_ROW_LOCK = 33;
+
+  // Check-and-Delete family.
+  HOOK_ID_PRE_CHECK_AND_DELETE = 34;
+  HOOK_ID_POST_CHECK_AND_DELETE = 35;
+  HOOK_ID_PRE_CHECK_AND_DELETE_AFTER_ROW_LOCK = 36;
+
+  // Check-and-Mutate family.
+  HOOK_ID_PRE_CHECK_AND_MUTATE = 37;
+  HOOK_ID_POST_CHECK_AND_MUTATE = 38;
+  HOOK_ID_PRE_CHECK_AND_MUTATE_AFTER_ROW_LOCK = 39;
+
+  // Append.
+  HOOK_ID_PRE_APPEND = 40;
+  HOOK_ID_POST_APPEND = 41;
+  HOOK_ID_PRE_APPEND_AFTER_ROW_LOCK = 42;
+
+  // Increment.
+  HOOK_ID_PRE_INCREMENT = 43;
+  HOOK_ID_POST_INCREMENT = 44;
+  HOOK_ID_PRE_INCREMENT_AFTER_ROW_LOCK = 45;
+
+  // Scanner.
+  HOOK_ID_PRE_SCANNER_OPEN = 46;
+  HOOK_ID_POST_SCANNER_OPEN = 47;
+  HOOK_ID_PRE_SCANNER_NEXT = 48;
+  HOOK_ID_POST_SCANNER_NEXT = 49;
+  HOOK_ID_POST_SCANNER_FILTER_ROW = 50;
+  HOOK_ID_PRE_SCANNER_CLOSE = 51;
+  HOOK_ID_POST_SCANNER_CLOSE = 52;
+  HOOK_ID_PRE_STORE_SCANNER_OPEN = 53;
+
+  // WAL replay/restore.
+  HOOK_ID_PRE_REPLAY_WA_LS = 54;
+  HOOK_ID_POST_REPLAY_WA_LS = 55;
+  HOOK_ID_PRE_WAL_RESTORE = 56;
+  HOOK_ID_POST_WAL_RESTORE = 57;
+
+  // Bulk load + store-file commit.
+  HOOK_ID_PRE_BULK_LOAD_H_FILE = 58;
+  HOOK_ID_POST_BULK_LOAD_H_FILE = 59;
+  HOOK_ID_PRE_COMMIT_STORE_FILE = 60;
+  HOOK_ID_POST_COMMIT_STORE_FILE = 61;
+
+  // Store-file reader.
+  HOOK_ID_PRE_STORE_FILE_READER_OPEN = 62;
+  HOOK_ID_POST_STORE_FILE_READER_OPEN = 63;
+
+  // Before-WAL hooks.
+  HOOK_ID_POST_MUTATION_BEFORE_WAL = 64;
+  HOOK_ID_POST_INCREMENT_BEFORE_WAL = 65;
+  HOOK_ID_POST_APPEND_BEFORE_WAL = 66;
+
+  // Delete tracker, WAL append.
+  HOOK_ID_POST_INSTANTIATE_DELETE_TRACKER = 67;
+  HOOK_ID_PRE_WAL_APPEND = 68;
+
+  // --- MasterObserver (T51). IDs 100-199 reserved for the master surface
+  // so region hooks (currently 1-68) can grow without renumbering. ---
+
+  // Table lifecycle.
+  HOOK_ID_PRE_CREATE_TABLE = 100;
+  HOOK_ID_POST_CREATE_TABLE = 101;
+  HOOK_ID_PRE_DELETE_TABLE = 102;
+  HOOK_ID_POST_DELETE_TABLE = 103;
+  HOOK_ID_PRE_MODIFY_TABLE = 104;
+  HOOK_ID_POST_MODIFY_TABLE = 105;
+  HOOK_ID_PRE_TRUNCATE_TABLE = 106;
+  HOOK_ID_POST_TRUNCATE_TABLE = 107;
+
+  // Enable / disable.
+  HOOK_ID_PRE_ENABLE_TABLE = 108;
+  HOOK_ID_POST_ENABLE_TABLE = 109;
+  HOOK_ID_PRE_DISABLE_TABLE = 110;
+  HOOK_ID_POST_DISABLE_TABLE = 111;
+
+  // Region placement.
+  HOOK_ID_PRE_MOVE = 112;
+  HOOK_ID_POST_MOVE = 113;
+  HOOK_ID_PRE_ASSIGN = 114;
+  HOOK_ID_POST_ASSIGN = 115;
+  HOOK_ID_PRE_UNASSIGN = 116;
+  HOOK_ID_POST_UNASSIGN = 117;
+
+  // Cluster balance.
+  HOOK_ID_PRE_BALANCE = 118;
+  HOOK_ID_POST_BALANCE = 119;
+
+  // --- RegionServerObserver (T52). IDs 200-219 reserved for the
+  // region-server surface so master hooks (100-199) and region hooks
+  // (1-99) can grow without renumbering. ---
+
+  // Server lifecycle.
+  HOOK_ID_PRE_STOP_REGION_SERVER = 200;
+
+  // WAL writer roll.
+  HOOK_ID_PRE_ROLL_WAL_WRITER_REQUEST = 201;
+  HOOK_ID_POST_ROLL_WAL_WRITER_REQUEST = 202;
+
+  // Replication log entries.
+  HOOK_ID_PRE_REPLICATE_LOG_ENTRIES = 203;
+  HOOK_ID_POST_REPLICATE_LOG_ENTRIES = 204;
+
+  // Compaction queue clearing.
+  HOOK_ID_PRE_CLEAR_COMPACTION_QUEUES = 205;
+  HOOK_ID_POST_CLEAR_COMPACTION_QUEUES = 206;
+
+  // Procedure execution.
+  HOOK_ID_PRE_EXECUTE_PROCEDURES = 207;
+  HOOK_ID_POST_EXECUTE_PROCEDURES = 208;
+
+  // --- WALObserver (T53). IDs 220-255 reserved for the WAL surface. ---
+
+  // WAL write — latency-critical hot path.
+  HOOK_ID_PRE_WAL_WRITE = 220;
+  HOOK_ID_POST_WAL_WRITE = 221;
+
+  // WAL roll.
+  HOOK_ID_PRE_WAL_ROLL = 222;
+  HOOK_ID_POST_WAL_ROLL = 223;
+
+  // BulkLoadObserver (T54). Region-scoped coprocessor invoked at
+  // bulk-load prepare/cleanup boundaries; HBase 2.5 hooks take only
+  // the observer context, so the per-hook payload is empty.
+  HOOK_ID_PRE_PREPARE_BULK_LOAD = 224;
+  HOOK_ID_PRE_CLEANUP_BULK_LOAD = 225;
+}
+
+// HookContext is the shared per-call envelope sent with every hook
+// invocation. Identifies the table + region the call is bound to and
+// carries the observer-supplied request id used to correlate logs and
+// traces across the bridge.
+message HookContext {
+  virogg.hbasecop.hbase.v1.TableName table_name = 1;
+  bytes region_name = 2;  // encoded region name (RegionInfo.encoded_name)
+  uint64 request_id = 3;
+}
+
+// HookError carries an observer-level failure back to the Java side.
+// Strict-mode policy (T32) surfaces this as IOException; best-effort
+// turns it into a WARN log and a no-op return.
+message HookError {
+  uint32 code = 1;
+  string message = 2;
+}
+
+// HookResponse is the shared per-call response envelope. Empty body =
+// success, observer chose not to bypass and no error. Populating either
+// field triggers the corresponding RegionObserver semantics on the
+// Java side.
+//
+// blocked_indices is honored only by batch-shaped hooks (preBatchMutate
+// today; preBulkLoadHFile / future batch hooks may opt in). Each value
+// is a zero-based index into the inbound MutationOperation list; the
+// Java adapter calls MiniBatchOperationInProgress.setOperationStatus(i,
+// OperationStatus(SANITY_CHECK_FAILURE)) on each so the matching
+// individual mutation fails while the rest of the batch proceeds. The
+// field is ignored on non-batch hooks.
+message HookResponse {
+  bool bypass = 1;
+  HookError error = 2;
+  repeated uint32 blocked_indices = 3;
+  // Substitute Result cells for value-returning bypass hooks
+  // (preAppend / preIncrement and their after-row-lock variants). When
+  // bypass = true on one of those hooks, these cells are returned to the
+  // client as the operation's Result (an empty list yields an empty
+  // Result). Ignored by every other hook. Additive (field 4) — minor
+  // version compatible; older peers simply don't read it.
+  repeated virogg.hbasecop.hbase.v1.Cell result = 4;
+}
+
+// PrePutRequest is the inbound payload for prePut. Phase-2 message,
+// kept stable for the frozen PrePut/PostPut SDK contract.
+message PrePutRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.MutationProto mutation = 2;
+}
+
+// PostPutRequest is the inbound payload for postPut.
+message PostPutRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.MutationProto mutation = 2;
+}
+
+// ---------------------------------------------------------------------
+// T41 stub requests. Each carries HookContext only — per-hook payload
+// (Cell, Get, Scan, …) lands in T42 as fields are appended. The proto
+// number-1 ctx field stays stable for forward compatibility.
+// ---------------------------------------------------------------------
+
+// Lifecycle (T42 Wave 4). Open/Close round-trip the abort_requested
+// flag; the rest of the env is reachable via HookContext (table/region).
+message PreOpenRequest { HookContext ctx = 1; }
+message PostOpenRequest { HookContext ctx = 1; }
+message PreCloseRequest {
+  HookContext ctx = 1;
+  bool abort_requested = 2;
+}
+message PostCloseRequest {
+  HookContext ctx = 1;
+  bool abort_requested = 2;
+}
+
+message PreFlushRequest { HookContext ctx = 1; }
+message PreFlushScannerOpenRequest { HookContext ctx = 1; }
+message PostFlushRequest { HookContext ctx = 1; }
+
+message PreMemStoreCompactionRequest { HookContext ctx = 1; }
+message PreMemStoreCompactionCompactScannerOpenRequest { HookContext ctx = 1; }
+message PreMemStoreCompactionCompactRequest { HookContext ctx = 1; }
+message PostMemStoreCompactionRequest { HookContext ctx = 1; }
+
+// Compaction (T42 Wave 4). Runtime trackers (CompactionLifeCycleTracker)
+// are opaque; we ship the column-family bytes and the candidate store-file
+// paths so observers can decide policy. The HBase ScanType enum is sent
+// as an int32 ordinal to avoid proto2/3 enum mixing.
+message StoreFilePathProto {
+  string path = 1;
+  uint64 size_bytes = 2;
+}
+
+message CompactionRequestSummary {
+  bool is_major = 1;
+  bool is_all_files = 2;
+  uint64 size = 3;
+  uint64 selection_time = 4;
+}
+
+message PreCompactSelectionRequest {
+  HookContext ctx = 1;
+  bytes column_family = 2;
+  repeated StoreFilePathProto candidate = 3;
+}
+message PostCompactSelectionRequest {
+  HookContext ctx = 1;
+  bytes column_family = 2;
+  repeated StoreFilePathProto selected = 3;
+  CompactionRequestSummary request = 4;
+}
+message PreCompactScannerOpenRequest {
+  HookContext ctx = 1;
+  bytes column_family = 2;
+  int32 scan_type = 3;
+  CompactionRequestSummary request = 4;
+}
+message PreCompactRequest {
+  HookContext ctx = 1;
+  bytes column_family = 2;
+  int32 scan_type = 3;
+  CompactionRequestSummary request = 4;
+}
+message PostCompactRequest {
+  HookContext ctx = 1;
+  bytes column_family = 2;
+  StoreFilePathProto result_file = 3;
+  CompactionRequestSummary request = 4;
+}
+
+// Read path (T42 Wave 1). The Get/Scan envelopes are vendored under
+// proto/hbase/Client.proto; per-hook payload fields are appended below
+// without renumbering the shared ctx=1 slot.
+message PreGetOpRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.Get get = 2;
+}
+message PostGetOpRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.Get get = 2;
+  // Cells the read produced (snapshot of the result list HBase passes to
+  // the post-hook). Observers may inspect but should not mutate.
+  repeated virogg.hbasecop.hbase.v1.Cell result = 3;
+}
+message PreExistsRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.Get get = 2;
+  // Pre-existing existence flag (HBase's own input). Observer may
+  // override by returning bypass + a different value in HookResponse.
+  bool exists = 3;
+}
+message PostExistsRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.Get get = 2;
+  bool exists = 3;
+}
+
+// Write path — Delete + version-stamp prepare (T42 Wave 2).
+message PreDeleteRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.MutationProto mutation = 2;
+}
+message PostDeleteRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.MutationProto mutation = 2;
+}
+message PrePrepareTimeStampForDeleteVersionRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.MutationProto mutation = 2;
+  virogg.hbasecop.hbase.v1.Cell cell = 3;
+  // The "now" timestamp HBase considers for the delete version, as a
+  // raw 8-byte big-endian buffer (matches HBase's internal byte[] form).
+  bytes byte_now = 4;
+  virogg.hbasecop.hbase.v1.Get get = 5;
+}
+
+// Batch mutate (T42 Wave 3). HBase's MiniBatchOperationInProgress
+// holds an array of Mutation operations with parallel
+// OperationStatus codes; we ship one MutationOperation per slot.
+
+message MutationOperation {
+  virogg.hbasecop.hbase.v1.MutationProto mutation = 1;
+  // Mirror of HBase's OperationStatusCode enum: SUCCESS=0, BAD_FAMILY=1,
+  // SANITY_CHECK_FAILURE=2, NOT_RUN=3, FAILURE=4. Int32 keeps proto3
+  // compatibility with the proto2 vendored enum.
+  int32 operation_status_code = 2;
+}
+
+message PreBatchMutateRequest {
+  HookContext ctx = 1;
+  repeated MutationOperation operation = 2;
+}
+message PostBatchMutateRequest {
+  HookContext ctx = 1;
+  repeated MutationOperation operation = 2;
+}
+message PostBatchMutateIndispensablyRequest {
+  HookContext ctx = 1;
+  repeated MutationOperation operation = 2;
+  bool success = 3;
+}
+
+// Region operation envelope (open / close round-trip the operation kind).
+// Region.Operation enum is mirrored as int32; see HBase's
+// org.apache.hadoop.hbase.regionserver.Region.Operation ordinal order.
+message PostStartRegionOperationRequest {
+  HookContext ctx = 1;
+  int32 operation = 2;
+}
+message PostCloseRegionOperationRequest {
+  HookContext ctx = 1;
+  int32 operation = 2;
+}
+
+// Check-and-* (T42 Wave 3). All three families share the same column-
+// based check shape (row + family + qualifier + compare_op + comparator
+// + mutation + input flag). compare_op is an int32 mirror of
+// org.apache.hadoop.hbase.CompareOperator (LESS=0, LESS_OR_EQUAL=1,
+// EQUAL=2, NOT_EQUAL=3, GREATER_OR_EQUAL=4, GREATER=5, NO_OP=6).
+
+message PreCheckAndPutRequest {
+  HookContext ctx = 1;
+  bytes row = 2;
+  bytes family = 3;
+  bytes qualifier = 4;
+  int32 compare_op = 5;
+  virogg.hbasecop.hbase.v1.Comparator comparator = 6;
+  virogg.hbasecop.hbase.v1.MutationProto put = 7;
+  // Input flag passed by HBase to the pre-hook (current check result).
+  bool input_result = 8;
+}
+message PostCheckAndPutRequest {
+  HookContext ctx = 1;
+  bytes row = 2;
+  bytes family = 3;
+  bytes qualifier = 4;
+  int32 compare_op = 5;
+  virogg.hbasecop.hbase.v1.Comparator comparator = 6;
+  virogg.hbasecop.hbase.v1.MutationProto put = 7;
+  bool input_result = 8;
+}
+message PreCheckAndPutAfterRowLockRequest {
+  HookContext ctx = 1;
+  bytes row = 2;
+  bytes family = 3;
+  bytes qualifier = 4;
+  int32 compare_op = 5;
+  virogg.hbasecop.hbase.v1.Comparator comparator = 6;
+  virogg.hbasecop.hbase.v1.MutationProto put = 7;
+  bool input_result = 8;
+}
+
+message PreCheckAndDeleteRequest {
+  HookContext ctx = 1;
+  bytes row = 2;
+  bytes family = 3;
+  bytes qualifier = 4;
+  int32 compare_op = 5;
+  virogg.hbasecop.hbase.v1.Comparator comparator = 6;
+  virogg.hbasecop.hbase.v1.MutationProto delete = 7;
+  bool input_result = 8;
+}
+message PostCheckAndDeleteRequest {
+  HookContext ctx = 1;
+  bytes row = 2;
+  bytes family = 3;
+  bytes qualifier = 4;
+  int32 compare_op = 5;
+  virogg.hbasecop.hbase.v1.Comparator comparator = 6;
+  virogg.hbasecop.hbase.v1.MutationProto delete = 7;
+  bool input_result = 8;
+}
+message PreCheckAndDeleteAfterRowLockRequest {
+  HookContext ctx = 1;
+  bytes row = 2;
+  bytes family = 3;
+  bytes qualifier = 4;
+  int32 compare_op = 5;
+  virogg.hbasecop.hbase.v1.Comparator comparator = 6;
+  virogg.hbasecop.hbase.v1.MutationProto delete = 7;
+  bool input_result = 8;
+}
+
+// CheckAndMutate (HBase 2.4+). Either column-based check (family +
+// qualifier + compare_op + value) OR filter-based check (filter) is
+// populated by HBase; the action mutation type is encoded in the
+// MutationProto's mutate_type. Note: the legacy preCheckAndPut/Delete
+// overloads use a Comparator (above); CheckAndMutate uses a fixed
+// byte[] value instead.
+message CheckAndMutateAction {
+  bytes row = 1;
+  bytes family = 2;
+  bytes qualifier = 3;
+  int32 compare_op = 4;
+  bytes value = 5;
+  virogg.hbasecop.hbase.v1.Filter filter = 6;
+  virogg.hbasecop.hbase.v1.MutationProto action = 7;
+}
+
+message CheckAndMutateResultProto {
+  bool success = 1;
+  virogg.hbasecop.hbase.v1.Result result = 2;
+}
+
+message PreCheckAndMutateRequest {
+  HookContext ctx = 1;
+  CheckAndMutateAction action = 2;
+  CheckAndMutateResultProto input_result = 3;
+}
+message PostCheckAndMutateRequest {
+  HookContext ctx = 1;
+  CheckAndMutateAction action = 2;
+  CheckAndMutateResultProto input_result = 3;
+}
+message PreCheckAndMutateAfterRowLockRequest {
+  HookContext ctx = 1;
+  CheckAndMutateAction action = 2;
+  CheckAndMutateResultProto input_result = 3;
+}
+
+// Append (T42 Wave 2). HBase's Append maps to MutationProto with
+// mutate_type=APPEND; the post-hook also carries the read-side Result.
+message PreAppendRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.MutationProto append = 2;
+}
+message PostAppendRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.MutationProto append = 2;
+  virogg.hbasecop.hbase.v1.Result result = 3;
+}
+message PreAppendAfterRowLockRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.MutationProto append = 2;
+}
+
+// Increment (T42 Wave 2). Same shape as Append; mutate_type=INCREMENT
+// distinguishes on the wire.
+message PreIncrementRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.MutationProto increment = 2;
+}
+message PostIncrementRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.MutationProto increment = 2;
+  virogg.hbasecop.hbase.v1.Result result = 3;
+}
+message PreIncrementAfterRowLockRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.MutationProto increment = 2;
+}
+
+// Scanner hooks (T42 Wave 1). The scanner state itself (InternalScanner,
+// RegionScanner) is runtime-only and not shippable; we send the Scan
+// shape, per-call limit/has_more, and the row-batch the post-hook
+// observes. Scanner identity across calls is carried via
+// HookContext.request_id on the bridge side.
+message PreScannerOpenRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.Scan scan = 2;
+}
+message PostScannerOpenRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.Scan scan = 2;
+}
+message PreScannerNextRequest {
+  HookContext ctx = 1;
+  int32 limit = 2;
+  bool has_more = 3;
+}
+message PostScannerNextRequest {
+  HookContext ctx = 1;
+  int32 limit = 2;
+  bool has_more = 3;
+  // Rows accumulated for this batch (one Result per row); observers
+  // see the snapshot HBase is about to return to the client.
+  repeated virogg.hbasecop.hbase.v1.Result result = 4;
+}
+message PostScannerFilterRowRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.Cell current_row = 2;
+  bool has_more = 3;
+}
+message PreScannerCloseRequest { HookContext ctx = 1; }
+message PostScannerCloseRequest { HookContext ctx = 1; }
+message PreStoreScannerOpenRequest {
+  HookContext ctx = 1;
+  // Column-family byte-array identifies the Store the scanner opens for;
+  // the Store object itself is a runtime handle and stays off-wire.
+  bytes column_family = 2;
+}
+
+// WAL replay/restore (T42 Wave 4). RegionInfo is already vendored under
+// proto/hbase/HBase.proto. WALKey/WALEdit are slim envelopes — we ship
+// the shippable scalars (seq num, write time, table, encoded region)
+// plus the WALEdit cell array; runtime-only fields (e.g. cluster ids)
+// are dropped today.
+
+message WalKeyProto {
+  bytes encoded_region_name = 1;
+  bytes table_name = 2;
+  uint64 log_seq_num = 3;
+  uint64 write_time = 4;
+  uint64 origin_seq_num = 5;
+}
+
+message WalEditProto {
+  repeated virogg.hbasecop.hbase.v1.Cell cell = 1;
+  // Replay metadata stays a serialized Cell list — HBase already encodes
+  // it that way internally.
+  bool has_replay_meta = 2;
+}
+
+message PreReplayWALsRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.RegionInfo region_info = 2;
+  string edits_path = 3;
+}
+message PostReplayWALsRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.RegionInfo region_info = 2;
+  string edits_path = 3;
+}
+message PreWALRestoreRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.RegionInfo region_info = 2;
+  WalKeyProto log_key = 3;
+  WalEditProto log_edit = 4;
+}
+message PostWALRestoreRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.RegionInfo region_info = 2;
+  WalKeyProto log_key = 3;
+  WalEditProto log_edit = 4;
+}
+
+// Bulk load + store-file commit (T42 Wave 4). HBase passes
+// List<Pair<byte[], String>> for family-paths; the staging API uses
+// Path objects which we ship as strings.
+
+message FamilyPath {
+  bytes family = 1;
+  string path = 2;
+}
+
+message BulkLoadFamilyPaths {
+  bytes family = 1;
+  repeated string path = 2;
+}
+
+message PreBulkLoadHFileRequest {
+  HookContext ctx = 1;
+  repeated FamilyPath family_path = 2;
+}
+message PostBulkLoadHFileRequest {
+  HookContext ctx = 1;
+  repeated FamilyPath staging_family_path = 2;
+  repeated BulkLoadFamilyPaths final_path = 3;
+}
+
+message PathPair {
+  string source = 1;
+  string destination = 2;
+}
+
+message PreCommitStoreFileRequest {
+  HookContext ctx = 1;
+  bytes family = 2;
+  repeated PathPair pair = 3;
+}
+message PostCommitStoreFileRequest {
+  HookContext ctx = 1;
+  bytes family = 2;
+  string source_path = 3;
+  string destination_path = 4;
+}
+
+// Store-file reader (T42 Wave 4). FileSystem / FSDataInputStreamWrapper
+// / CacheConfig / Reference / StoreFileReader are runtime handles; we
+// ship the file path + size which are the shippable bits.
+message PreStoreFileReaderOpenRequest {
+  HookContext ctx = 1;
+  string path = 2;
+  uint64 size_bytes = 3;
+}
+message PostStoreFileReaderOpenRequest {
+  HookContext ctx = 1;
+  string path = 2;
+  uint64 size_bytes = 3;
+}
+
+// Before-WAL hooks (T42 Wave 2). HBase invokes these on the cell stream
+// HBase will write to the WAL, giving the observer a chance to rewrite
+// individual cells (e.g. tag-injection).
+
+// CellPair carries the (old, new) cell pair the Increment/Append
+// before-WAL hooks expose to the observer.
+message CellPair {
+  virogg.hbasecop.hbase.v1.Cell first = 1;
+  virogg.hbasecop.hbase.v1.Cell second = 2;
+}
+
+message PostMutationBeforeWALRequest {
+  HookContext ctx = 1;
+  // Discriminator carrying the value of RegionObserver.MutationType, mapped
+  // 1:1 onto MutationProto.MutationType (APPEND=0, INCREMENT=1, PUT=2, DELETE=3).
+  // Held as int32 because proto3 messages cannot reference proto2 enums
+  // directly — the vendored MutationProto.MutationType is proto2.
+  int32 mutation_type = 2;
+  virogg.hbasecop.hbase.v1.MutationProto mutation = 3;
+  virogg.hbasecop.hbase.v1.Cell old_cell = 4;
+  virogg.hbasecop.hbase.v1.Cell new_cell = 5;
+}
+message PostIncrementBeforeWALRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.MutationProto mutation = 2;
+  repeated CellPair cell_pair = 3;
+}
+message PostAppendBeforeWALRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.MutationProto mutation = 2;
+  repeated CellPair cell_pair = 3;
+}
+
+// Delete tracker (T42 Wave 4). DeleteTracker is runtime state; we ship
+// its class name so observers can identify the tracker variety in use.
+message PostInstantiateDeleteTrackerRequest {
+  HookContext ctx = 1;
+  string tracker_class = 2;
+}
+
+// preWALAppend (T42 Wave 4). Ships the WALKey + WALEdit slim envelopes.
+message PreWALAppendRequest {
+  HookContext ctx = 1;
+  WalKeyProto log_key = 2;
+  WalEditProto log_edit = 3;
+}
+
+// ---------------------------------------------------------------------
+// MasterObserver Request messages (T51).
+//
+// All MasterObserver hooks share the HookContext envelope. table_name on
+// the context is left empty for cluster-level hooks (balance, etc); the
+// concrete table affected travels in the per-hook payload. The encoded
+// TableDescriptor / RegionInfo bytes are the canonical HBase 2.5
+// protobuf serialisations (TableDescriptor.toByteArray /
+// RegionInfo.toByteArray) — opaque to the Go side except as identifiers.
+// ---------------------------------------------------------------------
+
+message PreCreateTableRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.TableName table_name = 2;
+  bytes table_descriptor = 3;
+  repeated bytes split_key = 4;
+}
+message PostCreateTableRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.TableName table_name = 2;
+  bytes table_descriptor = 3;
+  repeated bytes split_key = 4;
+}
+
+message PreDeleteTableRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.TableName table_name = 2;
+}
+message PostDeleteTableRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.TableName table_name = 2;
+}
+
+message PreModifyTableRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.TableName table_name = 2;
+  bytes new_table_descriptor = 3;
+}
+message PostModifyTableRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.TableName table_name = 2;
+  bytes new_table_descriptor = 3;
+  bytes old_table_descriptor = 4;
+}
+
+message PreTruncateTableRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.TableName table_name = 2;
+  bool preserve_splits = 3;
+}
+message PostTruncateTableRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.TableName table_name = 2;
+  bool preserve_splits = 3;
+}
+
+message PreEnableTableRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.TableName table_name = 2;
+}
+message PostEnableTableRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.TableName table_name = 2;
+}
+message PreDisableTableRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.TableName table_name = 2;
+}
+message PostDisableTableRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.TableName table_name = 2;
+}
+
+message ServerNameProto {
+  string host = 1;
+  uint32 port = 2;
+  uint64 start_code = 3;
+}
+
+message PreMoveRequest {
+  HookContext ctx = 1;
+  bytes region_info = 2;       // RegionInfo.toByteArray
+  ServerNameProto source = 3;
+  ServerNameProto destination = 4;
+}
+message PostMoveRequest {
+  HookContext ctx = 1;
+  bytes region_info = 2;
+  ServerNameProto source = 3;
+  ServerNameProto destination = 4;
+}
+
+message PreAssignRequest {
+  HookContext ctx = 1;
+  bytes region_info = 2;
+}
+message PostAssignRequest {
+  HookContext ctx = 1;
+  bytes region_info = 2;
+}
+
+message PreUnassignRequest {
+  HookContext ctx = 1;
+  bytes region_info = 2;
+}
+message PostUnassignRequest {
+  HookContext ctx = 1;
+  bytes region_info = 2;
+}
+
+message PreBalanceRequest {
+  HookContext ctx = 1;
+  // 0=NONE, 1=NORMAL, 2=FORCE — mirrors HBase BalanceRequest.BalanceMode.
+  int32 balance_mode = 2;
+}
+message PostBalanceRequest {
+  HookContext ctx = 1;
+  int32 balance_mode = 2;
+  bool ran = 3;
+}
+
+// ---------------------------------------------------------------------
+// RegionServerObserver Request messages (T52).
+//
+// RegionServerObserver hooks are server-scoped, not table/region-scoped:
+// HookContext carries no table_name, and the affected RegionServer is
+// identified by the `server` field (env.getServerName() on the Java
+// side). The hooks themselves take no payload arguments in HBase 2.5
+// beyond the observer context, so every message is the (ctx, server)
+// envelope.
+// ---------------------------------------------------------------------
+
+message PreStopRegionServerRequest {
+  HookContext ctx = 1;
+  ServerNameProto server = 2;
+}
+
+message PreRollWalWriterRequestRequest {
+  HookContext ctx = 1;
+  ServerNameProto server = 2;
+}
+message PostRollWalWriterRequestRequest {
+  HookContext ctx = 1;
+  ServerNameProto server = 2;
+}
+
+message PreReplicateLogEntriesRequest {
+  HookContext ctx = 1;
+  ServerNameProto server = 2;
+}
+message PostReplicateLogEntriesRequest {
+  HookContext ctx = 1;
+  ServerNameProto server = 2;
+}
+
+message PreClearCompactionQueuesRequest {
+  HookContext ctx = 1;
+  ServerNameProto server = 2;
+}
+message PostClearCompactionQueuesRequest {
+  HookContext ctx = 1;
+  ServerNameProto server = 2;
+}
+
+message PreExecuteProceduresRequest {
+  HookContext ctx = 1;
+  ServerNameProto server = 2;
+}
+message PostExecuteProceduresRequest {
+  HookContext ctx = 1;
+  ServerNameProto server = 2;
+}
+
+// ---------------------------------------------------------------------
+// WALObserver Request messages (T53).
+//
+// WALObserver attaches to the write-ahead log. preWALWrite / postWALWrite
+// sit on the latency-critical WAL append hot path; preWALRoll /
+// postWALRoll fire when the WAL file is rotated. The WALKey / WALEdit
+// slim envelopes are reused from the region-server WAL replay surface.
+// ---------------------------------------------------------------------
+
+message PreWALWriteRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.RegionInfo region_info = 2;
+  WalKeyProto log_key = 3;
+  WalEditProto log_edit = 4;
+}
+message PostWALWriteRequest {
+  HookContext ctx = 1;
+  virogg.hbasecop.hbase.v1.RegionInfo region_info = 2;
+  WalKeyProto log_key = 3;
+  WalEditProto log_edit = 4;
+}
+
+message PreWALRollRequest {
+  HookContext ctx = 1;
+  string old_path = 2;
+  string new_path = 3;
+}
+message PostWALRollRequest {
+  HookContext ctx = 1;
+  string old_path = 2;
+  string new_path = 3;
+}
+
+// ---------------------------------------------------------------------
+// BulkLoadObserver Request messages (T54).
+//
+// HBase 2.5's BulkLoadObserver hooks take no payload arguments beyond
+// the observer context — the table/region the bulk load targets travels
+// in HookContext (filled from the RegionCoprocessorEnvironment on the
+// Java side).
+// ---------------------------------------------------------------------
+
+message PrePrepareBulkLoadRequest {
+  HookContext ctx = 1;
+}
+message PreCleanupBulkLoadRequest {
+  HookContext ctx = 1;
+}

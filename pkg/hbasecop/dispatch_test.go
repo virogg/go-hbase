@@ -1,0 +1,413 @@
+// Copyright 2026 The go-hbase Authors
+// SPDX-License-Identifier: Apache-2.0
+
+package hbasecop
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"sync"
+	"testing"
+
+	"github.com/virogg/go-hbase/internal/wire"
+	"github.com/virogg/go-hbase/internal/wire/hbasepb"
+	"github.com/virogg/go-hbase/internal/wire/hookpb"
+	"github.com/virogg/go-hbase/internal/wire/wirepb"
+	"google.golang.org/protobuf/proto"
+)
+
+// capturingObserver records the most recent invocation so tests can
+// inspect the mutation/env the dispatcher decoded. The mutex makes
+// concurrent calls safe — the race detector cannot see the
+// happens-before edge across the shmem ring used by the loop test, so
+// observer state must be guarded explicitly.
+type capturingObserver struct {
+	UnimplementedRegionObserver
+
+	mu           sync.Mutex
+	prePutCalls  int
+	postPutCalls int
+	lastEnv      ObserverEnv
+	lastMut      *hbasepb.MutationProto
+	prePutResult HookResult
+	prePutErr    error
+	postPutErr   error
+}
+
+func (c *capturingObserver) PrePut(_ context.Context, env ObserverEnv, mut *hbasepb.MutationProto) (HookResult, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.prePutCalls++
+	c.lastEnv = env
+	c.lastMut = mut
+	return c.prePutResult, c.prePutErr
+}
+
+func (c *capturingObserver) PostPut(_ context.Context, env ObserverEnv, mut *hbasepb.MutationProto) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.postPutCalls++
+	c.lastEnv = env
+	c.lastMut = mut
+	return c.postPutErr
+}
+
+func (c *capturingObserver) snapshot() (int, int, ObserverEnv, *hbasepb.MutationProto) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.prePutCalls, c.postPutCalls, c.lastEnv, c.lastMut
+}
+
+func buildRequestFrame(t *testing.T, hookID HookID, reqID uint64, hookCtxBytes []byte) *wire.Message {
+	t.Helper()
+	outer := &wirepb.Request{HookCtx: hookCtxBytes}
+	outerBytes, err := proto.Marshal(outer)
+	if err != nil {
+		t.Fatalf("marshal wirepb.Request: %v", err)
+	}
+	return &wire.Message{
+		Type:    wire.TypeRequest,
+		ReqID:   reqID,
+		HookID:  uint8(hookID),
+		Payload: outerBytes,
+	}
+}
+
+func decodeHookResponse(t *testing.T, frame *wire.Message) *hookpb.HookResponse {
+	t.Helper()
+	var wireResp wirepb.Response
+	if err := proto.Unmarshal(frame.Payload, &wireResp); err != nil {
+		t.Fatalf("unmarshal wirepb.Response: %v", err)
+	}
+	var hookResp hookpb.HookResponse
+	if err := proto.Unmarshal(wireResp.GetHookResp(), &hookResp); err != nil {
+		t.Fatalf("unmarshal hookpb.HookResponse: %v", err)
+	}
+	return &hookResp
+}
+
+func TestDispatchPrePut(t *testing.T) {
+	obs := &capturingObserver{}
+	d := newDispatcher(obs, nil)
+
+	mut := &hbasepb.MutationProto{Row: []byte("row-1")}
+	hctx := &hookpb.HookContext{
+		TableName: &hbasepb.TableName{
+			Namespace: []byte("default"),
+			Qualifier: []byte("users"),
+		},
+		RegionName: []byte("users,,1234567890.abc."),
+		RequestId:  42,
+	}
+	inner := &hookpb.PrePutRequest{Ctx: hctx, Mutation: mut}
+	innerBytes, err := proto.Marshal(inner)
+	if err != nil {
+		t.Fatalf("marshal PrePutRequest: %v", err)
+	}
+	req := buildRequestFrame(t, HookIDPrePut, 7, innerBytes)
+
+	resp := d.dispatch(context.Background(), req)
+	if resp == nil {
+		t.Fatal("dispatch returned nil response frame")
+	}
+	if resp.Type != wire.TypeResponse {
+		t.Fatalf("resp.Type = %v, want Response", resp.Type)
+	}
+	if resp.ReqID != req.ReqID {
+		t.Fatalf("resp.ReqID = %d, want %d", resp.ReqID, req.ReqID)
+	}
+	if resp.HookID != req.HookID {
+		t.Fatalf("resp.HookID = %d, want %d", resp.HookID, req.HookID)
+	}
+
+	if obs.prePutCalls != 1 {
+		t.Fatalf("PrePut calls = %d, want 1", obs.prePutCalls)
+	}
+	if !bytes.Equal(obs.lastMut.GetRow(), []byte("row-1")) {
+		t.Fatalf("observer received mut.Row = %q, want %q", obs.lastMut.GetRow(), []byte("row-1"))
+	}
+	if obs.lastEnv.TableName != "default:users" {
+		t.Fatalf("env.TableName = %q, want %q", obs.lastEnv.TableName, "default:users")
+	}
+	if obs.lastEnv.RegionName != string(hctx.RegionName) {
+		t.Fatalf("env.RegionName = %q, want %q", obs.lastEnv.RegionName, hctx.RegionName)
+	}
+
+	hookResp := decodeHookResponse(t, resp)
+	if hookResp.GetBypass() {
+		t.Fatalf("HookResponse.Bypass = true, want false")
+	}
+	if hookResp.GetError() != nil {
+		t.Fatalf("HookResponse.Error = %v, want nil", hookResp.GetError())
+	}
+}
+
+func TestDispatchPrePutBypass(t *testing.T) {
+	obs := &capturingObserver{prePutResult: HookResult{Bypass: true}}
+	d := newDispatcher(obs, nil)
+
+	innerBytes, err := proto.Marshal(&hookpb.PrePutRequest{Mutation: &hbasepb.MutationProto{}})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	req := buildRequestFrame(t, HookIDPrePut, 1, innerBytes)
+
+	resp := d.dispatch(context.Background(), req)
+	if resp == nil {
+		t.Fatal("dispatch returned nil")
+	}
+	hookResp := decodeHookResponse(t, resp)
+	if !hookResp.GetBypass() {
+		t.Fatalf("HookResponse.Bypass = false, want true")
+	}
+}
+
+func TestDispatchPrePutObserverError(t *testing.T) {
+	obs := &capturingObserver{prePutErr: errors.New("denied by policy")}
+	d := newDispatcher(obs, nil)
+
+	innerBytes, err := proto.Marshal(&hookpb.PrePutRequest{Mutation: &hbasepb.MutationProto{}})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	req := buildRequestFrame(t, HookIDPrePut, 1, innerBytes)
+
+	resp := d.dispatch(context.Background(), req)
+	if resp == nil {
+		t.Fatal("dispatch returned nil")
+	}
+	if resp.Type != wire.TypeResponse {
+		t.Fatalf("resp.Type = %v, want Response (error carried in HookResponse.Error)", resp.Type)
+	}
+	hookResp := decodeHookResponse(t, resp)
+	if hookResp.GetError() == nil {
+		t.Fatal("HookResponse.Error = nil, want non-nil")
+	}
+	if hookResp.GetError().GetMessage() != "denied by policy" {
+		t.Fatalf("HookResponse.Error.Message = %q, want %q",
+			hookResp.GetError().GetMessage(), "denied by policy")
+	}
+}
+
+// batchObserver overrides only PreBatchMutate so the dispatch-level test
+// can assert HookResult.BlockedIndices round-trips into HookResponse
+// without coupling to the broader capturingObserver fixture.
+type batchObserver struct {
+	UnimplementedRegionObserver
+
+	mu             sync.Mutex
+	calls          int
+	lastOperations int
+	result         HookResult
+	err            error
+}
+
+func (b *batchObserver) PreBatchMutate(
+	_ context.Context,
+	_ ObserverEnv,
+	req *hookpb.PreBatchMutateRequest,
+) (HookResult, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.calls++
+	b.lastOperations = len(req.GetOperation())
+	return b.result, b.err
+}
+
+func TestDispatchPreBatchMutateBlockedIndices(t *testing.T) {
+	obs := &batchObserver{result: HookResult{BlockedIndices: []uint32{0, 2}}}
+	d := newDispatcher(obs, nil)
+
+	inner := &hookpb.PreBatchMutateRequest{
+		Operation: []*hookpb.MutationOperation{
+			{Mutation: &hbasepb.MutationProto{Row: []byte("r0")}},
+			{Mutation: &hbasepb.MutationProto{Row: []byte("r1")}},
+			{Mutation: &hbasepb.MutationProto{Row: []byte("r2")}},
+		},
+	}
+	innerBytes, err := proto.Marshal(inner)
+	if err != nil {
+		t.Fatalf("marshal PreBatchMutateRequest: %v", err)
+	}
+	req := buildRequestFrame(t, HookIDPreBatchMutate, 42, innerBytes)
+
+	resp := d.dispatch(context.Background(), req)
+	if resp == nil {
+		t.Fatal("dispatch returned nil")
+	}
+	if obs.calls != 1 {
+		t.Fatalf("PreBatchMutate calls = %d, want 1", obs.calls)
+	}
+	if obs.lastOperations != 3 {
+		t.Fatalf("PreBatchMutate saw %d operations, want 3", obs.lastOperations)
+	}
+
+	hookResp := decodeHookResponse(t, resp)
+	got := hookResp.GetBlockedIndices()
+	want := []uint32{0, 2}
+	if len(got) != len(want) {
+		t.Fatalf("HookResponse.BlockedIndices = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("HookResponse.BlockedIndices[%d] = %d, want %d", i, got[i], want[i])
+		}
+	}
+	if hookResp.GetBypass() {
+		t.Fatalf("HookResponse.Bypass = true, want false (partial-block does not bypass)")
+	}
+	if hookResp.GetError() != nil {
+		t.Fatalf("HookResponse.Error = %v, want nil", hookResp.GetError())
+	}
+}
+
+func TestDispatchPreBatchMutateEmptyBlockedIndices(t *testing.T) {
+	obs := &batchObserver{}
+	d := newDispatcher(obs, nil)
+
+	inner := &hookpb.PreBatchMutateRequest{
+		Operation: []*hookpb.MutationOperation{
+			{Mutation: &hbasepb.MutationProto{Row: []byte("r0")}},
+		},
+	}
+	innerBytes, err := proto.Marshal(inner)
+	if err != nil {
+		t.Fatalf("marshal PreBatchMutateRequest: %v", err)
+	}
+	req := buildRequestFrame(t, HookIDPreBatchMutate, 43, innerBytes)
+
+	resp := d.dispatch(context.Background(), req)
+	hookResp := decodeHookResponse(t, resp)
+	if len(hookResp.GetBlockedIndices()) != 0 {
+		t.Fatalf("HookResponse.BlockedIndices = %v, want []", hookResp.GetBlockedIndices())
+	}
+}
+
+func TestDispatchPostPut(t *testing.T) {
+	obs := &capturingObserver{}
+	d := newDispatcher(obs, nil)
+
+	mut := &hbasepb.MutationProto{Row: []byte("row-x")}
+	inner := &hookpb.PostPutRequest{
+		Ctx:      &hookpb.HookContext{TableName: &hbasepb.TableName{Namespace: []byte{}, Qualifier: []byte("t1")}},
+		Mutation: mut,
+	}
+	innerBytes, err := proto.Marshal(inner)
+	if err != nil {
+		t.Fatalf("marshal PostPutRequest: %v", err)
+	}
+	req := buildRequestFrame(t, HookIDPostPut, 9, innerBytes)
+
+	resp := d.dispatch(context.Background(), req)
+	if resp == nil {
+		t.Fatal("dispatch returned nil")
+	}
+	if resp.Type != wire.TypeResponse {
+		t.Fatalf("resp.Type = %v, want Response", resp.Type)
+	}
+	if obs.postPutCalls != 1 {
+		t.Fatalf("PostPut calls = %d, want 1", obs.postPutCalls)
+	}
+	if !bytes.Equal(obs.lastMut.GetRow(), []byte("row-x")) {
+		t.Fatalf("PostPut row = %q, want %q", obs.lastMut.GetRow(), "row-x")
+	}
+	// Namespace empty → qualifier-only.
+	if obs.lastEnv.TableName != "t1" {
+		t.Fatalf("env.TableName = %q, want %q", obs.lastEnv.TableName, "t1")
+	}
+}
+
+func TestDispatchUnknownHookReturnsError(t *testing.T) {
+	obs := &capturingObserver{}
+	d := newDispatcher(obs, nil)
+
+	req := buildRequestFrame(t, HookID(0x77), 1, nil)
+	resp := d.dispatch(context.Background(), req)
+	if resp == nil {
+		t.Fatal("dispatch returned nil for unknown hook")
+	}
+	if resp.Type != wire.TypeError {
+		t.Fatalf("resp.Type = %v, want Error", resp.Type)
+	}
+	if obs.prePutCalls != 0 || obs.postPutCalls != 0 {
+		t.Fatalf("observer methods should not have been called: pre=%d post=%d",
+			obs.prePutCalls, obs.postPutCalls)
+	}
+}
+
+// TestDispatchExposesRegionID is the T61 SDK guard: the wire-level
+// region_id allocated by the Java supervisor must surface in
+// ObserverEnv so user code can shard state per region without having
+// to parse the (opaque) encoded region name.
+func TestDispatchExposesRegionID(t *testing.T) {
+	obs := &regionIDRecorder{}
+	d := newDispatcher(obs, nil)
+
+	mut := &hbasepb.MutationProto{Row: []byte("r")}
+	innerBytes, err := proto.Marshal(&hookpb.PrePutRequest{Mutation: mut})
+	if err != nil {
+		t.Fatalf("marshal PrePutRequest: %v", err)
+	}
+
+	for _, regionID := range []uint32{0, 1, 7, 4_294_967_295} {
+		req := &wire.Message{
+			Type:     wire.TypeRequest,
+			ReqID:    uint64(regionID) + 1,
+			RegionID: regionID,
+			HookID:   uint8(HookIDPrePut),
+			Payload:  innerBytes,
+		}
+		resp := d.dispatch(context.Background(), req)
+		if resp == nil {
+			t.Fatalf("region=%d: dispatch returned nil", regionID)
+		}
+		if resp.RegionID != regionID {
+			t.Fatalf("region=%d: resp.RegionID = %d", regionID, resp.RegionID)
+		}
+		if got := obs.last(); got != regionID {
+			t.Fatalf("region=%d: env.RegionID = %d", regionID, got)
+		}
+	}
+}
+
+// regionIDRecorder captures only env.RegionID from PrePut. Keeping the
+// fixture minimal isolates the assertion from unrelated env fields.
+type regionIDRecorder struct {
+	UnimplementedRegionObserver
+
+	mu       sync.Mutex
+	regionID uint32
+}
+
+func (r *regionIDRecorder) PrePut(_ context.Context, env ObserverEnv, _ *hbasepb.MutationProto) (HookResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.regionID = env.RegionID
+	return HookResult{}, nil
+}
+
+func (r *regionIDRecorder) last() uint32 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.regionID
+}
+
+func TestDispatchMalformedRequestPayloadReturnsError(t *testing.T) {
+	obs := &capturingObserver{}
+	d := newDispatcher(obs, nil)
+
+	req := &wire.Message{
+		Type:    wire.TypeRequest,
+		ReqID:   1,
+		HookID:  uint8(HookIDPrePut),
+		Payload: []byte{0xff, 0xff, 0xff, 0xff},
+	}
+	resp := d.dispatch(context.Background(), req)
+	if resp == nil {
+		t.Fatal("dispatch returned nil")
+	}
+	if resp.Type != wire.TypeError {
+		t.Fatalf("resp.Type = %v, want Error", resp.Type)
+	}
+}

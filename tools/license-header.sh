@@ -38,7 +38,8 @@ mapfile -t TARGETS < <(
   cd "$ROOT" && find . \
       \( -path ./.git -o -path ./target -o -path ./bin -o -path ./.idea \
          -o -path ./.vscode -o -path ./.serena -o -path ./.claude \
-         -o -path ./memory -o -path ./tasks -o -path ./node_modules \) -prune \
+         -o -path ./memory -o -path ./tasks -o -path ./node_modules \
+         -o -path ./third_party \) -prune \
       -o -type f \( \
             -name '*.go' -not -name '*.pb.go' \
          -o -name '*.java' -not -name '*Pb.java' \

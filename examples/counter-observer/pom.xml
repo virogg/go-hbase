@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Copyright 2026 The go-hbase Authors
+  SPDX-License-Identifier: Apache-2.0
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.virogg.hbasecop.examples</groupId>
+  <artifactId>counter-observer</artifactId>
+  <version>0.0.1-SNAPSHOT</version>
+  <packaging>jar</packaging>
+
+  <name>counter-observer (go-hbase example)</name>
+  <description>T25 reference coproc-jar: shades the bridge and embeds a Go ELF at bin/linux-amd64/.</description>
+
+  <!--
+    Standalone example project (not in the bridge reactor). To produce the
+    deployable coproc-jar:
+      1. `mvn install -DskipTests` at repo root  (publishes hbasecop-bridge into ~/.m2)
+      2. `make go-build-counter`                  (builds the Go ELF into this module's resources)
+      3. `mvn -f examples/counter-observer/pom.xml package`
+    `make counter-observer-jar` runs all three.
+  -->
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.source>11</maven.compiler.source>
+    <maven.compiler.target>11</maven.compiler.target>
+    <maven.compiler.release>11</maven.compiler.release>
+
+    <bridge.version>0.0.1-SNAPSHOT</bridge.version>
+    <hbase.version>2.5.10</hbase.version>
+    <protobuf.version>3.25.5</protobuf.version>
+    <junit.version>5.10.2</junit.version>
+
+    <plugin.compiler.version>3.13.0</plugin.compiler.version>
+    <plugin.surefire.version>3.2.5</plugin.surefire.version>
+    <plugin.shade.version>3.5.3</plugin.shade.version>
+    <plugin.resources.version>3.3.1</plugin.resources.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.virogg</groupId>
+      <artifactId>hbasecop-bridge</artifactId>
+      <version>${bridge.version}</version>
+    </dependency>
+
+    <!--
+      HBase is provided at runtime by the RegionServer; never shaded into
+      the coproc-jar (would cause classloader conflicts + bloat).
+    -->
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-server</artifactId>
+      <version>${hbase.version}</version>
+      <scope>provided</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java</artifactId>
+      <version>${protobuf.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-api</artifactId>
+      <version>${junit.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-engine</artifactId>
+      <version>${junit.version}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <finalName>counter-observer</finalName>
+
+    <!--
+      The embedded Go ELF is staged into src/main/resources/bin/linux-amd64/
+      by `make go-build-counter` before `mvn package` runs.
+    -->
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+      </resource>
+    </resources>
+
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>${plugin.compiler.version}</version>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-resources-plugin</artifactId>
+        <version>${plugin.resources.version}</version>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>${plugin.surefire.version}</version>
+        <configuration>
+          <useModulePath>false</useModulePath>
+        </configuration>
+      </plugin>
+
+      <!--
+        Shade everything that's not `provided` into a single coproc-jar:
+        bridge classes, protobuf-java, java-go-shmem. HBase stays out (provided).
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>${plugin.shade.version}</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals><goal>shade</goal></goals>
+            <configuration>
+              <createDependencyReducedPom>false</createDependencyReducedPom>
+              <shadedArtifactAttached>false</shadedArtifactAttached>
+              <minimizeJar>false</minimizeJar>
+              <filters>
+                <filter>
+                  <artifact>*:*</artifact>
+                  <excludes>
+                    <exclude>META-INF/*.SF</exclude>
+                    <exclude>META-INF/*.DSA</exclude>
+                    <exclude>META-INF/*.RSA</exclude>
+                    <exclude>module-info.class</exclude>
+                  </excludes>
+                </filter>
+                <!--
+                  The bridge artifact carries its own generic Go runtime ELF
+                  (for E2E ping/pong tests). Drop it so the example's
+                  counter-observer ELF wins in the final coproc-jar.
+                -->
+                <filter>
+                  <artifact>com.virogg:hbasecop-bridge</artifact>
+                  <excludes>
+                    <exclude>bin/**</exclude>
+                  </excludes>
+                </filter>
+              </filters>
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+              </transformers>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>
