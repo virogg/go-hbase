@@ -30,6 +30,15 @@ import java.util.concurrent.TimeoutException;
  */
 public final class MuxHookDispatcher implements HookDispatcher {
 
+  /**
+   * Budget for spin-polling the response future before parking in {@code fut.get(timeout)}. Round
+   * trips through the no-op Go observer complete in ~100µs (T81 bench), so a parked caller pays two
+   * context switches per hook — measurably more than the remaining wait. Spinning just past the
+   * typical completion keeps the fast path park-free; slow or failing hooks fall through to the
+   * blocking wait after at most this budget, so timeout semantics are unchanged.
+   */
+  private static final long RESPONSE_SPIN_NANOS = 150_000;
+
   private final Multiplexer mux;
 
   public MuxHookDispatcher(Multiplexer mux) {
@@ -51,6 +60,11 @@ public final class MuxHookDispatcher implements HookDispatcher {
     Message req = new Message(FrameType.REQUEST, 0L, regionId, hookId, requestPayload);
     Multiplexer.Call call = mux.callTracked(req);
     CompletableFuture<Message> fut = call.future;
+
+    long spinDeadline = System.nanoTime() + RESPONSE_SPIN_NANOS;
+    while (!fut.isDone() && System.nanoTime() - spinDeadline < 0) {
+      Thread.onSpinWait();
+    }
 
     final Message resp;
     try {
