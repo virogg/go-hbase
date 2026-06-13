@@ -314,4 +314,27 @@
       </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <!--
+      Integration and packaging invoke `mvn install -DskipTests` (jar prereqs)
+      and `mvn test -Dtest=*IT`, both of which reach the `verify` phase where
+      jacoco-check is bound — but without producing full unit-test coverage
+      data. A stale single-IT jacoco.exec left by an earlier `mvn test` would
+      then fail the 75% LINE gate on an unrelated jar rebuild (observed on the
+      integration matrix). Line coverage is enforced solely by the dedicated
+      `java` CI job (`mvn verify` with the full suite), so whenever tests are
+      skipped we skip JaCoCo entirely. Mirrors the explicit -Djacoco.skip=true
+      already passed by the bench targets.
+    -->
+    <profile>
+      <id>skip-coverage-when-tests-skipped</id>
+      <activation>
+        <property><name>skipTests</name></property>
+      </activation>
+      <properties>
+        <jacoco.skip>true</jacoco.skip>
+      </properties>
+    </profile>
+  </profiles>
 </project>
