@@ -74,5 +74,14 @@ if [ -n "${HBASECOP_WAL_COPROC_CLASS:-}" ]; then
   echo "entrypoint: registered WAL coprocessor ${HBASECOP_WAL_COPROC_CLASS} (jar ${jar})" >&2
 fi
 
+# Relay the embedded ZooKeeper client port onto a host-reachable address.
+# HBase 2.5.0's MiniZooKeeperCluster binds ZK to 127.0.0.1:2181 (ignoring
+# hbase.zookeeper.property.clientPortAddress), which docker's port forward
+# cannot reach, so a host-side HBase client's ZK session dies with
+# ConnectionLoss for /hbase/master. socat listens on 0.0.0.0:2182 and forwards
+# to ZK's loopback; docker-compose maps host 2181 -> container 2182. Harmless
+# on 2.5.11 (its ZK already binds 0.0.0.0). Backgrounded; HBase stays PID 1.
+socat TCP-LISTEN:2182,fork,reuseaddr TCP:127.0.0.1:2181 &
+
 # Standalone mode: master process spawns RS + embedded ZK in the same JVM.
 exec "${HBASE_HOME}/bin/hbase" master start
