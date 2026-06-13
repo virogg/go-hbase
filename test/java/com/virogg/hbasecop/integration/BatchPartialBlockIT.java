@@ -83,7 +83,7 @@ final class BatchPartialBlockIT {
     try (Connection conn = ConnectionFactory.createConnection(cfg);
         Admin admin = conn.getAdmin()) {
 
-      waitForClusterReady(admin, Duration.ofSeconds(60));
+      waitForClusterReady(admin, Duration.ofSeconds(300));
 
       if (admin.tableExists(tn)) {
         dropTable(admin, tn);

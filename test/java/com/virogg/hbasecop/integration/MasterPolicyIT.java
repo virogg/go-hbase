@@ -67,7 +67,7 @@ final class MasterPolicyIT {
     try (Connection conn = ConnectionFactory.createConnection(cfg);
         Admin admin = conn.getAdmin()) {
 
-      waitForClusterReady(admin, Duration.ofSeconds(60));
+      waitForClusterReady(admin, Duration.ofSeconds(300));
 
       dropQuietly(admin, blocked);
       dropQuietly(admin, allowed);

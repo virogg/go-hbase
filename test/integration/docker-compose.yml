@@ -27,7 +27,7 @@ services:
     ports:
       - "16010:16010"   # master web UI
       - "16030:16030"   # regionserver web UI
-      - "2181:2181"     # zookeeper client
+      - "2181:2182"     # zookeeper client (host 2181 -> in-container socat relay :2182 -> ZK 127.0.0.1:2181; see hbase/entrypoint.sh)
       - "16000:16000"   # master RPC
       - "16020:16020"   # regionserver RPC
     volumes:
