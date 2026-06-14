@@ -45,6 +45,8 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: verify deps (supply-chain pin)
+        run: make verify-deps
       - name: golangci-lint
         # action v7+ is required for golangci-lint v2 / the v2 .golangci.yml schema
         # (action v6 only supports golangci-lint v1).
@@ -56,6 +58,11 @@ jobs:
         run: make go-build
       - name: go test (race)
         run: make go-test
+      - name: go test (posix_shm cgo backend)
+        # Compiles + exercises the cgo POSIX shared-memory backend that the
+        # default build omits (SPEC §3 "POSIX shm + mmap"). ubuntu runners
+        # ship gcc, so cgo is available.
+        run: make go-test-posixshm
       - name: go coverage gate (SPEC §7 ≥80% line, hand-written code)
         run: make go-cover
       - name: wire-codec fuzz (smoke; T83)
@@ -74,6 +81,8 @@ jobs:
           distribution: temurin
           java-version: '11'
           cache: maven
+      - name: verify deps (supply-chain pin)
+        run: make verify-deps
       - name: Install java-go-shmem to ~/.m2
         run: make deps-shmem
       - name: spotless:check

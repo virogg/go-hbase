@@ -9,10 +9,14 @@ import (
 	"github.com/virogg/go-hbase/internal/wire/hookpb"
 )
 
-// MasterObserver is the Go-side mirror of HBase 2.5 MasterObserver.
-// Implement the methods whose hooks your master coprocessor needs;
-// embed UnimplementedMasterObserver to inherit no-op defaults for the
-// rest. Returning HookResult{Bypass:true} from a Pre-* method causes
+// MasterObserver is the Go-side surface for HBase 2.5 master hooks. It
+// covers a curated subset — the 20 most common master hooks (table
+// lifecycle, enable/disable, region placement and balance) — NOT the
+// full ~165-method HBase MasterObserver interface; ACL, quota,
+// namespace, snapshot and merge hooks are out of MVP scope (see
+// docs/coverage-region-observer.md). Implement the methods whose hooks
+// your master coprocessor needs; embed UnimplementedMasterObserver to
+// inherit no-op defaults for the rest. Returning HookResult{Bypass:true} from a Pre-* method causes
 // the Java MasterObserverAdapter to invoke ObserverContext.bypass(),
 // which short-circuits the in-progress master operation. Returning a
 // non-nil error fails the call back to the HBase admin client per the

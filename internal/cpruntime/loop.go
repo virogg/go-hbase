@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"runtime"
 	"sync"
@@ -264,6 +265,21 @@ func encodeFrame(m *wire.Message) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// decodeFrame reassembles one logical message from a single ring slot.
+// The transport is one-message-per-slot: a multi-chunk message arrives
+// with all its chunk frames concatenated in the slot, and the Decoder's
+// internal loop reassembles them. Any bytes left after the first complete
+// message mean the slot is corrupt or carried more than one message — we
+// surface that as a clear error rather than silently dropping the
+// remainder (the reader logs and skips the slot).
 func decodeFrame(data []byte) (*wire.Message, error) {
-	return wire.NewDecoder(bytes.NewReader(data)).Decode()
+	r := bytes.NewReader(data)
+	msg, err := wire.NewDecoder(r).Decode()
+	if err != nil {
+		return nil, err
+	}
+	if r.Len() != 0 {
+		return nil, fmt.Errorf("wire: %d trailing bytes after message (slot must carry exactly one)", r.Len())
+	}
+	return msg, nil
 }

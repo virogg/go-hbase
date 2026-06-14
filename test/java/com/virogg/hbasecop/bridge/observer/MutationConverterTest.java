@@ -127,4 +127,39 @@ class MutationConverterTest {
         com.virogg.hbasecop.bridge.wire.pb.PostIncrementBeforeWALRequest.getDefaultInstance();
     assertEquals(0, empty.getCellPairCount());
   }
+
+  // Regression for the F2 data-integrity defect: mutation-level attributes were
+  // dropped, so a Go security/validation observer saw none of the client's
+  // CellVisibility / ACL / TTL context. setTTL is stored as a mutation attribute
+  // ("_ttl"), and setAttribute is the same generic mechanism CellVisibility/ACL
+  // use; both must now reach the proto's attribute list.
+  @Test
+  void putMutationCarriesAttributesIncludingTtl() throws IOException {
+    Put put = new Put(Bytes.toBytes("row-1"));
+    put.addColumn(Bytes.toBytes("f"), Bytes.toBytes("q"), Bytes.toBytes("v"));
+    put.setTTL(60_000L); // stored as the "_ttl" mutation attribute
+    put.setAttribute("custom-policy", Bytes.toBytes("audit=on"));
+
+    MutationProto rehydrated =
+        MutationProto.parseFrom(MutationConverter.toProto(put).toByteArray());
+
+    assertTrue(rehydrated.getAttributeCount() >= 2, "TTL + custom attribute must survive");
+    java.util.Map<String, byte[]> got = new java.util.HashMap<>();
+    for (com.virogg.hbasecop.hbase.v1.HBaseProtos.NameBytesPair p : rehydrated.getAttributeList()) {
+      got.put(p.getName(), p.getValue().toByteArray());
+    }
+    assertTrue(got.containsKey("custom-policy"), "custom attribute dropped");
+    assertArrayEquals(Bytes.toBytes("audit=on"), got.get("custom-policy"));
+    assertTrue(got.containsKey("_ttl"), "TTL (mutation attribute) dropped");
+  }
+
+  @Test
+  void mutationWithoutAttributesEmitsNone() throws IOException {
+    Put put = new Put(Bytes.toBytes("row-1"));
+    put.addColumn(Bytes.toBytes("f"), Bytes.toBytes("q"), Bytes.toBytes("v"));
+
+    MutationProto rehydrated =
+        MutationProto.parseFrom(MutationConverter.toProto(put).toByteArray());
+    assertEquals(0, rehydrated.getAttributeCount());
+  }
 }

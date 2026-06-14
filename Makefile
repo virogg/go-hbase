@@ -73,9 +73,32 @@ deps: deps-shmem go-deps java-deps ## Download all Go and Java dependencies (CI 
 SHMEM_SUBMODULE := third_party/java-go-shmem
 SHMEM_POM       := $(SHMEM_SUBMODULE)/java/pom.xml
 
+# Recorded pin of the java-go-shmem submodule. This is the project's single
+# most load-bearing dependency (the Java<->Go shared-memory IPC) yet it sits
+# OUTSIDE the usual integrity nets: the Go side consumes it via a `replace`
+# directive (so go.sum carries no checksum for it) and the Java side is a local
+# SNAPSHOT (mutable). `verify-deps` is the in-repo backstop — it asserts the
+# checked-out submodule is exactly this commit with no tracked-source drift, so
+# a bump or tampering can't slip through unreviewed. Bumping the dependency means
+# updating this SHA and docs/dep-shmem.md in the same change.
+SHMEM_EXPECTED_SHA := ef35ad6d413899b4497aca191b9cc4dcca4f98bc
+
 .PHONY: deps-shmem
 deps-shmem: $(SHMEM_POM) ## Install the local java-go-shmem jar into ~/.m2 (no-op for Go: replace directive).
 	$(MVN) $(MVN_FLAGS) install -DskipTests -f $(SHMEM_POM)
+
+.PHONY: verify-deps
+verify-deps: $(SHMEM_POM) ## Supply-chain guard: java-go-shmem submodule matches the recorded pin.
+	@actual=$$(git -C $(SHMEM_SUBMODULE) rev-parse HEAD); \
+	  if [ "$$actual" != "$(SHMEM_EXPECTED_SHA)" ]; then \
+	    echo "FAIL: java-go-shmem at $$actual, expected pinned $(SHMEM_EXPECTED_SHA)." >&2; \
+	    echo "      If intentional, update SHMEM_EXPECTED_SHA + docs/dep-shmem.md in this change." >&2; \
+	    exit 1; \
+	  fi
+	@git -C $(SHMEM_SUBMODULE) diff --quiet HEAD || { \
+	  echo "FAIL: java-go-shmem tracked sources modified vs the pinned commit (possible tampering)." >&2; \
+	  exit 1; }
+	@echo "verify-deps: java-go-shmem pinned at $(SHMEM_EXPECTED_SHA), tracked sources clean."
 
 $(SHMEM_POM):
 	@echo "$(SHMEM_SUBMODULE) is empty — run: git submodule update --init --recursive" >&2
@@ -106,6 +129,15 @@ hbasecop-build: ## T71: build the coproc-jar packaging CLI (host arch, target/bi
 .PHONY: go-test
 go-test: ## Run Go tests with the race detector.
 	$(GO) test -race -count=1 $(GO_PKGS)
+
+# The POSIX named-shm backend (SPEC §3 "POSIX shm + mmap") is cgo-only and
+# guarded by the `posixshm` build tag, so the default go-test (which builds
+# without it) never compiles or exercises it. This target compiles the cgo
+# backend and runs its runtime round-trip so the SPEC-advertised backend is
+# actually covered. Requires a C toolchain; Linux/macOS only.
+.PHONY: go-test-posixshm
+go-test-posixshm: ## Compile + test the cgo POSIX shared-memory backend.
+	CGO_ENABLED=1 $(GO) test -tags posixshm -count=1 ./internal/shmem/...
 
 # SPEC §5 documents `test-go`/`test-java`/`test-bench`; keep the language-first
 # names canonical and provide these as aliases so the spec commands work.
