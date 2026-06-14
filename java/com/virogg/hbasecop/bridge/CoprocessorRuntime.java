@@ -180,11 +180,12 @@ public final class CoprocessorRuntime implements AutoCloseable {
       // every send through this lock — the ring stays effectively SPSC from the producer's view.
       final Object sendLock = new Object();
       final Channel javaToGoRef = javaToGo;
+      final long sendDeadlineMs = restartDeadlineMs;
       mux =
           Multiplexer.builder(
                   msg -> {
                     synchronized (sendLock) {
-                      sendOnChannel(javaToGoRef, enc, msg);
+                      sendOnChannel(javaToGoRef, enc, msg, sendDeadlineMs);
                     }
                   })
               .restartDeadlineMs(restartDeadlineMs)
@@ -683,18 +684,46 @@ public final class CoprocessorRuntime implements AutoCloseable {
         .build();
   }
 
-  private static void sendOnChannel(Channel ch, Encoder enc, Message msg)
-      throws ShmemException, WireException {
+  private static void sendOnChannel(Channel ch, Encoder enc, Message msg, long deadlineMs)
+      throws ShmemException, WireException, InterruptedException {
     ByteBuffer bb = enc.encode(msg);
     byte[] frame = new byte[bb.remaining()];
     bb.get(frame);
-    // Backpressure: if the ring is full the Go side hasn't drained yet — spin briefly. Producer
-    // contention here is low for prePut (one in-flight call per region thread).
+    sendWithDeadline(() -> ch.send(frame), deadlineMs, System::nanoTime);
+  }
+
+  /** A single non-blocking ring write; throws {@link RingFullException} when no slot is free. */
+  @FunctionalInterface
+  interface RingSend {
+    void send() throws ShmemException;
+  }
+
+  /**
+   * Retry a non-blocking ring write until it succeeds, the deadline passes, or the thread is
+   * interrupted. This spin MUST be bounded: {@link Channel#send} throws {@link RingFullException}
+   * immediately (it never blocks), and the production caller holds the shared {@code sendLock}, so
+   * an unbounded spin against a full/hung/dead Go side would pin this RegionServer RPC-handler
+   * thread at 100% CPU and starve every other region's send. On timeout it throws a clear {@link
+   * ShmemException} so the hook fails by policy instead of hanging forever. {@code nanoClock} is
+   * injected for testability.
+   */
+  static void sendWithDeadline(
+      RingSend send, long deadlineMs, java.util.function.LongSupplier nanoClock)
+      throws ShmemException, InterruptedException {
+    long deadlineNanos =
+        nanoClock.getAsLong() + TimeUnit.MILLISECONDS.toNanos(Math.max(1L, deadlineMs));
     while (true) {
       try {
-        ch.send(frame);
+        send.send();
         return;
       } catch (com.virogg.hbasecop.bridge.shmem.RingFullException e) {
+        if (Thread.interrupted()) {
+          throw new InterruptedException("hbasecop: interrupted while waiting for ring space");
+        }
+        if (nanoClock.getAsLong() - deadlineNanos >= 0) {
+          throw new ShmemException(
+              "hbasecop: outbound ring full for >" + deadlineMs + "ms; Go side not draining");
+        }
         Thread.onSpinWait();
       }
     }

@@ -14,8 +14,13 @@ buffer — no fork-per-call, no RPC hop.
 ### Highlights
 
 - **All five Observer surfaces**: Region, RegionServer, Master, WAL and
-  BulkLoad observers — 143 hooks dispatched over a protobuf wire protocol
-  (`virogg.hbasecop.v1`) with golden-corpus cross-language parity tests.
+  BulkLoad observers — 103 Observer hooks (143 request/response wire
+  messages) dispatched over a protobuf wire protocol
+  (`virogg.hbasecop.v1`). The Master surface ships a curated subset (20 of
+  HBase 2.5's master hooks); the other four surfaces are complete. Wire
+  framing has a cross-language golden corpus and a Go↔proto hook-id parity
+  guard; hook payload messages are round-tripped per language (full
+  cross-language byte-parity for payloads is tracked as follow-up).
 - **Go SDK** (`pkg/hbasecop`): implement `RegionObserver` (or any other
   observer interface), call `hbasecop.Run(...)`; `Unimplemented*` embeddings
   keep observers forward-compatible. Panics in user hooks are recovered and

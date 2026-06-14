@@ -209,6 +209,73 @@ final class CoprocessorRuntimeTest {
     }
   }
 
+  // Regression for C2: disabling heartbeats must NOT disable crash detection or
+  // auto-restart. The supervisor scheduler is created unconditionally and, with
+  // heartbeats off, ticks at the crash-probe cadence (DEFAULT_CRASH_PROBE_MS).
+  // The pre-fix bug only started the scheduler when a watchdog existed, so a
+  // crash with heartbeats off was never noticed and the runtime hung forever.
+  // This mirrors restartsGoProcessAfterCrash but with heartbeatPeriodMs(-1).
+  @Test
+  void restartsGoProcessAfterCrashWithHeartbeatsDisabled(@TempDir Path tmp) throws Exception {
+    Path inFile = tmp.resolve("in.mmap");
+    Path outFile = tmp.resolve("out.mmap");
+
+    RestartConfig restart =
+        RestartConfig.builder()
+            .initialDelayMs(50L)
+            .maxDelayMs(200L)
+            .multiplier(2.0)
+            .jitterRatio(0.0)
+            .maxConsecutiveFails(3)
+            .probeIntervalMs(500L)
+            .build();
+
+    CoprocessorRuntime.Config cfg =
+        CoprocessorRuntime.Config.builder()
+            .javaToGoFile(inFile)
+            .goToJavaFile(outFile)
+            .ringCapacity(8)
+            .ringMaxObjectSize(64 * 1024)
+            .heartbeatPeriodMs(-1) // heartbeats DISABLED — the C2 scenario
+            .hookTimeout(Duration.ofSeconds(2))
+            .gracefulShutdownTimeout(Duration.ofSeconds(2))
+            .restartConfig(restart)
+            .build();
+
+    try (CoprocessorRuntime rt = new CoprocessorRuntime(cfg)) {
+      rt.start();
+      assertTrue(rt.isAlive(), "Go process must be alive after start");
+      long origPid = rt.goProcessPidForTesting();
+      assertNotEquals(-1L, origPid);
+
+      rt.crashGoProcessForTesting();
+
+      // Detection now rides the crash-probe cadence (~500ms) rather than the
+      // 50ms heartbeat, so allow a wider deadline than the heartbeats-on test.
+      long deadline = System.currentTimeMillis() + 8_000L;
+      while (System.currentTimeMillis() < deadline) {
+        long pid = rt.goProcessPidForTesting();
+        if (rt.isAlive()
+            && pid != origPid
+            && pid != -1L
+            && rt.restartControllerForTesting().state() == RestartController.State.HEALTHY) {
+          break;
+        }
+        Thread.sleep(20);
+      }
+
+      assertTrue(rt.isAlive(), "crash must be detected and restarted even with heartbeats off");
+      assertNotEquals(origPid, rt.goProcessPidForTesting(), "pid must change after restart");
+      assertFalse(rt.isUnhealthy(), "after successful restart, runtime must be healthy");
+      assertEquals(
+          RestartController.State.HEALTHY,
+          rt.restartControllerForTesting().state(),
+          "controller must return to HEALTHY after a heartbeats-off restart");
+
+      rt.stop();
+    }
+  }
+
   @Test
   void crashFailsInflightCallsAndDefersNewOnesPastRestartDeadline(@TempDir Path tmp)
       throws Exception {

@@ -81,3 +81,25 @@ Both the `go` and `java` jobs in `.github/workflows/ci.yml` use
 `actions/checkout@v4` with `submodules: recursive`. The `java` job runs
 `make deps-shmem` before `make java-test` so the local SNAPSHOT is in the
 Maven cache when the bridge build runs.
+
+## Supply-chain integrity (`make verify-deps`)
+
+This submodule is the project's most load-bearing dependency, yet it sits
+outside the usual integrity nets: the Go side consumes it through a
+`replace` directive, so **`go.sum` carries no checksum for it**, and the
+Java artifact is a local `SNAPSHOT` (mutable). To compensate, the pin is
+recorded explicitly as `SHMEM_EXPECTED_SHA` in the `Makefile`, and both CI
+jobs run `make verify-deps` before building. That target fails the build
+unless the checked-out submodule is **exactly** the pinned commit with
+**no tracked-source modifications** (untracked build output such as
+`java/target/` is ignored). Bumping the dependency therefore requires
+updating `SHMEM_EXPECTED_SHA` and this document in the same change — the
+bump cannot slip through unreviewed, and a tampered working tree is
+caught.
+
+Residual risk (follow-up, needs upstream action): the dependency is
+pinned to a bare commit rather than a signed tag/release, and fully
+removing the `replace` directive / publishing a non-`SNAPSHOT` Maven
+coordinate depends on the upstream module being released at its declared
+path. `verify-deps` bounds the in-repo exposure; it does not replace a
+published, checksummed release.

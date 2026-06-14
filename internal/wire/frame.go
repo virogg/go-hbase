@@ -38,9 +38,17 @@ const (
 	// read straight off the wire as a u32, so without this cap a
 	// hostile or corrupt frame (chunk_total up to ~4.29e9) would make
 	// the decoder pre-allocate a multi-GiB chunk slice and OOM the
-	// process. 1024 chunks × MaxPayloadBytes ≈ 64 MiB max message,
-	// far above any real hook payload. Defended in both the Go and
-	// Java decoders (kept in lockstep; see WireFormat.MAX_CHUNKS).
+	// process. The Encoder also caps here (ErrMessageTooLarge) so it
+	// never emits a frame stream the decoder would reject. Defended in
+	// both the Go and Java decoders (kept in lockstep; see
+	// WireFormat.MAX_CHUNKS).
+	//
+	// The abstract 1024-chunk ceiling is NOT the practical limit: the
+	// live transport is one-message-per-slot (each ring Recv yields one
+	// slot carrying a whole message's chunks), so a message must fit a
+	// single ring slot (HBASECOP_RING_MAX_OBJECT_SIZE, e.g. 1 MiB).
+	// Channel.Send fails closed above the slot size; cross-slot
+	// reassembly is intentionally not supported.
 	MaxChunks = 1024
 
 	// MaxPendingReassemblies bounds the number of concurrent
@@ -130,4 +138,12 @@ var (
 	// MaxPendingBytes. Caps heap from abandoned near-complete
 	// reassemblies, which the entry-count cap alone does not bound.
 	ErrTooManyPendingBytes = errors.New("wire: too many pending reassembly bytes")
+
+	// ErrMessageTooLarge — the payload would split into more than
+	// MaxChunks chunks. Returned by Encode at the producer instead of
+	// emitting a frame stream carrying chunk_total > MaxChunks, which the
+	// matching Decoder is contractually required to reject with
+	// ErrTooManyChunks. Failing here turns self-undecodable output into a
+	// clear, early producer-side error.
+	ErrMessageTooLarge = errors.New("wire: message exceeds MaxChunks")
 )

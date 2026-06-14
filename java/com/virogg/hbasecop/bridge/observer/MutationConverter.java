@@ -5,6 +5,7 @@ package com.virogg.hbasecop.bridge.observer;
 
 import com.google.protobuf.ByteString;
 import com.virogg.hbasecop.hbase.v1.ClientProtos.MutationProto;
+import com.virogg.hbasecop.hbase.v1.HBaseProtos.NameBytesPair;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -76,10 +77,34 @@ final class MutationConverter {
 
   private static MutationProto.Builder baseBuilder(
       Mutation m, MutationProto.MutationType mutationType) {
-    return MutationProto.newBuilder()
-        .setRow(ByteString.copyFrom(m.getRow()))
-        .setMutateType(mutationType)
-        .setDurability(toProtoDurability(m.getDurability()));
+    MutationProto.Builder b =
+        MutationProto.newBuilder()
+            .setRow(ByteString.copyFrom(m.getRow()))
+            .setMutateType(mutationType)
+            .setDurability(toProtoDurability(m.getDurability()));
+    appendAttributes(b, m);
+    return b;
+  }
+
+  // Carry mutation-level attributes across the wire. In HBase 2.5 CellVisibility
+  // (setCellVisibility), per-cell ACL (setACL) and TTL (setTTL) are all stored as
+  // entries in the mutation's attribute map, alongside any custom operation
+  // attributes. Dropping them meant a Go validation/audit/security observer
+  // decided on incomplete data; emitting the full map (deterministically ordered
+  // for stable wire bytes) lets the observer see exactly what the client attached.
+  private static void appendAttributes(MutationProto.Builder b, Mutation m) {
+    Map<String, byte[]> attrs = m.getAttributesMap();
+    if (attrs.isEmpty()) {
+      return;
+    }
+    for (String name : new java.util.TreeSet<>(attrs.keySet())) {
+      byte[] value = attrs.get(name);
+      if (value == null) {
+        continue;
+      }
+      b.addAttribute(
+          NameBytesPair.newBuilder().setName(name).setValue(ByteString.copyFrom(value)).build());
+    }
   }
 
   private static void appendCells(
