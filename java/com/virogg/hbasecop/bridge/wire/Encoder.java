@@ -51,6 +51,19 @@ public final class Encoder {
             "control payload " + payload.length + " > maxPayload " + maxPayload);
       }
       total = (payload.length + maxPayload - 1) / maxPayload;
+      // Refuse to emit a frame stream the matching Decoder would reject
+      // (chunk_total > MAX_CHUNKS). Fail at the producer with the payload
+      // size in hand rather than producing self-undecodable output; this
+      // also keeps the totalBytes computation below from overflowing int.
+      if (total > WireFormat.MAX_CHUNKS) {
+        throw new MessageTooLargeException(
+            "payload "
+                + payload.length
+                + " would need "
+                + total
+                + " chunks > MAX_CHUNKS "
+                + WireFormat.MAX_CHUNKS);
+      }
     }
 
     int totalBytes = total * (4 + WireFormat.HEADER_SIZE) + payload.length;

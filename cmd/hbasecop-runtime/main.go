@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -33,10 +34,26 @@ import (
 )
 
 func main() {
-	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	log := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: logLevelFromEnv()}))
 	if err := run(log); err != nil {
 		log.Error("hbasecop-runtime: fatal", "err", err)
 		os.Exit(1)
+	}
+}
+
+// logLevelFromEnv maps HBASECOP_LOG_LEVEL (case-insensitive, trimmed)
+// onto a slog.Level per SPEC §6. debug|info|warn|error (plus "warning");
+// anything else, including empty, is info.
+func logLevelFromEnv() slog.Level {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("HBASECOP_LOG_LEVEL"))) {
+	case "debug":
+		return slog.LevelDebug
+	case "warn", "warning":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
 	}
 }
 

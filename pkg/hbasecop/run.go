@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -45,7 +46,7 @@ func Run(observers ...RegionObserver) error {
 	if len(observers) > 1 {
 		return errors.New("hbasecop.Run: multiple observers not supported in Phase 2")
 	}
-	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	logger := newLogger()
 
 	cfg, err := loadShmemConfigFromEnv()
 	if err != nil {
@@ -114,7 +115,7 @@ func RunMaster(masters ...MasterObserver) error {
 	if len(masters) > 1 {
 		return errors.New("hbasecop.RunMaster: multiple observers not supported")
 	}
-	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	logger := newLogger()
 
 	cfg, err := loadShmemConfigFromEnv()
 	if err != nil {
@@ -183,7 +184,7 @@ func RunRegionServer(observers ...RegionServerObserver) error {
 	if len(observers) > 1 {
 		return errors.New("hbasecop.RunRegionServer: multiple observers not supported")
 	}
-	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	logger := newLogger()
 
 	cfg, err := loadShmemConfigFromEnv()
 	if err != nil {
@@ -252,7 +253,7 @@ func RunWAL(observers ...WALObserver) error {
 	if len(observers) > 1 {
 		return errors.New("hbasecop.RunWAL: multiple observers not supported")
 	}
-	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	logger := newLogger()
 
 	cfg, err := loadShmemConfigFromEnv()
 	if err != nil {
@@ -321,7 +322,7 @@ func RunBulkLoad(observers ...BulkLoadObserver) error {
 	if len(observers) > 1 {
 		return errors.New("hbasecop.RunBulkLoad: multiple observers not supported")
 	}
-	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	logger := newLogger()
 
 	cfg, err := loadShmemConfigFromEnv()
 	if err != nil {
@@ -375,6 +376,30 @@ func RunBulkLoad(observers ...BulkLoadObserver) error {
 	}
 	logger.Info("hbasecop: clean exit (bulk-load)")
 	return nil
+}
+
+// newLogger builds the slog JSON logger shared by every Run* entrypoint.
+// The level is taken from HBASECOP_LOG_LEVEL (SPEC §6); unset or
+// unrecognized values fall back to info. JSON output to stderr with the
+// level wired in is the only observability surface in the MVP.
+func newLogger() *slog.Logger {
+	return slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: logLevelFromEnv()}))
+}
+
+// logLevelFromEnv maps HBASECOP_LOG_LEVEL (case-insensitive,
+// whitespace-trimmed) onto a slog.Level. Accepts debug|info|warn|error
+// (and "warning" as an alias); anything else, including empty, is info.
+func logLevelFromEnv() slog.Level {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("HBASECOP_LOG_LEVEL"))) {
+	case "debug":
+		return slog.LevelDebug
+	case "warn", "warning":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
 }
 
 type shmemEnvConfig struct {

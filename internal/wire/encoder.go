@@ -55,14 +55,18 @@ func (e *Encoder) Encode(m *Message) error {
 			return fmt.Errorf("%w: payload %d > %d", ErrControlMultiChunk, len(p), e.maxPayload)
 		}
 		total = (len(p) + e.maxPayload - 1) / e.maxPayload
+		// Refuse to emit a frame stream the matching Decoder would reject
+		// (chunk_total > MaxChunks). Fail at the producer with the payload
+		// size in hand rather than producing self-undecodable output.
+		if total > MaxChunks {
+			return fmt.Errorf("%w: payload %d would need %d chunks > MaxChunks %d",
+				ErrMessageTooLarge, len(p), total, MaxChunks)
+		}
 	}
 
 	for i := 0; i < total; i++ {
 		start := i * e.maxPayload
-		end := start + e.maxPayload
-		if end > len(p) {
-			end = len(p)
-		}
+		end := min(start+e.maxPayload, len(p))
 		if err := e.writeChunk(m, uint32(i), uint32(total), p[start:end]); err != nil {
 			return err
 		}
