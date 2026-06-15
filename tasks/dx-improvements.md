@@ -194,7 +194,22 @@ power users; make registration the documented happy path. No transport
 change. **AC.** counter rewritten via registration. **Verify.** existing
 dispatch tests pass against the registry-backed observer.
 
-## DX6 — Unified `Run` + chaining
+## DX6 — Unified `Run` + chaining — DONE
+
+> The dispatcher now holds a slice per surface. `foldObservers` runs a surface's
+> observers in order: first error short-circuits; HookResults fold (Bypass OR-ed,
+> BlockedIndices unioned, ResultCells last-non-empty wins). Each `Run*` dropped
+> the `len>1` rejection (multiple = chained) and delegates to a shared
+> `runDispatcher` core (removed ~250 duplicated lines). New `RunAll(...any)`
+> routes each arg to every Observer surface it satisfies, so one process serves
+> Region+Master+... over one shmem pair. Tested: chain ordering + bypass/blocked
+> fold, error short-circuit, multi-surface routing, mixed type-switch; race +
+> coverage gate green.
+>
+> Note: the Java side still loads one Coprocessor kind per delegate (DX2), and
+> SharedRuntime keys per coproc-jar — co-locating surfaces in one Go process via
+> RunAll needs a matching multi-surface Java entrypoint to be reachable in
+> production (follow-up). The Go-side capability + wire path are done and tested.
 
 **Problem.** `Run(observers ...RegionObserver)` advertises multi-observer
 but errors at runtime on `len>1` (`run.go:43-45`, same in all five `Run*`);

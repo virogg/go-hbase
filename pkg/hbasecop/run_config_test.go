@@ -98,33 +98,25 @@ func TestEnvIntHelpers(t *testing.T) {
 	}
 }
 
-// TestRunSurfaceGuards covers the argument-validation guards at the top of
-// every Run* entrypoint without standing up a shmem channel.
+// TestRunSurfaceGuards covers the no-observer guard at the top of every Run*
+// entrypoint without standing up a shmem channel. Multiple observers are now
+// valid (chained); see TestDispatchRegionChain.
 func TestRunSurfaceGuards(t *testing.T) {
-	region := UnimplementedRegionObserver{}
-	master := UnimplementedMasterObserver{}
-	rs := UnimplementedRegionServerObserver{}
-	wal := UnimplementedWALObserver{}
-	bulk := UnimplementedBulkLoadObserver{}
-
 	guards := []struct {
 		name string
 		none func() error
-		dup  func() error
 	}{
-		{"Run", func() error { return Run() }, func() error { return Run(region, region) }},
-		{"RunMaster", func() error { return RunMaster() }, func() error { return RunMaster(master, master) }},
-		{"RunRegionServer", func() error { return RunRegionServer() }, func() error { return RunRegionServer(rs, rs) }},
-		{"RunWAL", func() error { return RunWAL() }, func() error { return RunWAL(wal, wal) }},
-		{"RunBulkLoad", func() error { return RunBulkLoad() }, func() error { return RunBulkLoad(bulk, bulk) }},
+		{"Run", func() error { return Run() }},
+		{"RunMaster", func() error { return RunMaster() }},
+		{"RunRegionServer", func() error { return RunRegionServer() }},
+		{"RunWAL", func() error { return RunWAL() }},
+		{"RunBulkLoad", func() error { return RunBulkLoad() }},
+		{"RunAll", func() error { return RunAll() }},
 	}
 	for _, g := range guards {
 		t.Run(g.name, func(t *testing.T) {
 			if err := g.none(); err == nil {
 				t.Errorf("%s() with no observers: expected error", g.name)
-			}
-			if err := g.dup(); err == nil {
-				t.Errorf("%s() with multiple observers: expected error", g.name)
 			}
 		})
 	}
