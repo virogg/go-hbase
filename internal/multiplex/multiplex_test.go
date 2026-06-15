@@ -16,9 +16,8 @@ import (
 	"github.com/virogg/go-hbase/internal/wire"
 )
 
-// startEchoResponder spins up a goroutine that consumes outbound
-// frames from out, builds a matching TypeResponse and delivers it
-// through m. It stops when stop closes.
+// startEchoResponder consumes outbound frames from out, builds a matching
+// TypeResponse and delivers it through m. Stops when stop closes.
 func startEchoResponder(t *testing.T, m *multiplex.Multiplexer, out <-chan *wire.Message, stop <-chan struct{}) <-chan struct{} {
 	t.Helper()
 	done := make(chan struct{})
@@ -46,10 +45,9 @@ func startEchoResponder(t *testing.T, m *multiplex.Multiplexer, out <-chan *wire
 	return done
 }
 
-// TestMultiplexer_ConcurrentCallsAllMatched is the T24 acceptance
-// test: 1000 parallel Call invocations against a single Multiplexer
-// must all observe their own matching Response. No goroutine may
-// observe another caller's payload.
+// TestMultiplexer_ConcurrentCallsAllMatched is the T24 acceptance test: 1000
+// parallel Call invocations against a single Multiplexer must each observe
+// their own matching Response, never another caller's payload.
 func TestMultiplexer_ConcurrentCallsAllMatched(t *testing.T) {
 	out := make(chan *wire.Message, 1024)
 	send := func(msg *wire.Message) error {
@@ -100,11 +98,10 @@ func TestMultiplexer_ConcurrentCallsAllMatched(t *testing.T) {
 	}
 }
 
-// TestMultiplexer_AllocatesMonotonicReqIDs documents the invariant
-// that req_id is monotonically increasing across concurrent Call
-// invocations.
+// TestMultiplexer_AllocatesMonotonicReqIDs: req_id increases monotonically
+// across concurrent Call invocations.
 func TestMultiplexer_AllocatesMonotonicReqIDs(t *testing.T) {
-	var seen sync.Map // uint64 → struct{}
+	var seen sync.Map // uint64 -> struct{}
 	var maxSeen atomic.Uint64
 
 	send := func(msg *wire.Message) error {
@@ -132,7 +129,7 @@ func TestMultiplexer_AllocatesMonotonicReqIDs(t *testing.T) {
 			defer wg.Done()
 			ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 			defer cancel()
-			// We expect ctx timeout — the responder isn't running.
+			// Expect ctx timeout; the responder isn't running.
 			_, _ = m.Call(ctx, &wire.Message{})
 		}()
 	}
@@ -143,7 +140,7 @@ func TestMultiplexer_AllocatesMonotonicReqIDs(t *testing.T) {
 	}
 }
 
-// TestMultiplexer_CloseFailsPending — outstanding Calls return
+// TestMultiplexer_CloseFailsPending: outstanding Calls return
 // ErrChannelClosed when Close is invoked.
 func TestMultiplexer_CloseFailsPending(t *testing.T) {
 	send := func(*wire.Message) error { return nil }
@@ -157,7 +154,7 @@ func TestMultiplexer_CloseFailsPending(t *testing.T) {
 		}()
 	}
 
-	// Give the goroutines a chance to register before Close.
+	// Let the goroutines register before Close.
 	time.Sleep(20 * time.Millisecond)
 	m.Close()
 
@@ -173,9 +170,8 @@ func TestMultiplexer_CloseFailsPending(t *testing.T) {
 	}
 }
 
-// TestMultiplexer_CallAfterCloseRejected — Close is sticky; later
-// Call attempts also fail with ErrChannelClosed without invoking the
-// sender.
+// TestMultiplexer_CallAfterCloseRejected: Close is sticky; later Call
+// attempts also fail with ErrChannelClosed without invoking the sender.
 func TestMultiplexer_CallAfterCloseRejected(t *testing.T) {
 	var sends atomic.Int32
 	send := func(*wire.Message) error {
@@ -194,9 +190,9 @@ func TestMultiplexer_CallAfterCloseRejected(t *testing.T) {
 	}
 }
 
-// TestMultiplexer_ContextCancelReleasesSlot — a canceled Call must
-// not leak the pending entry; a subsequent Deliver for that req_id
-// returns false rather than blocking on a dead receiver.
+// TestMultiplexer_ContextCancelReleasesSlot: a canceled Call must not leak
+// the pending entry; a subsequent Deliver for that req_id returns false
+// rather than blocking on a dead receiver.
 func TestMultiplexer_ContextCancelReleasesSlot(t *testing.T) {
 	captured := make(chan *wire.Message, 1)
 	send := func(msg *wire.Message) error {
@@ -229,8 +225,8 @@ func TestMultiplexer_ContextCancelReleasesSlot(t *testing.T) {
 	}
 }
 
-// TestMultiplexer_DeliverUnknownReqID — Deliver for a req_id that
-// was never issued (or already consumed) returns false without panic.
+// TestMultiplexer_DeliverUnknownReqID: Deliver for a req_id that was never
+// issued (or already consumed) returns false without panic.
 func TestMultiplexer_DeliverUnknownReqID(t *testing.T) {
 	m := multiplex.New(func(*wire.Message) error { return nil })
 	if m.Deliver(&wire.Message{Type: wire.TypeResponse, ReqID: 42}) {
@@ -238,9 +234,8 @@ func TestMultiplexer_DeliverUnknownReqID(t *testing.T) {
 	}
 }
 
-// TestMultiplexer_SendErrorReleasesSlot — when the sender fails the
-// Call must return the sender's error and free the pending slot
-// immediately.
+// TestMultiplexer_SendErrorReleasesSlot: when the sender fails, Call returns
+// the sender's error and frees the pending slot immediately.
 func TestMultiplexer_SendErrorReleasesSlot(t *testing.T) {
 	wantErr := errors.New("send boom")
 	m := multiplex.New(func(*wire.Message) error { return wantErr })

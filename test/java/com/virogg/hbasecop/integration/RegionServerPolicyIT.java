@@ -31,7 +31,7 @@ import org.junit.jupiter.api.Test;
  *
  * <p>The {@code preStopRegionServer} hook named in T52's AC cannot be triggered without tearing
  * down the standalone cluster's only RegionServer, so this test drives the region-server surface
- * through {@code Admin#rollWALWriter(ServerName)} — a clean, idempotent admin operation that
+ * through {@code Admin#rollWALWriter(ServerName)} - a clean, idempotent admin operation that
  * invokes {@code preRollWALWriterRequest} on the live RegionServer.
  *
  * <p>The test asserts that {@code rollWALWriter} fails with an exception carrying the observer's
@@ -71,7 +71,7 @@ final class RegionServerPolicyIT {
       String msg = rootMessage(rejected);
       assertTrue(
           msg.contains("region-server policy") || msg.contains("WAL writer roll rejected"),
-          "rejection should carry the observer's policy message — got: " + msg);
+          "rejection should carry the observer's policy message - got: " + msg);
     }
   }
 

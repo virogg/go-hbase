@@ -144,13 +144,12 @@ import org.apache.hadoop.hbase.wal.WALKey;
  * surfaced as {@code IOException} regardless of policy and re-sets the interrupt flag.
  *
  * <p>{@code bypass=true} in the Go-side response triggers {@link ObserverContext#bypass()} so HBase
- * skips its own implementation; it is only honoured when the hook actually returned a clean
- * response.
+ * skips its own implementation; only honoured when the hook returned a clean response.
  *
- * <p>T41 surface: this class overrides every {@link RegionObserver} method declared in HBase 2.5.
- * For methods returning a value, the noop default is to return the input value unchanged so the
- * adapter behaves like a passthrough until the user's Go observer wires up a real handler. T42
- * grows the per-hook proto Request bodies + return-value plumbing.
+ * <p>T41 surface: overrides every {@link RegionObserver} method declared in HBase 2.5. Value-
+ * returning methods default to passthrough (return the input unchanged) until the user's Go
+ * observer wires up a real handler. T42 grows the per-hook proto Request bodies and return-value
+ * plumbing.
  */
 public final class RegionObserverAdapter implements RegionObserver {
 
@@ -187,18 +186,17 @@ public final class RegionObserverAdapter implements RegionObserver {
 
   // --- Region lifecycle: region_id allocation (T61) ---------------------
   //
-  // RegionObserver fires preOpen / postClose per region open/close on a
-  // RegionServer — exactly the right granularity for the per-region wire
-  // routing key. We mint the id in preOpen (so every subsequent hook
-  // dispatched for this region carries a non-zero region_id) and release
-  // in postClose (so reopen gets a fresh monotonic id, never recycled).
-  // The Coprocessor.start(env) lifecycle on the supertype fires once per
-  // RegionServer load and is therefore not suitable for per-region scope.
+  // RegionObserver fires preOpen/postClose per region open/close: the right
+  // granularity for the per-region wire routing key. Mint the id in preOpen
+  // (so every subsequent hook on this region carries a non-zero region_id),
+  // release in postClose (reopen gets a fresh monotonic id, never recycled).
+  // Coprocessor.start(env) on the supertype fires once per RegionServer load,
+  // so it can't scope per-region.
 
   /**
-   * Public hook for the supervisor / tests to register a region without going through {@link
-   * #preOpen(ObserverContext)} (e.g. the T61 unit tests skip the preOpen dispatch round-trip and
-   * just want the allocator wired). Idempotent.
+   * Public hook for the supervisor/tests to register a region without going through {@link
+   * #preOpen(ObserverContext)} (e.g. T61 unit tests skip the preOpen dispatch round-trip and just
+   * want the allocator wired). Idempotent.
    */
   public void start(RegionCoprocessorEnvironment env) {
     Objects.requireNonNull(env, "env");
@@ -440,8 +438,8 @@ public final class RegionObserverAdapter implements RegionObserver {
     if (f.getPath() != null) {
       b.setPath(f.getPath().toString());
     }
-    // StoreFile (2.5 interface) doesn't expose file-byte size; size_bytes
-    // stays 0 today. T46 can switch to HFileInfo lookup when needed.
+    // StoreFile (2.5 interface) doesn't expose file-byte size; size_bytes stays 0.
+    // T46 can switch to HFileInfo lookup when needed.
     return b.build();
   }
 
@@ -537,7 +535,7 @@ public final class RegionObserverAdapter implements RegionObserver {
     return exists;
   }
 
-  // --- Write path — Put (Phase-2 frozen contract) -----------------------
+  // --- Write path: Put (Phase-2 frozen contract) ------------------------
 
   @Override
   public void prePut(
@@ -563,7 +561,7 @@ public final class RegionObserverAdapter implements RegionObserver {
     applyHookResponse(c, resp);
   }
 
-  // --- Write path — Delete + version timestamp --------------------------
+  // --- Write path: Delete + version timestamp ---------------------------
 
   @Override
   public void preDelete(
@@ -1642,11 +1640,11 @@ public final class RegionObserverAdapter implements RegionObserver {
   // === Internals =========================================================
 
   /**
-   * Stub dispatch helper for hooks whose Request body is just {@link HookContext} — every T41 stub
-   * Request message in {@code proto/hooks.proto} embeds {@link HookContext} at field 1, so we set
-   * it via the field descriptor on the generic {@link Message.Builder}. T42 will widen each Request
-   * with hook-specific payload fields; the call sites with specialised builders (currently {@link
-   * #prePut} / {@link #postPut}) demonstrate the pattern.
+   * Stub dispatch helper for hooks whose Request body is just {@link HookContext}. Every T41 stub
+   * Request message in {@code proto/hooks.proto} embeds {@link HookContext} at field 1, set here
+   * via the field descriptor on the generic {@link Message.Builder}. T42 widens each Request with
+   * hook-specific payload fields; the specialised-builder call sites (currently {@link #prePut} /
+   * {@link #postPut}) show the pattern.
    */
   private void dispatchStub(
       ObserverContext<? extends RegionCoprocessorEnvironment> c,
@@ -1719,7 +1717,7 @@ public final class RegionObserverAdapter implements RegionObserver {
     if (pol.policy() == Policy.STRICT) {
       throw cause == null ? new IOException(detail) : new IOException(detail, cause);
     }
-    LOG.log(Level.WARNING, "{0} — best-effort, treated as no-op", detail);
+    LOG.log(Level.WARNING, "{0} - best-effort, treated as no-op", detail);
     return null;
   }
 
@@ -1737,7 +1735,7 @@ public final class RegionObserverAdapter implements RegionObserver {
    * Sentinel row used to neuter a scan an observer asked to bypass. HBase 2.5's {@code
    * preScannerOpen} {@link ObserverContext} is <em>not</em> bypassable, so "bypass this scan" is
    * realized instead by constraining the {@link Scan} to the empty half-open interval {@code
-   * [SENTINEL, SENTINEL)} — the opened scanner then yields no rows, the observable equivalent of a
+   * [SENTINEL, SENTINEL)}: the opened scanner yields no rows, the observable equivalent of a
    * bypassed scan.
    */
   private static final byte[] SCAN_BYPASS_SENTINEL = {0};
@@ -1745,7 +1743,7 @@ public final class RegionObserverAdapter implements RegionObserver {
   /**
    * Invoke {@link ObserverContext#bypass()} defensively. HBase 2.5 only makes the ObserverContext
    * bypassable for a subset of hooks; calling {@code bypass()} on a non-bypassable hook throws
-   * {@link UnsupportedOperationException}, which — uncaught from a coprocessor — aborts the entire
+   * {@link UnsupportedOperationException}, which (uncaught from a coprocessor) aborts the entire
    * RegionServer. An over-eager observer must never be able to do that, so a rejected bypass is
    * downgraded to a WARN and the host operation proceeds unbypassed.
    */
@@ -1755,7 +1753,7 @@ public final class RegionObserverAdapter implements RegionObserver {
     } catch (UnsupportedOperationException e) {
       LOG.log(
           Level.WARNING,
-          "hbasecop: observer requested bypass on a hook that does not support it — ignored",
+          "hbasecop: observer requested bypass on a hook that does not support it - ignored",
           e);
     }
   }
@@ -1768,7 +1766,7 @@ public final class RegionObserverAdapter implements RegionObserver {
    *
    * <p>Returns {@code null} when the observer did not bypass (HBase then runs the operation
    * normally). On bypass, returns a Result assembled from the cells the observer supplied in {@code
-   * HookResponse.result} — an empty list yields an empty Result — which HBase returns to the client
+   * HookResponse.result} (an empty list yields an empty Result), which HBase returns to the client
    * in place of the operation.
    */
   private static Result valueReturningResult(HookResponse resp) {
@@ -1784,7 +1782,7 @@ public final class RegionObserverAdapter implements RegionObserver {
 
   /**
    * Apply a {@code preScannerOpen} HookResponse. Unlike {@link #applyHookResponse}, a bypass here
-   * cannot go through {@link ObserverContext#bypass()} — HBase 2.5 does not make {@code
+   * cannot go through {@link ObserverContext#bypass()}: HBase 2.5 does not make {@code
    * preScannerOpen} bypassable. Instead the {@link Scan} itself is constrained to an empty row
    * range so the scanner about to be opened yields no rows.
    */
@@ -1796,12 +1794,11 @@ public final class RegionObserverAdapter implements RegionObserver {
   }
 
   /**
-   * Batch-shaped variant of {@link #applyHookResponse}: in addition to honoring {@code bypass}, it
-   * walks {@code resp.getBlockedIndicesList()} and stamps {@code
-   * OperationStatus(SANITY_CHECK_FAILURE)} on every in-range index of the supplied {@link
-   * MiniBatchOperationInProgress}. Out-of-range indices are silently ignored — observer-supplied
-   * indices are treated as a hint, not an authority, so a buggy observer can never crash the
-   * RegionServer's batch path.
+   * Batch-shaped variant of {@link #applyHookResponse}: besides honoring {@code bypass}, walks
+   * {@code resp.getBlockedIndicesList()} and stamps {@code OperationStatus(SANITY_CHECK_FAILURE)}
+   * on every in-range index of the supplied {@link MiniBatchOperationInProgress}. Out-of-range
+   * indices are silently ignored: observer-supplied indices are a hint, not an authority, so a
+   * buggy observer can never crash the RegionServer's batch path.
    */
   private static void applyBatchHookResponse(
       ObserverContext<? extends RegionCoprocessorEnvironment> c,
@@ -1832,7 +1829,7 @@ public final class RegionObserverAdapter implements RegionObserver {
 
   /**
    * Resolve the wire-level region_id for {@code c}. Returns {@code 0} if {@link
-   * #start(org.apache.hadoop.hbase.CoprocessorEnvironment)} has not yet registered the region —
+   * #start(org.apache.hadoop.hbase.CoprocessorEnvironment)} has not yet registered the region,
    * preserving the Phase-2 wire shape so an unwired adapter still works against the Go runtime.
    */
   private int regionIdFor(ObserverContext<? extends RegionCoprocessorEnvironment> c) {

@@ -41,8 +41,8 @@ import org.junit.jupiter.api.io.TempDir;
  * and 1 MiB forces ~17 chunks. The serial send/recv loop times each roundtrip and emits a
  * p50/p99/p999/max distribution to {@code stderr}.
  *
- * <p>Each shmem ring slot carries one full wire-encoded message — including all of its chunks
- * back-to-back — so {@code maxObjectSize} is sized to fit the 1 MiB-payload encoding.
+ * <p>Each shmem ring slot carries one full wire-encoded message - including all of its chunks
+ * back-to-back - so {@code maxObjectSize} is sized to fit the 1 MiB-payload encoding.
  */
 class PingPongE2ETest {
 

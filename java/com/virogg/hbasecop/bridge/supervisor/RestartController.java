@@ -10,7 +10,7 @@ import java.util.function.DoubleSupplier;
 import java.util.function.LongSupplier;
 
 /**
- * Tick-driven restart state machine for the supervised Go process. Owns no threads of its own —
+ * Tick-driven restart state machine for the supervised Go process. Owns no threads of its own;
  * callers signal lifecycle events via {@link #notifyDead()} and drive the clock by polling {@link
  * #tick()}; the controller fires the injected {@link RestartAttempt} when the next scheduled
  * deadline elapses.
@@ -53,7 +53,7 @@ public final class RestartController {
   @FunctionalInterface
   public interface RestartAttempt {
     /**
-     * Try to bring the supervised resource back up. Implementations should not throw — if they do,
+     * Try to bring the supervised resource back up. Implementations should not throw; if they do,
      * the throw is logged at {@code WARNING} and counted as a failure.
      *
      * @return {@code true} iff the resource is healthy after this call
@@ -217,7 +217,7 @@ public final class RestartController {
     }
   }
 
-  /** Terminal stop — cancels future attempts. Idempotent. */
+  /** Terminal stop; cancels future attempts. Idempotent. */
   public synchronized void stop() {
     state = State.STOPPED;
     nextAttemptDueMs = Long.MIN_VALUE;

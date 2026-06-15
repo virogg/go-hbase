@@ -11,14 +11,14 @@ import java.nio.ByteOrder;
  * Feeds arbitrary bytes through the framing decoder, mirroring Go's {@code FuzzDecode} (T83). The
  * decoder reads length-prefixed, chunked frames off an untrusted shmem ring, so it is the project's
  * primary adversarial-input surface. The invariant: {@code decode} must never throw anything but
- * {@link WireException} and never make an unbounded allocation — every malformed input must surface
+ * {@link WireException} and never make an unbounded allocation - every malformed input must surface
  * as a checked decode error.
  *
  * <p>Seed corpus: the golden wire fixtures from {@code test/golden/wire/v1}, mapped to the {@code
  * DecoderFuzzTestInputs} classpath resource by the pom's testResources block.
  *
  * <p>Without {@code JAZZER_FUZZ=1} in the environment this replays only the seeds (regression mode,
- * runs in every {@code mvn verify}); with it, jazzer fuzzes for {@code maxDuration} — see {@code
+ * runs in every {@code mvn verify}); with it, jazzer fuzzes for {@code maxDuration} - see {@code
  * make java-fuzz}.
  */
 class DecoderFuzzTest {

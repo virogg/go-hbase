@@ -5,11 +5,11 @@ package hbasecop
 
 // HookID is the on-wire discriminator that selects a RegionObserver
 // method on the Go side. Constants below mirror the HookId enum in
-// proto/hooks.proto — the proto values are the source of truth, and
+// proto/hooks.proto - the proto values are the source of truth, and
 // TestHookIDMatchesProtoEnum (this package, T41) pins parity.
 //
 // The wire frame layout uses a single byte for hook_id (see
-// internal/wire/frame.go), so HookID is uint8 — values must fit in 255.
+// internal/wire/frame.go), so HookID is uint8 - values must fit in 255.
 // The 68 RegionObserver hooks today are well below that cap.
 type HookID uint8
 

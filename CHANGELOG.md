@@ -5,16 +5,16 @@ All notable changes to go-hbase are documented here. The format follows
 [SemVer](https://semver.org/) with the wire protocol versioned independently
 (`virogg.hbasecop.v1`).
 
-## [0.1.0] — unreleased
+## [0.1.0] - unreleased
 
 First release. HBase Observer coprocessors written in Go, executing in a
 long-lived Go process per RegionServer, bridged over a shared-memory ring
-buffer — no fork-per-call, no RPC hop.
+buffer: no fork-per-call, no RPC hop.
 
 ### Highlights
 
 - **All five Observer surfaces**: Region, RegionServer, Master, WAL and
-  BulkLoad observers — 103 Observer hooks (143 request/response wire
+  BulkLoad observers; 103 Observer hooks (143 request/response wire
   messages) dispatched over a protobuf wire protocol
   (`virogg.hbasecop.v1`). The Master surface ships a curated subset (20 of
   HBase 2.5's master hooks); the other four surfaces are complete. Wire
@@ -34,7 +34,7 @@ buffer — no fork-per-call, no RPC hop.
   a user observer class + Go ELF; the embedded binary is integrity-checked
   (SHA-256 manifest digest) at spawn.
 - **Performance** (T81/T82 benches, gated in CI): prePut p50 dispatch
-  overhead ~70–80µs vs a no-op Java observer (<100µs SPEC target) after the
+  overhead ~70-80µs vs a no-op Java observer (<100µs SPEC target) after the
   spin-before-park dispatch optimization; WAL-write throughput regression
   with a registered WALObserver inside the <50% gate.
 - **Hardening**: wire decoders on both sides bound chunk counts and pending

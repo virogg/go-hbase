@@ -45,7 +45,7 @@
     these RPC endpoints on its veth0 (so docker port-forwards work from the
     host) but ZK still hands back `localhost` to the host-side HBase client.
     Without the explicit *.ipc.address overrides, HBase resolves the hostname
-    setting and binds only to 127.0.0.1 inside the container — invisible to
+    setting and binds only to 127.0.0.1 inside the container - invisible to
     docker port forwarding.
   -->
   <property>

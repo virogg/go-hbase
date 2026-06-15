@@ -12,7 +12,7 @@ package com.virogg.hbasecop.bridge.shmem;
  */
 public final class Config {
 
-  /** Backend identifier — must match {@code com.jgshmem.backend.MemoryBackends}. */
+  /** Backend identifier - must match {@code com.jgshmem.backend.MemoryBackends}. */
   public static final String BACKEND_MMAP = "mmap";
 
   public static final String BACKEND_POSIX_SHM = "posix_shm";

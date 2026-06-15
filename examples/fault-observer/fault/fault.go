@@ -2,11 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package fault implements the configurable fault-injection RegionObserver
-// used by the T36 fault-injection matrix. The Observer dispatches each
-// PrePut invocation to a [Mode]-specific action exposed via the [Actions]
-// interface; production wires the syscall-backed [DefaultActions] and tests
-// inject a stub so dispatch logic can be exercised without terminating the
-// test process.
+// used by the T36 fault-injection matrix. The Observer dispatches each PrePut
+// to a [Mode]-specific action exposed via [Actions]: production wires the
+// syscall-backed [DefaultActions]; tests inject a stub so dispatch can be
+// exercised without terminating the test process.
 package fault
 
 import (
@@ -24,16 +23,16 @@ type Mode int
 const (
 	// ModeNone is the pass-through default; PrePut returns success.
 	ModeNone Mode = iota
-	// ModeKill9 invokes [Actions.Kill9] before returning — production SIGKILLs self.
+	// ModeKill9 invokes [Actions.Kill9] before returning; production SIGKILLs self.
 	ModeKill9
-	// ModeHang invokes [Actions.Hang] — production blocks indefinitely.
+	// ModeHang invokes [Actions.Hang]; production blocks indefinitely.
 	ModeHang
-	// ModeExit1 invokes [Actions.Exit1] — production calls os.Exit(1).
+	// ModeExit1 invokes [Actions.Exit1]; production calls os.Exit(1).
 	ModeExit1
 	// ModeProtocolError returns [ErrProtocolFault] from PrePut, surfacing
 	// as a wirepb Error frame to Java.
 	ModeProtocolError
-	// ModeOOM invokes [Actions.AllocateOOM] — production allocates until the
+	// ModeOOM invokes [Actions.AllocateOOM]; production allocates until the
 	// process is reaped by the kernel OOM killer.
 	ModeOOM
 )
@@ -52,8 +51,8 @@ var modeStrings = map[string]Mode{
 }
 
 // ParseMode resolves a mode token (matching the [Mode.String] form) to its
-// enum value. An empty string maps to [ModeNone] so an unset env var Just
-// Works. Unknown tokens are an error.
+// enum value. Empty string maps to [ModeNone] so an unset env var works.
+// Unknown tokens are an error.
 func ParseMode(s string) (Mode, error) {
 	if s == "" {
 		return ModeNone, nil
@@ -89,16 +88,16 @@ func (m Mode) String() string {
 // Real implementations live in [DefaultActions].
 type Actions interface {
 	// Kill9 should SIGKILL the current process. Real implementations do not
-	// return; the interface keeps a return-less signature for stub-ability.
+	// return; the return-less signature keeps stubs simple.
 	Kill9()
 	// Exit1 should terminate the current process with status 1.
 	Exit1()
 	// Hang should block indefinitely (or until ctx is done) so the watchdog
-	// observes missed heartbeats. Real implementations may select on ctx so
-	// the framework's shutdown signal still wins.
+	// observes missed heartbeats. May select on ctx so the framework's
+	// shutdown signal still wins.
 	Hang(ctx context.Context)
 	// AllocateOOM should allocate until the process is reaped by the OOM
-	// killer. The call returns only if allocation surprisingly succeeds.
+	// killer. Returns only if allocation unexpectedly succeeds.
 	AllocateOOM()
 }
 
@@ -118,7 +117,7 @@ type Observer struct {
 }
 
 // New constructs an Observer that applies mode m via actions. Panics when
-// actions is nil — every mode (including ModeNone) consults the counter, and
+// actions is nil: every mode (including ModeNone) consults the counter, and
 // non-trivial modes consult actions.
 func New(m Mode, actions Actions) *Observer {
 	if actions == nil {

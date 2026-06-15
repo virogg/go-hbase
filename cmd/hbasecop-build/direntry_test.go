@@ -53,7 +53,7 @@ func TestBuild_PreservesDirectoryEntries(t *testing.T) {
 	}
 
 	// The directory entry must survive with its trailing slash AND be marked
-	// as a directory — not demoted to a "com" file.
+	// as a directory - not demoted to a "com" file.
 	d, ok := byName["com/"]
 	if !ok {
 		t.Fatalf("directory entry \"com/\" missing from output jar; entries=%v", names(zr))

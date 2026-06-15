@@ -11,7 +11,7 @@ import (
 // FuzzDecode feeds arbitrary bytes through the framing decoder. The decoder
 // reads length-prefixed, chunked frames off an untrusted shmem ring, so it is
 // the project's primary adversarial-input surface (T83). The invariant is
-// simple: Decode must never panic and never make an unbounded allocation —
+// simple: Decode must never panic and never make an unbounded allocation -
 // every malformed input must surface as a returned error. The chunk_total OOM
 // (a 23-byte frame requesting a multi-GiB chunk slice) and the unbounded
 // pending-reassembly map are both regression-guarded here via MaxChunks /

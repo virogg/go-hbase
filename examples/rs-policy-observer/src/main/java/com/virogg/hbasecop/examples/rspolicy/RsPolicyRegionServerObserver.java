@@ -22,7 +22,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionServerObserver;
 
 /**
  * T52 region-server coprocessor. Acquires a shared {@link CoprocessorRuntime} via {@link
- * SharedRuntime} keyed on this class and delegates to its {@link RegionServerObserver} adapter —
+ * SharedRuntime} keyed on this class and delegates to its {@link RegionServerObserver} adapter -
  * but attaches at a RegionServer instead of the HMaster. The embedded Go binary is the {@code
  * rs-policy-observer} ELF, which audits region-server lifecycle hooks and, when WAL-roll vetoing
  * is enabled, rejects every {@code preRollWALWriterRequest} by returning an error; rejection

@@ -71,8 +71,8 @@ public final class GoProcessConfig {
   /**
    * Extra environment variables injected into the spawned process on top of the parent's
    * environment. Used by example coprocessors (e.g. fault-observer in T36) to forward
-   * coprocessor-specific tokens — like {@code HBASECOP_FAULT_MODE} — without having to bake them
-   * into the RegionServer container.
+   * coprocessor-specific tokens (like {@code HBASECOP_FAULT_MODE}) without having to bake them into
+   * the RegionServer container.
    *
    * @return an unmodifiable view; never {@code null}
    */
@@ -155,9 +155,9 @@ public final class GoProcessConfig {
     }
 
     /**
-     * Expected ELF SHA-256 (64-hex, case-insensitive) — when set, {@link GoProcess#start()}
-     * computes the digest of the extracted binary and aborts on mismatch. {@code null} → skip.
-     * Typically populated from the coproc-jar manifest by {@link ManifestBinaryDescriptor}.
+     * Expected ELF SHA-256 (64-hex, case-insensitive): when set, {@link GoProcess#start()} computes
+     * the digest of the extracted binary and aborts on mismatch. {@code null} → skip. Typically
+     * populated from the coproc-jar manifest by {@link ManifestBinaryDescriptor}.
      */
     public Builder expectedBinarySha256(String hex) {
       this.expectedBinarySha256 = hex;

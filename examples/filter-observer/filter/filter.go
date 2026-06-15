@@ -95,7 +95,7 @@ func (o *Observer) PreScannerOpen(
 	return hbasecop.HookResult{}, nil
 }
 
-// PreScannerNext counts invocations only — never bypasses — so the IT
+// PreScannerNext counts invocations only - never bypasses - so the IT
 // can prove the hook fires on every batch fetch without changing the
 // scanner's progression.
 func (o *Observer) PreScannerNext(
@@ -111,7 +111,7 @@ func (o *Observer) PreScannerNext(
 // in the inbound MiniBatch whose target row matches the blocked prefix.
 // The Java adapter applies SANITY_CHECK_FAILURE per index, so blocked
 // mutations land as individual failures while the rest of the batch
-// proceeds — this is the partial-block path required by T44's AC.
+// proceeds - this is the partial-block path required by T44's AC.
 func (o *Observer) PreBatchMutate(
 	_ context.Context,
 	_ hbasecop.ObserverEnv,

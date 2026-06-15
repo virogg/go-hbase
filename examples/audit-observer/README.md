@@ -8,7 +8,7 @@ attached to.
 
 - **Post-hooks** (`PostPut`, `PostDelete`) running under the default
   **best-effort** policy: auditing can never block or fail the client's
-  write — if the Go side is down, the operation proceeds and the bridge
+  write - if the Go side is down, the operation proceeds and the bridge
   logs a WARN.
 - **Log-based observability** (SPEC §6): records go through `slog` as JSON
   on stderr; the bridge forwards them into the RegionServer log, ready for

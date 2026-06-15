@@ -1,10 +1,10 @@
-# T83 — Wire-codec fuzzing report
+# T83 - Wire-codec fuzzing report
 
 **Verifies:** plan task T83 "Go fuzz target на `wire.Decode`, Java fuzz
-target. 30 минут CPU. Найденные баги — фикс + regression test."
+target. 30 минут CPU. Найденные баги: фикс + regression test."
 
 The framing decoder reads length-prefixed, chunked frames off an untrusted
-shmem ring on both sides of the bridge — it is the project's primary
+shmem ring on both sides of the bridge: the project's primary
 adversarial-input surface. Invariant under fuzz: decode never panics/throws
 unchecked and never makes an unbounded allocation; every malformed input
 surfaces as a typed decode error.
@@ -23,7 +23,7 @@ test in every `mvn verify` (regression mode), and fuzzes for real under
 `JAZZER_FUZZ=1`. Seeds: the golden wire corpus (`test/golden/wire/v1`),
 mapped onto the test classpath by the root pom.
 
-## Campaign (2026-06-10) — 30 min CPU total
+## Campaign (2026-06-10): 30 min CPU total
 
 | Side | Duration | Executions | Throughput | Coverage | Findings |
 |------|---------:|-----------:|-----------:|---------:|----------|
@@ -33,11 +33,11 @@ mapped onto the test classpath by the root pom.
 ## The bug the campaign was built around
 
 Preparing the Java target surfaced that the **H2/H4 allocation bounds were
-missing from the Java decoder** — `RELEASE-BLOCKERS.md` claimed "both
+missing from the Java decoder**: `RELEASE-BLOCKERS.md` claimed "both
 decoders", but only `internal/wire/decoder.go` enforced `MaxChunks` /
 `MaxPendingReassemblies`. A hostile 27-byte frame declaring
 `chunk_total=2^31−1` made `Decoder.java` allocate a ~16GiB reference array
-(instant OOM — jazzer finds it in seconds on the unfixed decoder), and
+(instant OOM; jazzer finds it in seconds on the unfixed decoder), and
 abandoned multi-chunk req_ids grew the pending map without bound.
 
 Fix: `WireFormat.MAX_CHUNKS=1024` / `MAX_PENDING_REASSEMBLIES=4096`,
@@ -50,8 +50,8 @@ cap-doesn't-block-existing-reassembly case). With the fix in place the
 A follow-up adversarial review of the fix found a second-order gap in it,
 **on both sides**: the entry-count cap bounds how many reassemblies exist,
 not how many bytes they retain. Each abandoned near-complete reassembly may
-hold (MAX_CHUNKS−1) × MAX_PAYLOAD_BYTES ≈ 67 MB, so 4096 entries still
-permitted ~256 GiB of retained heap — an OOM at ~60 abandoned entries on a
+hold (MAX_CHUNKS-1) × MAX_PAYLOAD_BYTES ≈ 67 MB, so 4096 entries still
+permitted ~256 GiB of retained heap: an OOM at ~60 abandoned entries on a
 4 GiB heap, far below the count cap. Closed with a cumulative retained-byte
 bound (`MaxPendingBytes` / `WireFormat.MAX_PENDING_BYTES` = 96 MiB,
 decremented on completion) in both decoders; `ErrTooManyPendingBytes` /

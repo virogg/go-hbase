@@ -11,13 +11,12 @@ import (
 	"github.com/virogg/go-hbase/internal/wire/hookpb"
 )
 
-// hookEntry is one row of the T41 dispatch table: how to decode an
-// inbound Request payload, how to invoke the matching RegionObserver
-// method, and its name (mirrored by the Go interface method and the
-// Java HookId enum). The table is iterated at startup to build
-// hooksByID and consulted in TestHookTableIsCanonical / the
-// interface-coverage test to keep the three sides (proto enum, Go
-// interface, Java HookId) in lockstep.
+// hookEntry is one row of the T41 dispatch table: how to decode an inbound
+// Request payload, how to invoke the matching RegionObserver method, and its
+// name (mirrored by the Go interface method and the Java HookId enum). Iterated
+// at startup to build hooksByID. TestHookTableIsCanonical and the
+// interface-coverage test keep the three sides (proto enum, Go interface, Java
+// HookId) in lockstep.
 type hookEntry struct {
 	id     HookID
 	name   string
@@ -25,15 +24,14 @@ type hookEntry struct {
 	invoke hookInvoker
 }
 
-// hookInvoker is the type-erased entrypoint. The closure dispatches to
-// one RegionObserver method, type-asserts the decoded Request and
-// normalises Post-* methods (which return only error) into the
-// (HookResult, error) shape used by Pre-* methods.
+// hookInvoker is the type-erased entrypoint. The closure dispatches to one
+// RegionObserver method, type-asserts the decoded Request, and normalises
+// Post-* methods (error-only) into the (HookResult, error) shape used by Pre-*.
 type hookInvoker func(observer RegionObserver, ctx context.Context, env ObserverEnv, req proto.Message) (HookResult, error)
 
-// newReq returns a zero-valued proto.Message for the type parameter so
-// the dispatch table rows stay one-liner. The pointer-constraint trick
-// keeps PT = *T addressable for proto.Unmarshal.
+// newReq returns a zero-valued proto.Message for the type parameter so dispatch
+// table rows stay one-liners. The pointer constraint keeps PT = *T addressable
+// for proto.Unmarshal.
 func newReq[T any, PT interface {
 	*T
 	proto.Message
@@ -41,10 +39,9 @@ func newReq[T any, PT interface {
 	return PT(new(T))
 }
 
-// preHook boxes a RegionObserver Pre-* method expression so the table
-// can store it behind the type-erased hookInvoker. Method expressions
-// on interfaces yield func(RegionObserver, …); the closure type-asserts
-// the decoded payload to the per-hook Request type.
+// preHook boxes a RegionObserver Pre-* method expression behind the type-erased
+// hookInvoker. Interface method expressions yield func(RegionObserver, ...); the
+// closure type-asserts the decoded payload to the per-hook Request type.
 func preHook[Req proto.Message](method func(RegionObserver, context.Context, ObserverEnv, Req) (HookResult, error)) hookInvoker {
 	return func(o RegionObserver, ctx context.Context, env ObserverEnv, req proto.Message) (HookResult, error) {
 		return method(o, ctx, env, req.(Req))
@@ -59,12 +56,11 @@ func postHook[Req proto.Message](method func(RegionObserver, context.Context, Ob
 	}
 }
 
-// hookTable is the canonical T41 dispatch table. The order matches
-// proto/hooks.proto's HookId enum so a reader can scan it top-to-bottom
-// against the .proto. Adding a new HBase RegionObserver method means
-// appending one row here, one method to the RegionObserver interface,
-// one no-op on UnimplementedRegionObserver, and one entry in the Java
-// HookId enum + RegionObserverAdapter override — the hooks_test
+// hookTable is the canonical T41 dispatch table. Order matches
+// proto/hooks.proto's HookId enum so it scans top-to-bottom against the .proto.
+// Adding an HBase RegionObserver method means: one row here, one method on the
+// RegionObserver interface, one no-op on UnimplementedRegionObserver, one entry
+// in the Java HookId enum plus RegionObserverAdapter override. The hooks_test
 // reflection checks pin the parity.
 var hookTable = []hookEntry{
 	// Lifecycle.
@@ -97,7 +93,7 @@ var hookTable = []hookEntry{
 	{HookIDPreExists, "PreExists", newReq[hookpb.PreExistsRequest], preHook(RegionObserver.PreExists)},
 	{HookIDPostExists, "PostExists", newReq[hookpb.PostExistsRequest], postHook(RegionObserver.PostExists)},
 
-	// Write path — Put (frozen Phase-2 signatures: take *MutationProto direct).
+	// Write path - Put (frozen Phase-2 signatures: take *MutationProto direct).
 	{
 		HookIDPrePut, "PrePut",
 		newReq[hookpb.PrePutRequest],
@@ -113,7 +109,7 @@ var hookTable = []hookEntry{
 		},
 	},
 
-	// Write path — Delete + version timestamp.
+	// Write path - Delete + version timestamp.
 	{HookIDPreDelete, "PreDelete", newReq[hookpb.PreDeleteRequest], preHook(RegionObserver.PreDelete)},
 	{HookIDPostDelete, "PostDelete", newReq[hookpb.PostDeleteRequest], postHook(RegionObserver.PostDelete)},
 	{HookIDPrePrepareTimeStampForDeleteVersion, "PrePrepareTimeStampForDeleteVersion", newReq[hookpb.PrePrepareTimeStampForDeleteVersionRequest], preHook(RegionObserver.PrePrepareTimeStampForDeleteVersion)},
@@ -186,8 +182,8 @@ var hookTable = []hookEntry{
 	{HookIDPreWALAppend, "PreWALAppend", newReq[hookpb.PreWALAppendRequest], preHook(RegionObserver.PreWALAppend)},
 }
 
-// hooksByID indexes the dispatch table for O(1) lookup on the
-// inbound-frame hot path. Built once at package init.
+// hooksByID indexes the dispatch table for O(1) lookup on the inbound-frame hot
+// path. Built once at package init.
 var hooksByID = func() map[HookID]hookEntry {
 	m := make(map[HookID]hookEntry, len(hookTable))
 	for _, h := range hookTable {

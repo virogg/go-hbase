@@ -20,19 +20,19 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Wave B of T71 — checksum-validation surface on the supervisor side:
+ * Wave B of T71 - checksum-validation surface on the supervisor side:
  *
  * <ul>
  *   <li>{@link GoProcess#computeSha256Hex(Path)} returns canonical 64-hex digest of any file.
  *   <li>{@link GoProcess#verifyChecksum(Path, String)} succeeds on match, throws on mismatch with a
  *       message that names both expected and actual digests.
  *   <li>When {@link GoProcessConfig#expectedBinarySha256()} is set and does not match the extracted
- *       ELF, {@link GoProcess#start()} fails fast — process never enters {@code Runtime.exec}.
+ *       ELF, {@link GoProcess#start()} fails fast - process never enters {@code Runtime.exec}.
  * </ul>
  */
 final class GoProcessChecksumTest {
 
-  // SHA-256 of the empty string — fixed by the standard, makes the test self-checking.
+  // SHA-256 of the empty string - fixed by the standard, makes the test self-checking.
   private static final String SHA256_EMPTY =
       "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 

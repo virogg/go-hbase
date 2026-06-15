@@ -18,11 +18,9 @@ import (
 	"strings"
 )
 
-// BuildOptions are the inputs to assemble a deployable coproc-jar.
-//
-// The CLI hands these straight from flags. Every field is required except
-// PolicyConfig (optional .properties file) and BinName (auto-derived from
-// GoBinPath's basename if empty).
+// BuildOptions are the inputs to assemble a deployable coproc-jar. The CLI
+// hands these straight from flags. All fields required except PolicyConfig
+// (optional .properties) and BinName (auto-derived from GoBinPath basename).
 type BuildOptions struct {
 	GoBinPath     string // path on disk to the compiled Go ELF
 	BridgeJarPath string // path to the shaded hbasecop-bridge jar
@@ -33,9 +31,8 @@ type BuildOptions struct {
 	BinName       string // optional override; default "bin/linux-amd64/<basename(GoBinPath)>"
 }
 
-// Build assembles a coproc-jar at opts.OutJarPath. It is the in-process
-// counterpart of the CLI's main(); pulled out so tests can drive it without
-// shelling out.
+// Build assembles a coproc-jar at opts.OutJarPath. In-process counterpart of
+// the CLI's main(), split out so tests can drive it without shelling out.
 //
 // Pipeline:
 //  1. validate inputs
@@ -43,8 +40,7 @@ type BuildOptions struct {
 //  3. open BridgeJarPath, iterate entries
 //  4. write META-INF/MANIFEST.MF first (JarInputStream contract)
 //  5. copy every bridge entry except its original manifest and any bin/**
-//     (the bridge ships a fallback ELF for ping/pong tests — the user's
-//     binary must win)
+//     (bridge ships a fallback ELF for ping/pong tests; the user's wins)
 //  6. write the user's ELF at BinName
 //  7. optionally write META-INF/hbasecop-policy.properties
 func Build(opts BuildOptions) error {
@@ -159,13 +155,11 @@ func writeManifest(zw *zip.Writer, opts BuildOptions, shaHex string) error {
 	return writeStored(zw, "META-INF/MANIFEST.MF", b.Bytes())
 }
 
-// writeManifestLine emits one logical "Name: value" record honouring the
-// jar-manifest 72-byte line limit: subsequent physical lines start with a
-// single space (continuation marker). All terminators are CRLF.
-//
-// The 72-byte budget includes the line terminator, so we cap payload bytes
-// per physical line at 70 (then write CRLF). Continuation lines reserve one
-// byte for the leading space.
+// writeManifestLine emits one logical "Name: value" record under the
+// jar-manifest 72-byte line limit; continuation physical lines start with a
+// single space. All terminators are CRLF. The 72-byte budget includes the
+// terminator, so payload caps at 70 bytes per line (continuations reserve one
+// more byte for the leading space).
 func writeManifestLine(buf *bytes.Buffer, key, value string) {
 	const maxLine = 72
 	const term = "\r\n"
@@ -191,8 +185,8 @@ func writeManifestLine(buf *bytes.Buffer, key, value string) {
 }
 
 func copyBridgeEntries(zw *zip.Writer, br *zip.Reader) error {
-	// Deterministic ordering — useful for reproducible builds and stable
-	// integration-test asserts.
+	// Deterministic ordering: reproducible builds and stable integration-test
+	// asserts.
 	names := make([]string, 0, len(br.File))
 	for _, f := range br.File {
 		names = append(names, f.Name)
@@ -216,10 +210,10 @@ func copyBridgeEntries(zw *zip.Writer, br *zip.Reader) error {
 }
 
 // shouldSkipBridgeEntry excludes entries the coproc-jar must own:
-//   - META-INF/MANIFEST.MF — we write our own first.
-//   - bin/** — the bridge bundles a generic runtime ELF (for E2E tests);
+//   - META-INF/MANIFEST.MF: we write our own first.
+//   - bin/**: bridge bundles a generic runtime ELF (for E2E tests);
 //     the user's compiled observer takes its place.
-//   - jar signing artefacts — meaningless once we re-shade.
+//   - jar signing artefacts: meaningless once we re-shade.
 func shouldSkipBridgeEntry(name string) bool {
 	switch name {
 	case "META-INF/MANIFEST.MF":
@@ -249,16 +243,16 @@ func copyZipEntry(zw *zip.Writer, f *zip.File) error {
 	if err != nil {
 		return err
 	}
-	// Use the same compression method the source used — that keeps already-
-	// stored entries (e.g. classpath dir markers) stored.
+	// Reuse the source compression method so already-stored entries (e.g.
+	// classpath dir markers) stay stored.
 	return writeWith(zw, f.Name, body, f.Method)
 }
 
 func writeWith(zw *zip.Writer, name string, body []byte, method uint16) error {
 	// Preserve the entry name VERBATIM. zip/jar names use forward slashes
 	// and a trailing slash marks a directory entry; path.Clean would strip
-	// that slash, demoting "META-INF/" → "META-INF" (a zero-length file
-	// colliding with its own directory) and producing a jar that `jar x`,
+	// that slash, demoting "META-INF/" to "META-INF" (a zero-length file
+	// colliding with its own directory) and yielding a jar that `jar x`,
 	// unzip and the JVM classloader cannot extract.
 	hdr := &zip.FileHeader{
 		Name:   name,

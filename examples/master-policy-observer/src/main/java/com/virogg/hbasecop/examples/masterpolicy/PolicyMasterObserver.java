@@ -22,7 +22,7 @@ import org.apache.hadoop.hbase.coprocessor.MasterObserver;
 
 /**
  * T51 master-side coprocessor. Acquires a shared {@link CoprocessorRuntime} via {@link
- * SharedRuntime} keyed on this class and delegates to its {@link MasterObserver} adapter — but
+ * SharedRuntime} keyed on this class and delegates to its {@link MasterObserver} adapter - but
  * attaches at the HMaster instead of a RegionServer. The embedded Go binary is the {@code
  * master-policy-observer} ELF which rejects table-lifecycle operations on tables whose qualifier
  * carries the configured blocked prefix; rejection travels back as an IOException to the HBase

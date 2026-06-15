@@ -8,7 +8,7 @@
 //
 // Privacy: per SPEC §8, row keys and cell values are potentially sensitive
 // and must not reach logs at the default level. Audit records therefore
-// carry a short SHA-256 digest of the row key — stable enough to correlate
+// carry a short SHA-256 digest of the row key - stable enough to correlate
 // repeated operations on the same row, useless for recovering the key.
 package audit
 
@@ -109,7 +109,7 @@ func NewRecord(op string, env hbasecop.ObserverEnv, mut *hbasecop.MutationProto,
 	return r
 }
 
-// RowDigest returns the first 8 bytes of SHA-256(row), hex-encoded —
+// RowDigest returns the first 8 bytes of SHA-256(row), hex-encoded -
 // 16 hex chars. Stable per row key, non-reversible.
 func RowDigest(row []byte) string {
 	sum := sha256.Sum256(row)

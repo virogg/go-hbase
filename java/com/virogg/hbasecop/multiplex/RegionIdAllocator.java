@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * cycles within one Go-process lifetime.
  *
  * <p>The id space is local to one Go-process lifetime (one supervisor, one shmem ring pair). After
- * a Go-process restart or RegionServer restart the counter resets — the Java adapter re-allocates
+ * a Go-process restart or RegionServer restart the counter resets - the Java adapter re-allocates
  * ids on the next {@code RegionObserver.start(env)}. The id is therefore opaque to user observer
  * code; treat it as a sharding key, not a stable identifier.
  *
@@ -45,7 +45,7 @@ public final class RegionIdAllocator {
   /**
    * Return the id previously allocated for {@code encodedRegionName}, or {@code 0} if the region
    * has not been registered (or has been released). {@code 0} is reserved as the "no region scope"
-   * sentinel — it is never assigned by {@link #allocate(String)}.
+   * sentinel - it is never assigned by {@link #allocate(String)}.
    */
   public int idFor(String encodedRegionName) {
     if (encodedRegionName == null) {

@@ -7,12 +7,12 @@ package com.virogg.hbasecop.bridge.observer;
  * Canonical mapping between the wire-level hook byte, the HBase {@link
  * org.apache.hadoop.hbase.coprocessor.RegionObserver} method name and the Go-side HookID constant.
  *
- * <p>This enum is the single source of truth on the Java adapter side. Each entry pairs:
+ * <p>Single source of truth on the Java adapter side. Each entry pairs:
  *
  * <ul>
- *   <li>A wire byte ({@link #value()}) — same as the Go {@code HookID} constant and the {@code
+ *   <li>A wire byte ({@link #value()}): same as the Go {@code HookID} constant and the {@code
  *       com.virogg.hbasecop.bridge.wire.pb.HookId} proto-generated value.
- *   <li>A method name ({@link #methodName()}) — matches the corresponding HBase API method (e.g.
+ *   <li>A method name ({@link #methodName()}): matches the corresponding HBase API method (e.g.
  *       {@code "prePut"}), so {@link com.virogg.hbasecop.bridge.config.PolicyConfig} can resolve
  *       policy keys (e.g. {@code hbasecop.policy.prePut}) directly from a HookId.
  * </ul>
@@ -52,11 +52,11 @@ public enum HookId {
   PRE_EXISTS((byte) 19, "preExists"),
   POST_EXISTS((byte) 20, "postExists"),
 
-  // Write path — Put.
+  // Write path - Put.
   PRE_PUT((byte) 21, "prePut"),
   POST_PUT((byte) 22, "postPut"),
 
-  // Write path — Delete + version timestamp.
+  // Write path - Delete + version timestamp.
   PRE_DELETE((byte) 23, "preDelete"),
   POST_DELETE((byte) 24, "postDelete"),
   PRE_PREPARE_TIME_STAMP_FOR_DELETE_VERSION((byte) 25, "prePrepareTimeStampForDeleteVersion"),

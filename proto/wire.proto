@@ -20,15 +20,15 @@ option java_outer_classname = "WireProto";
 
 // FrameHeader is the routing metadata carried on every frame.
 //
-//   req_id      — caller-assigned request id; correlates Request↔Response
+//   req_id      - caller-assigned request id; correlates Request↔Response
 //                 (and Error responses). Heartbeats carry req_id=0.
-//   region_id   — HBase region identifier for routing on the Go side.
+//   region_id   - HBase region identifier for routing on the Go side.
 //                 Always 0 in Phase 1 (single-region E2E); real values
 //                 land in T61.
-//   hook_id     — Observer-method discriminator (T41 hook table).
+//   hook_id     - Observer-method discriminator (T41 hook table).
 //                 0 means "no hook" (control frames: Heartbeat/Shutdown/Log).
-//   chunk_idx   — 0-based index of this chunk in a multi-chunk message.
-//   chunk_total — total number of chunks (>=1). =1 for single-chunk.
+//   chunk_idx   - 0-based index of this chunk in a multi-chunk message.
+//   chunk_total - total number of chunks (>=1). =1 for single-chunk.
 message FrameHeader {
   uint64 req_id = 1;
   uint32 region_id = 2;

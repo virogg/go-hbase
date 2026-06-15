@@ -54,7 +54,7 @@ while true; do
 done
 
 # ---------------------------------------------------------------------------
-# Phase 2: RPC readiness — the cluster can actually serve a meta operation.
+# Phase 2: RPC readiness - the cluster can actually serve a meta operation.
 # ---------------------------------------------------------------------------
 if ! command -v docker >/dev/null 2>&1; then
   printf 'WARNING: docker CLI not found; skipping RPC-readiness probe (phase 1 only)\n' >&2

@@ -11,7 +11,7 @@ import (
 
 // TestDecodeRejectsHugeChunkTotal pins the fix for the chunk_total OOM DoS:
 // a single frame declaring chunk_total far above MaxChunks must be rejected
-// with ErrTooManyChunks BEFORE the decoder allocates the chunk slice — never
+// with ErrTooManyChunks BEFORE the decoder allocates the chunk slice - never
 // an out-of-memory from make([][]byte, chunk_total).
 func TestDecodeRejectsHugeChunkTotal(t *testing.T) {
 	for _, total := range []uint32{MaxChunks + 1, 1 << 20, 0xFFFFFFFF} {
@@ -59,7 +59,7 @@ func TestDecodeCapsPendingBytes(t *testing.T) {
 	payload := bytes.Repeat([]byte("x"), MaxPayloadBytes)
 	// Each frame opens a distinct 2-chunk reassembly holding one max-size
 	// chunk that never completes. Far fewer frames than the entry cap must
-	// suffice — that is the point of the byte bound.
+	// suffice - that is the point of the byte bound.
 	framesToCap := MaxPendingBytes/MaxPayloadBytes + 2
 	if framesToCap >= MaxPendingReassemblies {
 		t.Fatalf("test premise broken: %d frames to byte cap >= %d entry cap", framesToCap, MaxPendingReassemblies)

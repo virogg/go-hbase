@@ -14,13 +14,13 @@ import (
 // UnimplementedWALObserver to inherit no-op defaults for the rest.
 //
 // preWALWrite / postWALWrite sit on the latency-critical WAL append hot
-// path — keep their implementations cheap. Returning HookResult{Bypass:true}
+// path - keep their implementations cheap. Returning HookResult{Bypass:true}
 // from a Pre-* method causes the Java WALObserverAdapter to invoke
 // ObserverContext.bypass(); returning a non-nil error fails the call
 // back to HBase per the configured failure policy (T31/T32, same wiring
 // as the region, master and region-server surfaces).
 type WALObserver interface {
-	// WAL write — latency-critical hot path.
+	// WAL write - latency-critical hot path.
 	PreWALWrite(ctx context.Context, env ObserverEnv, req *hookpb.PreWALWriteRequest) (HookResult, error)
 	PostWALWrite(ctx context.Context, env ObserverEnv, req *hookpb.PostWALWriteRequest) error
 
@@ -36,7 +36,7 @@ type UnimplementedWALObserver struct{}
 
 var _ WALObserver = UnimplementedWALObserver{}
 
-// The methods below are intentionally undocumented one-liners — they all
+// The methods below are intentionally undocumented one-liners - they all
 // do the same thing (return the zero value, no error). The type
 // doc-comment above is the single source of truth for the contract.
 //revive:disable:exported

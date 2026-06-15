@@ -18,7 +18,7 @@ ENV HBASE_HOME=/opt/hbase
 ENV PATH=${HBASE_HOME}/bin:${PATH}
 
 # curl: tarball fetch + container healthcheck. procps: jps/ps for HBase shell.
-# socat: relays the embedded ZooKeeper port to a host-reachable address —
+# socat: relays the embedded ZooKeeper port to a host-reachable address -
 # HBase 2.5.0's MiniZooKeeperCluster binds the ZK client port to 127.0.0.1
 # only (ignoring clientPortAddress), which docker port-forwarding cannot reach.
 RUN apt-get update \

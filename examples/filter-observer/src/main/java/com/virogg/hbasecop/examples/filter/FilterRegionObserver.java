@@ -22,7 +22,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 
 /**
  * T43 read-path RegionCoprocessor. Acquires a shared {@link CoprocessorRuntime} via {@link
- * SharedRuntime} keyed on this class — the embedded Go binary is the {@code filter-observer} ELF
+ * SharedRuntime} keyed on this class - the embedded Go binary is the {@code filter-observer} ELF
  * which inspects every Get / Scan and bypasses those whose target row carries the configured
  * blocked prefix. The prefix is read from the {@link #KEY_BLOCKED_PREFIX} table-level config and
  * forwarded to the Go side via the {@code HBASECOP_FILTER_BLOCKED_PREFIX} environment variable.

@@ -26,7 +26,7 @@ import (
 // barrierObserver records the region_id of every PrePut and forces all
 // concurrently-dispatched invocations to rendezvous before any of them
 // returns. If the runtime dispatched requests serially, the second
-// invocation would never start until the first returned — but the
+// invocation would never start until the first returned, but the
 // first cannot return until the barrier releases, which only happens
 // once `want` invocations have arrived. A serial dispatcher therefore
 // deadlocks and the test fails on its 2s deadline; only genuinely
@@ -125,7 +125,7 @@ func TestMultiRegionParallelRouting(t *testing.T) {
 	gotReqIDs := make(map[uint64]uint32)
 	for len(gotRegions) < nRegions {
 		if time.Now().After(deadline) {
-			t.Fatalf("only %d/%d responses within 2s — serial dispatch would "+
+			t.Fatalf("only %d/%d responses within 2s - serial dispatch would "+
 				"deadlock the barrier; got regions %v", len(gotRegions), nRegions, gotRegions)
 		}
 		data, err := h.mockIn.Recv()
@@ -152,7 +152,7 @@ func TestMultiRegionParallelRouting(t *testing.T) {
 		t.Fatalf("response region_ids = %v, want [1 2 3 4]", gotRegions)
 	}
 
-	// req_id r must have come back tagged with region_id r — confirms
+	// req_id r must have come back tagged with region_id r; confirms
 	// the runtime does not cross-wire region scope between requests.
 	for r := 1; r <= nRegions; r++ {
 		if got := gotReqIDs[uint64(r)]; got != uint32(r) {

@@ -1,9 +1,9 @@
-# T19 — Java↔Go ping/pong latency
+# T19 - Java↔Go ping/pong latency
 
 Artefact for **Phase 1 / Checkpoint β**. The numbers below come from a single
 run of `make test-e2e-ping` on the development host; reproduce locally with
 the same command. The harness is `test/java/com/virogg/hbasecop/e2e/PingPongE2ETest`
-— 10 000 serial PING/PONG roundtrips through the spawned `hbasecop-runtime`
+- 10 000 serial PING/PONG roundtrips through the spawned `hbasecop-runtime`
 process, across four payload sizes that exercise the wire chunker:
 
 | Payload | Encoded chunks | Notes                                  |

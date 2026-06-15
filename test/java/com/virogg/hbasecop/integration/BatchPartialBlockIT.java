@@ -124,7 +124,7 @@ final class BatchPartialBlockIT {
         assertBlocked(results, 4, "block-2");
 
         // Round-trip read-back: only the ok-* rows landed in storage. Note this exercises
-        // the Get path too — and our filter-observer also bypasses Gets on block-* rows,
+        // the Get path too - and our filter-observer also bypasses Gets on block-* rows,
         // so we cannot distinguish "absent in storage" from "bypass returned empty" on
         // the block-* side. Asserting on the ok-* side is the load-bearing check.
         for (int i = 1; i <= 3; i++) {

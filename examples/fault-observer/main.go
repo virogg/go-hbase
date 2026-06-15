@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Command fault-observer is the Go-side runtime of the T36 fault-injection
-// coproc. It mirrors counter-observer's layout — the Java bridge extracts the
+// coproc. It mirrors counter-observer's layout - the Java bridge extracts the
 // embedded ELF from the shaded jar and exec's it on the RegionServer.
 //
 // The injected fault is selected by the HBASECOP_FAULT_MODE environment

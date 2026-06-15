@@ -1,7 +1,7 @@
 # ttl-validator
 
 Pre-hook validation example (T73): a Go observer that rejects any `Put`
-whose cell values do not declare a TTL envelope — demonstrating the
+whose cell values do not declare a TTL envelope. Demonstrates the
 **strict** failure policy, where a Go-side rejection aborts the client's
 write with an `IOException`.
 
@@ -14,7 +14,7 @@ write with an `IOException`.
   RegionServer, on every write path (API, MR jobs, other clients), not just
   in application code.
 - **Payload privacy** (SPEC §8): rejection reasons name column coordinates
-  (family/qualifier — schema, not data) but never echo cell values.
+  (family/qualifier: schema, not data) but never echo cell values.
 
 ## The validation rule
 
@@ -24,12 +24,12 @@ Every cell value must start with a textual TTL envelope:
 ttl=<seconds>;<payload>      e.g.  ttl=3600;{"name":"alice"}
 ```
 
-`<seconds>` is 1–9 digits, > 0. Anything else — missing prefix, zero TTL,
-no `;` terminator — rejects the whole `Put`:
+`<seconds>` is 1-9 digits, > 0. Anything else (missing prefix, zero TTL,
+no `;` terminator) rejects the whole `Put`:
 
 ```
 org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException:
-  ... ttl-validator: cf:q — value lacks the "ttl=" TTL envelope ...
+  ... ttl-validator: cf:q - value lacks the "ttl=" TTL envelope ...
 ```
 
 ## Build

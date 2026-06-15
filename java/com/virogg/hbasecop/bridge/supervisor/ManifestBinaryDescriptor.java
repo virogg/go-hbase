@@ -16,7 +16,7 @@ import java.util.regex.Pattern;
 /**
  * Parsed view of the {@code HbaseCop-*} entries emitted by {@code hbasecop-build} into a coproc-jar
  * manifest. Used by the supervisor to (a) locate the embedded Go ELF inside the jar and (b) verify
- * its SHA-256 digest at extract time — guarding against jar corruption or wrong-arch binaries.
+ * its SHA-256 digest at extract time - guarding against jar corruption or wrong-arch binaries.
  *
  * <p>Two manifest attributes are paired and mutually required: {@code HbaseCop-Go-Bin-Name}
  * (resource path inside the jar, e.g. {@code bin/linux-amd64/audit}) and {@code
@@ -24,7 +24,7 @@ import java.util.regex.Pattern;
  * {@code HbaseCop-Observer-Class} and {@code HbaseCop-Coproc-Id} are optional metadata for
  * registration tooling.
  *
- * <p>A jar with none of these attributes returns {@code null} from {@link #fromJar(Path)} — that is
+ * <p>A jar with none of these attributes returns {@code null} from {@link #fromJar(Path)} - that is
  * not an error, only an indication that the jar was not produced by {@code hbasecop-build}.
  */
 public final class ManifestBinaryDescriptor {

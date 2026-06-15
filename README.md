@@ -27,20 +27,20 @@ HBase client ──RPC──▶ RegionServer
 Each [GitHub release](https://github.com/virogg/go-hbase/releases) ships two
 artifacts:
 
-- `hbasecop-bridge-<version>.jar` — the Java bridge your coproc-jar shades in
+- `hbasecop-bridge-<version>.jar`: the Java bridge your coproc-jar shades in
   (install into your Maven repo: `mvn install:install-file
   -Dfile=hbasecop-bridge-<version>.jar -DgroupId=com.virogg
   -DartifactId=hbasecop-bridge -Dversion=<version> -Dpackaging=jar`).
-- `hbasecop-build-linux-amd64` — the packaging CLI; `chmod +x` and use it as
+- `hbasecop-build-linux-amd64`: the packaging CLI; `chmod +x` and use it as
   `hbasecop-build` in step 3 below.
 
 The Go SDK is fetched as a normal module:
 `go get github.com/virogg/go-hbase/pkg/hbasecop@v<version>`. To build
 everything from source instead, follow the quick start.
 
-## Quick start — your first observer in ~5 minutes
+## Quick start: your first observer in ~5 minutes
 
-Prereqs: Go ≥ 1.24, JDK 11, Maven, Docker (for the dev cluster), Linux x86-64.
+Prereqs: Go >= 1.24, JDK 11, Maven, Docker (for the dev cluster), Linux x86-64.
 
 **1. Clone + bootstrap** (the shmem dependency is a git submodule):
 
@@ -109,7 +109,7 @@ go run ./cmd/hbasecop-build \
 
 The CLI shades the bridge, embeds your ELF at
 `bin/linux-amd64/hbasecop-runtime`, and writes its SHA-256 into the manifest
-(`HbaseCop-Go-Bin-SHA256`) — the supervisor verifies the digest before exec
+(`HbaseCop-Go-Bin-SHA256`); the supervisor verifies the digest before exec
 and refuses a corrupted or wrong-arch binary.
 
 `--observer-class` is the Java `RegionCoprocessor` HBase instantiates. The
@@ -208,19 +208,19 @@ Recovered by the SDK and returned as a hook error (policy applies). It never
 kills the shared Go process.
 
 **`ELF SHA-256 mismatch` at startup?**
-The jar's embedded Go binary doesn't match its manifest digest — corrupted
+The jar's embedded Go binary doesn't match its manifest digest: corrupted
 jar or a stale/mixed build. Rebuild with `hbasecop-build` (it writes the
 digest) and redeploy. This check is corruption/wrong-arch protection, not a
 signature scheme.
 
 **`classpath resource not found: bin/linux-amd64/hbasecop-runtime`?**
-The coproc-jar has no embedded ELF — pack with `hbasecop-build` (or the
+The coproc-jar has no embedded ELF: pack with `hbasecop-build` (or the
 example Maven setup), and build the ELF with `GOOS=linux GOARCH=amd64`.
 
 **My Put fails with `RetriesExhaustedWithDetailsException`.**
 That's strict policy working: a pre-hook returned an error (see the
 RegionServer log for the Go-side reason). Validation failures are
-deterministic — the client retries won't change the outcome.
+deterministic; the client retries won't change the outcome.
 
 **Which hooks can `Bypass` / substitute a result?**
 `HookResult{Bypass: true}` maps to `ObserverContext.bypass()` where HBase 2.5
@@ -232,8 +232,8 @@ constraining the scan to an empty range. Batch hooks use
 
 **Sensitive data in logs?**
 The framework never logs row keys or cell values at default level (SPEC §8),
-and forwards your observer's stdout/stderr into the RegionServer log at INFO
-— don't print payloads. See `examples/audit-observer` for the
+and forwards your observer's stdout/stderr into the RegionServer log at INFO;
+don't print payloads. See `examples/audit-observer` for the
 digest-instead-of-key pattern.
 
 **How many Go processes per RegionServer?**
@@ -267,7 +267,7 @@ make test-integration    # counter example end-to-end
 
 CI runs structure/license checks, Go (lint+race+coverage+fuzz), Java
 (spotless+tests+JaCoCo), the cross-language golden-corpus contract job, and
-— on main/nightly — the full integration matrix on HBase 2.5.0 and 2.5.11.
+(on main/nightly) the full integration matrix on HBase 2.5.0 and 2.5.11.
 
 ## License
 

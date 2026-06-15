@@ -10,7 +10,7 @@ import org.apache.hadoop.hbase.filter.Filter;
 
 /**
  * Maps an HBase {@link Filter} to its vendored proto envelope. The bridge ships (class-name,
- * self-serialized-bytes) — full reconstruction on the Go side waits for a per-filter mapper; the
+ * self-serialized-bytes) - full reconstruction on the Go side waits for a per-filter mapper; the
  * opaque blob round-trips losslessly through the wire.
  */
 final class FilterConverter {

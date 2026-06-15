@@ -33,7 +33,7 @@ final class ObserverBypass {
     } catch (UnsupportedOperationException e) {
       LOG.log(
           Level.WARNING,
-          "hbasecop: observer requested bypass on a hook that does not support it — ignored",
+          "hbasecop: observer requested bypass on a hook that does not support it - ignored",
           e);
     }
   }

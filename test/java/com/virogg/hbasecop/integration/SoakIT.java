@@ -39,34 +39,33 @@ import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.junit.jupiter.api.Test;
 
 /**
- * T84 soak driver: sustains a paced mixed Put/Get load against a live HBase 2.5 standalone cluster
- * (the T26 docker-compose target) with the counter-observer coproc-jar attached, and proves the
- * data-loss invariant: every <em>client-acked</em> Put rowkey must be present in a full table scan
- * at the end of the run. The table registers the coprocessor with {@code hbasecop.policy.prePut =
- * best-effort} so kill-9 chaos windows (injected externally by {@code
- * test/integration/scripts/soak.sh}) degrade the hook instead of rejecting client writes.
+ * T84 soak driver: paced mixed Put/Get load against a live HBase 2.5 standalone cluster (the T26
+ * docker-compose target) with the counter-observer coproc-jar attached. Proves the data-loss
+ * invariant: every client-acked Put rowkey must appear in a full table scan at end of run. Table
+ * registers the coprocessor with {@code hbasecop.policy.prePut = best-effort} so kill-9 chaos
+ * windows (injected externally by {@code test/integration/scripts/soak.sh}) degrade the hook
+ * instead of rejecting client writes.
  *
  * <p>Knobs (system properties):
  *
  * <ul>
- *   <li>{@code soak.duration.s} — wall-clock load duration in seconds (default 60, a smoke run; the
- *       soak target passes 3600).
- *   <li>{@code soak.rate} — target combined ops/sec across all writers (default 1000).
- *   <li>{@code soak.writers} — number of writer threads (default 4).
- *   <li>{@code soak.read.fraction} — fraction of ops that are Gets of previously-acked rows
- *       (default 0.2).
+ *   <li>{@code soak.duration.s}: load duration in seconds (default 60 smoke run; soak target passes
+ *       3600).
+ *   <li>{@code soak.rate}: target combined ops/sec across all writers (default 1000).
+ *   <li>{@code soak.writers}: number of writer threads (default 4).
+ *   <li>{@code soak.read.fraction}: fraction of ops that are Gets of previously-acked rows (default
+ *       0.2).
  * </ul>
  *
- * <p>Put failures are tolerated (best-effort policy + supervisor restart windows can still surface
- * transient RPC errors) and only reported; the test fails solely on {@code lost > 0} — an acked row
+ * <p>Put failures are tolerated (best-effort policy plus supervisor restart windows surface
+ * transient RPC errors) and only reported; the test fails solely on {@code lost > 0}, an acked row
  * missing from the final scan. The summary includes one machine-readable line, {@code SOAK_RESULT
- * ...}, that the soak orchestrator script parses.
+ * ...}, parsed by the soak orchestrator script.
  *
- * <p>Like {@code PrePutCounterIT}, this class is <em>not</em> part of {@code mvn test} — its {@code
- * *IT} suffix keeps Surefire's default include patterns from picking it up — and is invoked
- * explicitly (via {@code soak.sh} / {@code make soak}), which manages the cluster lifecycle and
- * stages {@code test/integration/coproc-jars/counter-observer.jar} into the bind-mount the
- * container reads from.
+ * <p>Like {@code PrePutCounterIT}, not part of {@code mvn test} (the {@code *IT} suffix keeps
+ * Surefire's default include patterns from picking it up); invoked explicitly via {@code soak.sh} /
+ * {@code make soak}, which manages the cluster lifecycle and stages {@code
+ * test/integration/coproc-jars/counter-observer.jar} into the bind-mount the container reads from.
  */
 final class SoakIT {
 
@@ -138,10 +137,9 @@ final class SoakIT {
 
         printSummary(scanned.rows, lost);
 
-        // Throughput floor: lost==0 is vacuous if the writers acked almost
-        // nothing (e.g. every put failed). 20% of the nominal write volume
-        // tolerates restart windows and pacing drift while still proving
-        // the cluster took sustained load.
+        // Throughput floor: lost==0 is vacuous if writers acked almost nothing
+        // (e.g. every put failed). 20% of nominal write volume tolerates restart
+        // windows and pacing drift while still proving sustained load.
         long writeShare = (long) (RATE * DURATION_S * (1.0 - READ_FRACTION));
         long minAcked = writeShare / 5;
         assertTrue(
@@ -201,7 +199,7 @@ final class SoakIT {
   }
 
   /**
-   * One writer: paced at {@code RATE / WRITERS} ops/sec — Put {@code soak-<thread>-<seq>} or, with
+   * One writer: paced at {@code RATE / WRITERS} ops/sec. Put {@code soak-<thread>-<seq>} or, with
    * probability {@code READ_FRACTION}, Get a random previously-acked row. Acked Put keys go into
    * {@code ledger} (single-writer list, read by the main thread only after join).
    */
@@ -221,7 +219,7 @@ final class SoakIT {
             if (r != null && !r.isEmpty()) {
               getsOk.increment();
             } else {
-              // Acked row not (yet) visible — reported, not fatal; the final scan is the gate.
+              // Acked row not (yet) visible: reported, not fatal; the final scan is the gate.
               getsFailed.increment();
             }
           } catch (Throwable t) {
@@ -256,7 +254,7 @@ final class SoakIT {
         }
       }
     } catch (IOException e) {
-      // getTable/close failure — per-op outcomes were already counted; nothing else to record.
+      // getTable/close failure: per-op outcomes were already counted; nothing else to record.
     }
   }
 

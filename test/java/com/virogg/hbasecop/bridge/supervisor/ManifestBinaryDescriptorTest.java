@@ -25,7 +25,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 final class ManifestBinaryDescriptorTest {
 
-  // 64-hex SHA-256 — content here is opaque to the descriptor (it only checks shape/length).
+  // 64-hex SHA-256 - content here is opaque to the descriptor (it only checks shape/length).
   private static final String SHA256_OK =
       "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
 
@@ -148,7 +148,7 @@ final class ManifestBinaryDescriptorTest {
     }
     try (OutputStream os = Files.newOutputStream(path);
         JarOutputStream jos = new JarOutputStream(os, m)) {
-      // empty payload — manifest only is enough
+      // empty payload - manifest only is enough
       jos.putNextEntry(new JarEntry("dummy.txt"));
       jos.write("noop".getBytes(StandardCharsets.UTF_8));
       jos.closeEntry();

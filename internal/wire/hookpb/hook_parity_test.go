@@ -31,7 +31,7 @@ type hookFixture struct {
 // hookFixtures is the representative set of hook payload messages whose
 // canonical bytes form the cross-language contract. The matching Java
 // test (HookGoldenParityTest) loads the SAME .bin files, parses them with
-// the generated Java classes and re-serializes, asserting byte-equality —
+// the generated Java classes and re-serializes, asserting byte-equality -
 // which is what proves Go↔Java wire parity for the payload layer (each
 // side previously only round-tripped within its own runtime). The set
 // spans the shared HookContext, a request that nests it, a response with
@@ -70,7 +70,7 @@ func TestHookPayloadGoldenParity(t *testing.T) {
 			t.Fatalf("%s: read golden (regenerate with -update-hookgolden): %v", fx.name, err)
 		}
 		if !bytes.Equal(got, want) {
-			t.Errorf("%s: marshaled bytes differ from committed golden — proto change without "+
+			t.Errorf("%s: marshaled bytes differ from committed golden - proto change without "+
 				"golden update, or non-deterministic encoding", fx.name)
 		}
 

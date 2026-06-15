@@ -19,7 +19,7 @@ import (
 
 // capturingObserver records the most recent invocation so tests can
 // inspect the mutation/env the dispatcher decoded. The mutex makes
-// concurrent calls safe — the race detector cannot see the
+// concurrent calls safe - the race detector cannot see the
 // happens-before edge across the shmem ring used by the loop test, so
 // observer state must be guarded explicitly.
 type capturingObserver struct {

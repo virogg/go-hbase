@@ -50,7 +50,7 @@ import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.master.RegionPlan;
 
 /**
- * T51 MasterObserver bridge. Routes every MasterObserver hook the SDK exposes (T51 Wave A — 20
+ * T51 MasterObserver bridge. Routes every MasterObserver hook the SDK exposes (T51 Wave A - 20
  * master hooks across table lifecycle, enable/disable, region placement and balance) through the
  * shared {@link HookDispatcher} mux. Mirrors {@link RegionObserverAdapter}'s policy / dispatch /
  * bypass plumbing exactly: the same {@link PolicyConfig} resolves per-hook strict-vs-best-effort
@@ -407,7 +407,7 @@ public final class MasterObserverAdapter implements MasterObserver {
   /**
    * Packs the two boolean knobs on HBase 2.5's {@link BalanceRequest} into the {@code balance_mode}
    * int32 the proto carries (bit 0 = dryRun, bit 1 = ignoreRegionsInTransition). HBase 2.5's
-   * BalanceRequest doesn't expose a single "mode" enum — earlier versions of this adapter assumed
+   * BalanceRequest doesn't expose a single "mode" enum - earlier versions of this adapter assumed
    * it did and failed to compile.
    */
   private static int balanceMode(BalanceRequest request) {
@@ -461,7 +461,7 @@ public final class MasterObserverAdapter implements MasterObserver {
     if (pol.policy() == Policy.STRICT) {
       throw cause == null ? new IOException(detail) : new IOException(detail, cause);
     }
-    LOG.log(Level.WARNING, "{0} — best-effort, treated as no-op", detail);
+    LOG.log(Level.WARNING, "{0} - best-effort, treated as no-op", detail);
     return null;
   }
 

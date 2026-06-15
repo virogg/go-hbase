@@ -146,7 +146,7 @@
                 Region-server coprocessors registered via
                 hbase.coprocessor.regionserver.classes load on the RegionServer's
                 *system* classloader. HBase 2.5 bundles protobuf-java 2.5.0
-                there, whose AbstractMessage has a private memoizedSize field —
+                there, whose AbstractMessage has a private memoizedSize field -
                 our generated proto classes are built against protobuf 3.25.5 and
                 access that field directly, so the 2.5.0 class on the shared
                 classloader triggers IllegalAccessError. Relocating

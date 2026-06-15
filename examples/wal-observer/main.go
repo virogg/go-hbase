@@ -24,7 +24,7 @@ import (
 // noopWALObserver answers every WAL hook with the zero result. The two
 // hot-path hooks are overridden explicitly (rather than inherited from
 // UnimplementedWALObserver) so the bench provably dispatches through the
-// hook table; they must stay free of any work — no logging, no counters.
+// hook table; they must stay free of any work - no logging, no counters.
 type noopWALObserver struct {
 	hbasecop.UnimplementedWALObserver
 }

@@ -1,11 +1,11 @@
-# T82 — WAL write throughput: WALObserver on vs off
+# T82 - WAL write throughput: WALObserver on vs off
 
-**Verifies:** plan task T82 "throughput WAL writes с WALObserver vs без —
+**Verifies:** plan task T82 "throughput WAL writes с WALObserver vs без,
 regression < 50%".
 
 A/B comparison on a live dockerized HBase 2.5 standalone cluster. Cycle A
 boots the cluster bare; cycle B boots it with the `wal-observer` coproc-jar
-registered cluster-wide (`hbase.coprocessor.wal.classes` — WAL coprocessors
+registered cluster-wide (`hbase.coprocessor.wal.classes`; WAL coprocessors
 cannot attach per-table), whose Go side is a **no-op WALObserver**
 (`examples/wal-observer`), so the delta is pure bridge dispatch cost on the
 WAL append path (preWALWrite/postWALWrite, hooks 220/221). Both cycles run
@@ -28,10 +28,10 @@ Hardware: AMD Ryzen 7 5800H, WSL2 + Docker, HBase 2.5.11 standalone.
 
 | Leg | Throughput |
 |-----|-----------:|
-| A — no WAL coprocessor | 16 170 ops/s |
-| B — go-hbase no-op WALObserver | 13 685 ops/s |
+| A: no WAL coprocessor | 16 170 ops/s |
+| B: go-hbase no-op WALObserver | 13 685 ops/s |
 
-**Regression: 15.4% — PASS (< 50% gate).**
+**Regression: 15.4%, PASS (< 50% gate).**
 
 ## Read
 
@@ -41,7 +41,7 @@ Hardware: AMD Ryzen 7 5800H, WSL2 + Docker, HBase 2.5.11 standalone.
   single puts would see a higher relative hit; the plan's risk table flags
   sampling-only WAL hooks as the fallback if a real workload needs it.
 - The measurement is end-to-end client put throughput, not isolated WAL
-  append rate — it is the regression a user actually experiences.
+  append rate: it is the regression a user actually experiences.
 
 ## Caveats
 

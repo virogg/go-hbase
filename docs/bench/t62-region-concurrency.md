@@ -1,4 +1,4 @@
-# T62 — Multi-region throughput benchmark
+# T62 - Multi-region throughput benchmark
 
 **Verifies:** plan task T62 "throughput с N регионами линейно масштабируется
 до core_count Go-side".
@@ -60,7 +60,7 @@ Translating to ops/sec at any region count ≥ 4:
   halves ns/op, up to GOMAXPROCS=8 (the host has 8 physical cores). The
   shortfall from a perfect 8× (we hit ~7×) is the unavoidable
   serialization on the SPSC reader/writer goroutines inside `cpruntime`
-  — every inbound frame queues through one reader, every outbound
+  - every inbound frame queues through one reader, every outbound
   response through one writer, so two single-threaded shims bracket the
   parallel handler pool. This matches the architectural intent (one Go
   process per RegionServer, one Java→Go ring, one Go→Java ring) and is
@@ -71,7 +71,7 @@ Translating to ops/sec at any region count ≥ 4:
   cannot help: parallelism is bounded by the goroutine scheduler, not
   by routing diversity. Equivalently, even a single region (N=1) drives
   the full available parallelism because the runtime spawns one handler
-  goroutine per inbound frame regardless of `region_id` — `region_id` is
+  goroutine per inbound frame regardless of `region_id` - `region_id` is
   routing metadata, not a partition key for the dispatcher. This is the
   property T62 Wave-B locks in: no per-region serialization point.
 

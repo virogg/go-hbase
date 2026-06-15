@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Test;
  * test/golden/hooks/v1/*.bin} files are produced by the Go encoder (see {@code
  * internal/wire/hookpb/hook_parity_test.go}); this test parses those exact bytes with the generated
  * Java classes and re-serializes, asserting the result is byte-identical. That round trip is what
- * proves Go↔Java agree on the wire encoding of hook messages — previously each side only
+ * proves Go↔Java agree on the wire encoding of hook messages - previously each side only
  * round-tripped within its own runtime, so a silent cross-language divergence (e.g. field ordering,
  * packed vs unpacked repeateds) would not have been caught. Closes the SPEC §7 contract gap for the
  * payload layer for this representative set; the corpus is meant to grow.

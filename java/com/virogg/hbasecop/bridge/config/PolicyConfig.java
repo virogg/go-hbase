@@ -16,9 +16,9 @@ import org.apache.hadoop.conf.Configuration;
  * <p>Keys:
  *
  * <ul>
- *   <li>{@code hbasecop.policy.<hook>} — {@code strict} | {@code best-effort}
- *   <li>{@code hbasecop.timeout.<hook>} — Hadoop-style duration ({@code 500ms}, {@code 2s}, ...)
- *   <li>{@code hbasecop.timeout.default} — fallback when the per-hook timeout is absent
+ *   <li>{@code hbasecop.policy.<hook>} - {@code strict} | {@code best-effort}
+ *   <li>{@code hbasecop.timeout.<hook>} - Hadoop-style duration ({@code 500ms}, {@code 2s}, ...)
+ *   <li>{@code hbasecop.timeout.default} - fallback when the per-hook timeout is absent
  * </ul>
  *
  * <p>Defaults: {@code pre*} → {@link Policy#STRICT}, {@code post*} → {@link Policy#BEST_EFFORT},

@@ -35,7 +35,7 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
 /**
- * T44 acceptance — verifies that {@code preBatchMutate} forwards {@code
+ * T44 acceptance - verifies that {@code preBatchMutate} forwards {@code
  * HookResponse.blocked_indices} back into the {@link MiniBatchOperationInProgress} as per-mutation
  * {@link OperationStatus} failures, so the matching individual mutations are skipped while the rest
  * of the batch proceeds (partial-block semantics).

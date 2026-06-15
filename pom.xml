@@ -136,7 +136,7 @@
       T83: coverage-guided fuzzing for the wire decoder. jazzer-junit is
       JUnit5-native (the plan's jqf is JUnit4-runner based and would drag
       junit4 + vintage-engine into this Jupiter-only build). Without
-      JAZZER_FUZZ=1 a @FuzzTest only replays the seed corpus — a fast
+      JAZZER_FUZZ=1 a @FuzzTest only replays the seed corpus - a fast
       regression that rides along in every `mvn verify`; `make java-fuzz`
       opts into real fuzzing.
     -->
@@ -171,7 +171,7 @@
         T81: the no-op bench observer ELF (built by `make go-build-bench-noop`)
         rides the test classpath so GoProcess can extract it via
         binaryResourcePath("bench/linux-amd64/noop-runtime"). Absent unless the
-        bench target has staged it — regular `mvn test` is unaffected.
+        bench target has staged it - regular `mvn test` is unaffected.
       -->
       <testResource>
         <directory>test/bench/bin</directory>
@@ -319,7 +319,7 @@
     <!--
       Integration and packaging invoke `mvn install -DskipTests` (jar prereqs)
       and `mvn test -Dtest=*IT`, both of which reach the `verify` phase where
-      jacoco-check is bound — but without producing full unit-test coverage
+      jacoco-check is bound - but without producing full unit-test coverage
       data. A stale single-IT jacoco.exec left by an earlier `mvn test` would
       then fail the 75% LINE gate on an unrelated jar rebuild (observed on the
       integration matrix). Line coverage is enforced solely by the dedicated

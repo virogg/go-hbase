@@ -16,10 +16,10 @@ import org.apache.hadoop.hbase.coprocessor.RegionServerObserver;
 import org.apache.hadoop.hbase.coprocessor.WALObserver;
 
 /**
- * T63 — process-wide refcounted lookup for {@link CoprocessorRuntime}.
+ * T63 - process-wide refcounted lookup for {@link CoprocessorRuntime}.
  *
  * <p>HBase loads a fresh {@code RegionCoprocessor} instance for each region attached on a
- * RegionServer. Without sharing, every region would spawn its own Go process — for a host serving
+ * RegionServer. Without sharing, every region would spawn its own Go process - for a host serving
  * dozens or hundreds of regions, that is dozens of redundant ELFs, shmem pairs, and watchdog
  * schedulers. {@code SharedRuntime} lets a coprocessor wrapper acquire a runtime by key (typically
  * the coproc-id or class name): the first {@link #acquire} on a key spawns the Go process and
@@ -39,7 +39,7 @@ public final class SharedRuntime {
 
   /**
    * Supplier of a {@link Spec} (config + optional cleanup); only invoked when this acquire is the
-   * one that creates the registry entry — i.e. the first acquire for the key.
+   * one that creates the registry entry - i.e. the first acquire for the key.
    */
   @FunctionalInterface
   public interface ConfigSupplier {

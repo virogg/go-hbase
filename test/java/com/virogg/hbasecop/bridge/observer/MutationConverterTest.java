@@ -20,7 +20,7 @@ import org.junit.jupiter.api.Test;
 /**
  * Round-trip checks for the T42 Wave-2 write-path converter ({@link MutationConverter}). The four
  * HBase {@link org.apache.hadoop.hbase.client.Mutation} subtypes (Put / Delete / Append /
- * Increment) all share the {@link MutationProto} wire shape — the discriminator {@link
+ * Increment) all share the {@link MutationProto} wire shape - the discriminator {@link
  * MutationProto.MutationType} steers the Go side per mutation kind.
  */
 class MutationConverterTest {
@@ -70,7 +70,7 @@ class MutationConverterTest {
             sawFamily = true;
             break;
           default:
-            // ignore — other delete types covered by separate tests later.
+            // ignore - other delete types covered by separate tests later.
         }
       }
     }
@@ -109,7 +109,7 @@ class MutationConverterTest {
   @Test
   void preDeleteWiresThroughMutationConverter() throws IOException {
     // Sanity: the proto Request body for PreDelete embeds MutationProto (T42 Wave 2
-    // schema). This shape pins the wire contract — observers can rely on the field
+    // schema). This shape pins the wire contract - observers can rely on the field
     // numbering: ctx=1, mutation=2.
     com.virogg.hbasecop.bridge.wire.pb.PreDeleteRequest empty =
         com.virogg.hbasecop.bridge.wire.pb.PreDeleteRequest.getDefaultInstance();

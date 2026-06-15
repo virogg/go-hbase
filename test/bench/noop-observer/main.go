@@ -6,7 +6,7 @@
 // through it measures pure bridge overhead (proto build → wire encode →
 // shmem ring → cpruntime dispatch → response path) and nothing else.
 //
-// Unlike examples/counter-observer it never logs from a hook — log I/O
+// Unlike examples/counter-observer it never logs from a hook - log I/O
 // would pollute the latency distribution the bench exists to pin down.
 // Built by `make go-build-bench-noop` into test/bench/bin/linux-amd64/
 // noop-runtime and mapped onto the test classpath (resource path

@@ -108,7 +108,7 @@ func TestHBaseMessageRoundTrip(t *testing.T) {
 				t.Fatalf("round-trip diverged:\n  want: %v\n  got:  %v", tc.msg, decoded)
 			}
 
-			// Second-pass encode must produce identical bytes — protoc-gen-go
+			// Second-pass encode must produce identical bytes - protoc-gen-go
 			// encodes deterministically in field-number order, which is what
 			// the cross-language wire compatibility story relies on.
 			reEncoded, err := proto.Marshal(decoded)

@@ -1,16 +1,16 @@
-# Concurrency model: reader → router → per-region actor
+# Concurrency model: reader, router, per-region actor
 
-> ⚠️ **FUTURE DESIGN — NOT IMPLEMENTED.** The router / per-region actor /
+> ⚠️ **FUTURE DESIGN, NOT IMPLEMENTED.** The router, per-region actor, and
 > lifecycle-barrier model below was planned for T41 but **was not built**.
 > The shipped runtime is a flat reader + writer + heartbeat with one
-> goroutine per request and **no per-region ordering or lifecycle barrier**
-> — observer state must be safe for fully concurrent invocation. For the
+> goroutine per request and **no per-region ordering or lifecycle barrier**;
+> observer state must be safe for fully concurrent invocation. For the
 > as-built model see [`docs/architecture.md`](../architecture.md)
-> §"Concurrency model (as built)". Keep this document only as a design
-> sketch for a possible post-v0.1.0 ordering layer.
+> §"Concurrency model (as built)". Keep this only as a design sketch for a
+> possible post-v0.1.0 ordering layer.
 
 > **Status.** Foundation in place via T17 (`internal/cpruntime.Loop`).
-> Full enforcement — including the lifecycle barrier — lands in T41 when
+> Full enforcement, including the lifecycle barrier, lands in T41 when
 > the RegionObserver hook surface fills in.
 > **Scope.** This document covers the Go-side runtime
 > (`internal/cpruntime`). Java-side mux (T24) mirrors the same shape on
@@ -28,7 +28,7 @@
    `preClose` / `postClose` / `preSplit` / `postSplit` / `preOpen` /
    `postOpen` for a region, the handler runs **after** all earlier
    in-flight data-hook handlers for that region have returned, and
-   **before** any subsequent data hook for that region starts.
+   **before** any later data hook for that region starts.
 4. **Bounded resource use.** No unbounded backlog; backpressure must
    propagate without livelock.
 
@@ -63,8 +63,8 @@ Three goroutines own I/O:
 
 | Goroutine     | Responsibility                                       | Why dedicated                                                      |
 |---------------|------------------------------------------------------|--------------------------------------------------------------------|
-| `reader`      | drain shmem inbound → push to routing chan           | Must never block in user code; pure I/O loop.                      |
-| `router`      | dequeue routing chan → push to actor's inbox         | Decouples shmem reads from any per-region backpressure.            |
+| `reader`      | drain shmem inbound → push to routing chan           | Never blocks in user code; pure I/O loop.                          |
+| `router`      | dequeue routing chan → push to actor's inbox         | Decouples shmem reads from per-region backpressure.               |
 | `writer`      | dequeue outbound chan → encode → shmem outbound      | shmem ring is SPSC; single writer enforces that.                   |
 
 `N` ephemeral goroutines own per-region work:
@@ -76,7 +76,7 @@ Three goroutines own I/O:
 | `handler` (lifecycle) | Same, but runs synchronously on the actor goroutine so the barrier holds. |
 
 Actors are **lazy-allocated** on the first frame with a new `region_id`.
-`region_id` is **monotonic** (T61 — never recycled). When the actor's
+`region_id` is **monotonic** (T61, never recycled). When the actor's
 `postClose` handler completes and the matching `unregisterRegion` Java
 event ships through, the actor's inbox is closed and the goroutine
 returns. State that referred to the region is collectable.
@@ -86,39 +86,37 @@ returns. State that referred to the region is collectable.
 ### Why a separate `router` goroutine
 
 If the reader pushed directly into `actor.inbox`, a full actor inbox
-would block the reader and stop draining shmem — head-of-line block
-across **all** regions, caused by one slow region. The router is the
-indirection that lets the reader stay live: it pulls from a large
-shared buffer (routing chan), absorbs spikes, and only blocks on the
-*slow region's* inbox when pushing there.
+would block the reader and stop draining shmem: head-of-line block
+across **all** regions, caused by one slow region. The router keeps the
+reader live: it pulls from a large shared buffer (routing chan), absorbs
+spikes, and only blocks on the *slow region's* inbox when pushing there.
 
 ### Why a `regionBarrier` cannot sit on the reader path
 
-Equivalent design: hold a `sync.RWMutex` per region — `RLock` for data,
-`Lock` for lifecycle — and acquire it on the reader goroutine. **Wrong**:
-acquiring `Lock` waits for all current `RLock` holders to release.
-While waiting, the reader is parked, which means no other region's
-frames are being drained either. One slow `prePut` handler delays
-`preClose` for region A *and* every hook for regions B…Z. The actor
-model confines that wait to one goroutine that nobody else depends on.
+Equivalent design: hold a `sync.RWMutex` per region (`RLock` for data,
+`Lock` for lifecycle) and acquire it on the reader goroutine. **Wrong**:
+acquiring `Lock` waits for all current `RLock` holders to release. While
+waiting, the reader is parked, so no other region's frames drain either.
+One slow `prePut` handler delays `preClose` for region A *and* every hook
+for regions B...Z. The actor model confines that wait to one goroutine
+that nobody else depends on.
 
 ### Why concurrency *inside* a region is allowed
 
 `preBatchMutate` ships up to `hbase.client.write.buffer` worth of
 mutations in one RPC. Serializing those across the actor would make
-per-region throughput a single-handler cliff. HBase itself doesn't
-guarantee cross-row ordering inside a batch, so handlers can run in
-parallel without changing observed semantics — provided lifecycle still
-joins.
+per-region throughput a single-handler cliff. HBase doesn't guarantee
+cross-row ordering inside a batch, so handlers can run in parallel
+without changing observed semantics, provided lifecycle still joins.
 
 ### Why `region_id` is monotonic
 
 A recycled id reuses an actor that may still be cleaning up. Monotonic
-ids — `AtomicInt64` on the Java mux — guarantee a fresh actor for every
+ids (`AtomicInt64` on the Java mux) guarantee a fresh actor for every
 `preOpen`, and let stale responses arriving after a cancel be dropped
 in O(1) (`live` set lookup).
 
-## Buffer sizing — chosen for T41
+## Buffer sizing (chosen for T41)
 
 - **routing chan:** 1024 frames. Absorbs ~50ms of 20k-msg/s sustained
   inbound throughput across all regions on a moderate RS.
@@ -128,26 +126,26 @@ in O(1) (`live` set lookup).
 - **outbound chan:** 256 frames (already in T17). Drains as fast as
   the single writer-thread can push to shmem (~µs/frame).
 
-These are starting points; T62 (multi-region stress) is the gate that
-either confirms them or forces a re-tune.
+Starting points; T62 (multi-region stress) is the gate that either
+confirms them or forces a re-tune.
 
 ## Head-of-line trade-off (open)
 
 The router will block on `actor.inbox <- msg` if the target region's
-inbox is full. **This is intentional** — the alternative is to drop or
+inbox is full. **This is intentional**: the alternative is to drop or
 error-spike under load, which we want under explicit policy, not as a
 silent regression.
 
-For T41 the chosen mitigation is **mitigation (1): generous buffers**.
-At the buffer sizes above, "actor inbox full" requires a user handler
-that genuinely cannot keep up — i.e. a real backpressure event the
-operator must see, not a startup transient.
+For T41 the chosen mitigation is **(1): generous buffers**. At the sizes
+above, "actor inbox full" requires a user handler that genuinely cannot
+keep up, i.e. a real backpressure event the operator must see, not a
+startup transient.
 
 ### Two further mitigations exist; one is structural, one is not
 
-**(2) Multi-router fan-out** — replace the single router goroutine with
+**(2) Multi-router fan-out**: replace the single router goroutine with
 a pool of M routers concurrently draining the routing chan. Reduces the
-probability that one full inbox stalls the whole router stage when other
+chance that one full inbox stalls the whole router stage when other
 inboxes have room.
 
 > Multi-router does **not** structurally close the HoL window. If every
@@ -156,7 +154,7 @@ inboxes have room.
 > sustained overload the symptom returns. Adopt only as a tuning knob
 > after T62 measurements, never as the load-shedding mechanism.
 
-**(3) Non-blocking offer + overflow policy** — router uses
+**(3) Non-blocking offer + overflow policy**: router uses
 `select { case a.inbox <- msg: default: overflowPolicy(msg) }`.
 Overflow paths: respond with `Error{code=Overloaded}` (strict-mode →
 IOException to client), or drop+WARN (best-effort).
@@ -171,7 +169,7 @@ IOException to client), or drop+WARN (best-effort).
 
 | Hook class | Examples                                | Dispatch                                                       |
 |------------|------------------------------------------|----------------------------------------------------------------|
-| data       | `prePut`, `postPut`, `preGet`, `postScannerNext`, `preBatchMutate`, … | `inflight.Add(1)`; runs in fresh `go` routine; `Done()` after response queued. |
+| data       | `prePut`, `postPut`, `preGet`, `postScannerNext`, `preBatchMutate`, ... | `inflight.Add(1)`; runs in fresh `go` routine; `Done()` after response queued. |
 | lifecycle  | `preOpen`, `postOpen`, `preClose`, `postClose`, `preSplit`, `postSplit`, `preMerge`, `postMerge`, `preFlush`, `postFlush`, `preCompact`, `postCompact` | Actor goroutine first `inflight.Wait()`, then runs handler synchronously. New data hooks for the region wait behind it. |
 
 Decision rules:
@@ -180,12 +178,12 @@ Decision rules:
    handler for **the same region** is concurrently running.
 2. The barrier does **not** order hooks across regions. Region A's
    `postOpen` may run while Region B's `preClose` is running.
-3. The barrier does not unwind on lifecycle handler failure — error is
+3. The barrier does not unwind on lifecycle handler failure: error is
    reported, actor continues, next hook resumes normally.
 4. A data handler that ignores `ctx.Done()` can indefinitely delay a
    lifecycle hook for its region. The SDK contract (T22) requires
    handlers to honour `ctx`; T35 enforces a hard deadline by forcing
-   an `Error` response when the deadline passes.
+   an `Error` response once the deadline passes.
 
 ## What this implies for the Java side (T24, T61)
 
@@ -193,7 +191,7 @@ Decision rules:
   `enqueue + future.get` only. No `synchronized` per send.
 - `Map<RegionInfo, RegionID>` allocates monotonic ids; never recycles.
 - `unregisterRegion` is bookkeeping-only; runs **after** the `postClose`
-  future resolves. There is no separate "drain region" call — the
+  future resolves. There is no separate "drain region" call: the
   HBase RPC contract guarantees in-flight RPCs are drained before
   `preClose` reaches the adapter (see `HRegion.doClose`).
 - Cancellation of a future on RPC timeout immediately removes it from
@@ -203,13 +201,13 @@ Decision rules:
 
 - `RegionObserver` handler signatures take `context.Context` first.
   Long-running handlers must respect `ctx.Done()`.
-- Lifecycle hooks (`PreOpen` … `PostMerge`) execute serially within a
-  region; per-region state mutation inside a lifecycle handler is
+- Lifecycle hooks (`PreOpen` through `PostMerge`) execute serially within
+  a region; per-region state mutation inside a lifecycle handler is
   race-free without user-level locks.
 - Data hooks within the same region run concurrently. User-level state
   shared across data hooks requires the usual `sync` primitives.
 - Per-region state lives in user code, indexed by `env.RegionID`.
-  Bridge does not migrate state across regions on split/merge — the
+  Bridge does not migrate state across regions on split/merge; the
   observer's `PostSplit`/`PostMerge` handlers do that.
 
 ## What this leaves open
@@ -222,6 +220,6 @@ Decision rules:
   the only viable lever for hard tail-latency SLOs in P8.
 - Heartbeats currently flow through the same outbound chan as
   responses (T17). Under sustained outbound saturation a heartbeat can
-  be dropped — already logged, but T33 (watchdog) is the consumer of
+  be dropped (already logged), but T33 (watchdog) is the consumer of
   that signal and must tolerate sporadic misses without false-killing
   a healthy process.

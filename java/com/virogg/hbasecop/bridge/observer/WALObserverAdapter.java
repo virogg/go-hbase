@@ -33,7 +33,7 @@ import org.apache.hadoop.hbase.wal.WALEdit;
 import org.apache.hadoop.hbase.wal.WALKey;
 
 /**
- * T53 WALObserver bridge. Routes every WALObserver hook the SDK exposes (T53 Wave A — 4 hooks:
+ * T53 WALObserver bridge. Routes every WALObserver hook the SDK exposes (T53 Wave A, 4 hooks:
  * preWALWrite / postWALWrite on the latency-critical WAL append path and preWALRoll / postWALRoll
  * on file rotation) through the shared {@link HookDispatcher} mux. Mirrors {@link
  * MasterObserverAdapter}'s policy / dispatch / bypass plumbing exactly: the same {@link
@@ -56,7 +56,7 @@ public final class WALObserverAdapter implements WALObserver {
     this.policyConfig = Objects.requireNonNull(policyConfig, "policyConfig");
   }
 
-  // --- WAL write — latency-critical hot path -------------------------------
+  // --- WAL write: latency-critical hot path --------------------------------
 
   @Override
   public void preWALWrite(
@@ -227,7 +227,7 @@ public final class WALObserverAdapter implements WALObserver {
     if (pol.policy() == Policy.STRICT) {
       throw cause == null ? new IOException(detail) : new IOException(detail, cause);
     }
-    LOG.log(Level.WARNING, "{0} — best-effort, treated as no-op", detail);
+    LOG.log(Level.WARNING, "{0} - best-effort, treated as no-op", detail);
     return null;
   }
 

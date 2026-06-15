@@ -18,7 +18,7 @@ import (
 // (shm_open/mmap) end-to-end. It is gated behind the `posixshm` build tag
 // and cgo because the backend is cgo-only; run it via
 // `make go-test-posixshm`. Before this test the SPEC-advertised "POSIX
-// shm" backend was compiled by nobody and exercised by no test — every
+// shm" backend was compiled by nobody and exercised by no test - every
 // CI run and every production path used only the file-backed mmap
 // backend. This pins that the cgo backend actually opens, shares and
 // round-trips frames between a producer and a consumer on the same name.

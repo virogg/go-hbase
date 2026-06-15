@@ -39,7 +39,7 @@ final class CellConverter {
   /**
    * Reverse of {@link #toProto}: build an HBase {@link Cell} (a {@link KeyValue}) from the vendored
    * proto envelope. Used to materialize the substitute Result an observer supplies on a
-   * value-returning bypass (preAppend / preIncrement). Cell-level tags are not reconstructed —
+   * value-returning bypass (preAppend / preIncrement). Cell-level tags are not reconstructed -
    * observer-authored substitute values do not carry server-side tags.
    */
   static Cell fromProto(CellProtos.Cell c) {

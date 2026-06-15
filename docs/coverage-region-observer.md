@@ -14,7 +14,7 @@ missing a row, missing `covered_by`, or marked anything other than
 `covered`.
 
 Adding a new hook to `pkg/hbasecop/hooktable.go` therefore requires
-appending a row to the table below — the CI gate will catch the
+appending a row to the table below; the CI gate will catch the
 omission.
 
 ## Test anchors
@@ -24,7 +24,7 @@ Short names referenced in the `covered_by` column.
 | anchor | scope | location |
 |---|---|---|
 | **dispatch** | T41 reflection parity (every hook in `hookTable` ↔ `RegionObserver` method ↔ `HookId` enum) | `pkg/hbasecop/hooktable_test.go::TestHookTableIsCanonical`, `TestRegionObserverInterfaceCoversAllHooks` |
-| **roundtrip** | T42 wire round-trip — each `proto.Request` encodes / decodes losslessly | `internal/wire/hookpb/*` (corpus-driven) and Java `wire.pb.*RoundTripTest` |
+| **roundtrip** | T42 wire round-trip: each `proto.Request` encodes / decodes losslessly | `internal/wire/hookpb/*` (corpus-driven) and Java `wire.pb.*RoundTripTest` |
 | **prePutIT** | T27 live IT (Put → Go observer counter) | `test/java/.../PrePutCounterIT.java`, `examples/counter-observer/` |
 | **readIT** | T43 live IT (Get / Scan bypass) | `test/java/.../ReadPathFilterIT.java`, `examples/filter-observer/` |
 | **batchIT** | T44 live IT (`Table.batch` partial block) | `test/java/.../BatchPartialBlockIT.java` |
@@ -112,8 +112,8 @@ Short names referenced in the `covered_by` column.
 The `covered_by` column lists the strongest anchor first.
 
 - **Live IT** (`*IT`): the hook runs inside a real HBase RegionServer
-  against the bridge — proves the wire path, the Java adapter override
-  and the Go SDK callback all work end-to-end. The strongest tier.
+  against the bridge; proves the wire path, the Java adapter override
+  and the Go SDK callback all work end-to-end. Strongest tier.
 - **adapter**: Java unit test runs the bridge's `RegionObserverAdapter`
   hook with a stub `ObserverContext`, exercising the per-hook payload
   mapper.
@@ -127,5 +127,5 @@ The `covered_by` column lists the strongest anchor first.
 
 Hooks that depend on rarely-triggered server paths (BulkLoad,
 WALRestore, MemStoreCompaction internals) are deliberately not yet
-covered by a live IT — Phase 5 will add the dedicated observer-type
+covered by a live IT; Phase 5 will add the dedicated observer-type
 adapters that exercise those code paths.

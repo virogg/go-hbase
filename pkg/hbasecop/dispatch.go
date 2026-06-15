@@ -123,7 +123,7 @@ func (d *dispatcher) dispatch(ctx context.Context, req *wire.Message) *wire.Mess
 // recoverInvoke runs one observer-method invocation and converts a panic
 // from user callback code into an error. SPEC §6 requires that a panic in
 // a user observer never escape to crash the long-lived per-RegionServer Go
-// process — it must become an Error travelling back to the Java side, which
+// process - it must become an Error travelling back to the Java side, which
 // then applies the configured failure policy (strict → IOException to the
 // client; best-effort → WARN + no-op). The recovered error flows through
 // responseFrame as HookResponse.error.

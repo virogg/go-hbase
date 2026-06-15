@@ -209,7 +209,7 @@ class MultiplexerTest {
     ConcurrentLinkedQueue<Message> outbox = new ConcurrentLinkedQueue<>();
     Multiplexer mux = new Multiplexer(outbox::add);
 
-    // Caller passes RESPONSE type with non-zero reqId — mux should
+    // Caller passes RESPONSE type with non-zero reqId - mux should
     // rewrite both fields before handing to the sender.
     mux.call(new Message(FrameType.RESPONSE, 999L, 7, (byte) 3, new byte[] {1, 2, 3}));
 

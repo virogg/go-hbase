@@ -33,23 +33,23 @@ import org.junit.jupiter.api.Test;
 /**
  * T82 WAL-throughput measurement driver: times a sequential batched-Put workload against a live
  * HBase 2.5 standalone cluster (the T26 docker-compose target) and prints one machine-readable
- * result line. It is a <em>measurement</em>, not an assertion test — the only assertion is the
- * coproc-presence sanity check below; the regression gate that compares a baseline run against a
- * run with the no-op {@code WalBenchWALCoprocessor} registered lives in {@code make bench-wal},
- * which drives two compose cycles and invokes this driver once per cycle.
+ * result line. A measurement, not an assertion test: the only assertion is the coproc-presence
+ * sanity check below. The regression gate comparing a baseline run against one with the no-op
+ * {@code WalBenchWALCoprocessor} registered lives in {@code make bench-wal}, which drives two
+ * compose cycles and invokes this driver once per cycle.
  *
- * <p>This test is not part of {@code mvn test} — its name doesn't match Surefire's defaults — and
- * is invoked explicitly via {@code mvn test -Dtest=WalThroughputBenchIT -DfailIfNoTests=false}.
+ * <p>Not part of {@code mvn test} (name doesn't match Surefire's defaults); invoked explicitly via
+ * {@code mvn test -Dtest=WalThroughputBenchIT -DfailIfNoTests=false}.
  *
  * <p>Knobs (system properties):
  *
  * <ul>
- *   <li>{@code bench.wal.ops} — total Puts to time (default 20000).
- *   <li>{@code bench.wal.batch} — Puts per {@code table.put(List)} call (default 100).
- *   <li>{@code bench.wal.expect.coproc} — when {@code "true"}, asserts a {@code hbasecop-runtime}
- *       process is alive inside the container (the entrypoint registered the WAL coprocessor); when
- *       {@code "false"} (default), asserts none is — guarding against a stale cluster leaking the
- *       coproc into the baseline measurement.
+ *   <li>{@code bench.wal.ops}: total Puts to time (default 20000).
+ *   <li>{@code bench.wal.batch}: Puts per {@code table.put(List)} call (default 100).
+ *   <li>{@code bench.wal.expect.coproc}: when {@code "true"}, asserts a {@code hbasecop-runtime}
+ *       process is alive in the container (entrypoint registered the WAL coprocessor); when {@code
+ *       "false"} (default), asserts none is, guarding against a stale cluster leaking the coproc
+ *       into the baseline measurement.
  * </ul>
  *
  * <p>The bench table carries no per-table coprocessor: WAL coprocessors are cluster-wide via {@code
@@ -97,8 +97,8 @@ final class WalThroughputBenchIT {
       try (Table table = conn.getTable(tn)) {
         Random rnd = new Random(0x57414C42L); // fixed seed: same value stream every run
 
-        // Warmup: prime client metadata caches and force WAL creation before
-        // both the presence check and the timed window.
+        // Warmup: prime client metadata caches and force WAL creation before the
+        // presence check and the timed window.
         for (int b = 0; b < WARMUP_BATCHES; b++) {
           table.put(makeBatch("warm-" + b + "-", 0, batchSize, rnd));
         }
@@ -168,7 +168,7 @@ final class WalThroughputBenchIT {
   }
 
   private static void createTable(Admin admin, TableName tn) throws IOException {
-    // No per-table coprocessor on purpose — see the class doc.
+    // No per-table coprocessor on purpose; see the class doc.
     TableDescriptor desc =
         TableDescriptorBuilder.newBuilder(tn)
             .setColumnFamily(ColumnFamilyDescriptorBuilder.of(CF))
@@ -198,7 +198,7 @@ final class WalThroughputBenchIT {
           pids.isEmpty(),
           "bench.wal.expect.coproc=true but no hbasecop-runtime process is alive in "
               + CONTAINER_NAME
-              + " — was HBASECOP_WAL_COPROC_CLASS set on the container?");
+              + " - was HBASECOP_WAL_COPROC_CLASS set on the container?");
     } else {
       assertTrue(
           pids.isEmpty(),
@@ -207,7 +207,7 @@ final class WalThroughputBenchIT {
                   + CONTAINER_NAME
                   + " (pids="
                   + pids
-                  + ") — stale cluster leaking a coprocessor into the baseline; recreate the"
+                  + ") - stale cluster leaking a coprocessor into the baseline; recreate the"
                   + " cluster");
     }
   }

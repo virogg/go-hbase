@@ -86,7 +86,7 @@ func TestBuild_HappyPath(t *testing.T) {
 	if _, ok := entries["META-INF/services/foo"]; !ok {
 		t.Fatalf("META-INF/services lost")
 	}
-	// Stale bin/** from bridge must NOT win — the user's ELF is canonical.
+	// Stale bin/** from bridge must NOT win - the user's ELF is canonical.
 	if _, ok := entries["bin/linux-amd64/hbasecop-runtime"]; ok {
 		t.Fatalf("stale bridge ELF leaked into output jar (must be stripped)")
 	}
@@ -124,7 +124,7 @@ func TestBuild_FirstEntryIsManifest(t *testing.T) {
 	if len(zr.File) == 0 {
 		t.Fatalf("empty jar")
 	}
-	// JarInputStream tolerates a leading META-INF/ directory entry — the
+	// JarInputStream tolerates a leading META-INF/ directory entry - the
 	// manifest must come either first or right after it.
 	first := zr.File[0].Name
 	switch first {

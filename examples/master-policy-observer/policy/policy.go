@@ -6,7 +6,7 @@
 // table-lifecycle hooks: any table whose qualifier carries the
 // configured blocked prefix is rejected. PreCreateTable returns an
 // error so the (strict-by-default) Java MasterObserverAdapter surfaces
-// it as an IOException back to the HBase admin client — the failure
+// it as an IOException back to the HBase admin client - the failure
 // path required by T51's AC.
 package policy
 

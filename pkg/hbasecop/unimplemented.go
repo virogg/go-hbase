@@ -32,7 +32,7 @@ import (
 // the three (interface, table, embedded helper) in lockstep.
 type UnimplementedRegionObserver struct{}
 
-// The 68 methods below are intentionally undocumented one-liners — they
+// The 68 methods below are intentionally undocumented one-liners: they
 // all do the same thing (return the zero value, no error). The type
 // doc-comment above is the single source of truth for the contract.
 //revive:disable:exported
@@ -127,7 +127,7 @@ func (UnimplementedRegionObserver) PostExists(context.Context, ObserverEnv, *hoo
 	return nil
 }
 
-// Write path — Put (frozen Phase-2 signatures).
+// Write path, Put (frozen Phase-2 signatures).
 
 func (UnimplementedRegionObserver) PrePut(context.Context, ObserverEnv, *MutationProto) (HookResult, error) {
 	return HookResult{}, nil
@@ -137,7 +137,7 @@ func (UnimplementedRegionObserver) PostPut(context.Context, ObserverEnv, *Mutati
 	return nil
 }
 
-// Write path — Delete + version timestamp.
+// Write path, Delete + version timestamp.
 
 func (UnimplementedRegionObserver) PreDelete(context.Context, ObserverEnv, *hookpb.PreDeleteRequest) (HookResult, error) {
 	return HookResult{}, nil
