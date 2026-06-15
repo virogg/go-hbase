@@ -1,51 +1,53 @@
-# Dependency: `java-go-shmem`
+# Зависимость: `java-go-shmem`
 
-Records integration of [virogg/java-go-shmem][upstream], the lock-free
-shared-memory ring used for Go↔Java IPC, and how to pin and update it.
+Описывает интеграцию [virogg/java-go-shmem][upstream] — lock-free
+shared-memory ring для Go↔Java IPC — а также порядок pin и обновления.
 
 [upstream]: https://github.com/virogg/java-go-shmem
 
-## Decision: git submodule + local install
+## Решение: git submodule + локальная установка
 
-The upstream library is not published to Maven Central (its Java artifact is
-`com.jgshmem:java-go-shmem:1.0.0-SNAPSHOT`) and the Go module declares
-`github.com/viroge/go-shmem` from a subdirectory layout
-(`/go/`), so neither side resolves cleanly with stock `go get` / Maven
-Central.
+Upstream-библиотека не опубликована в Maven Central (её Java-артефакт —
+`com.jgshmem:java-go-shmem:1.0.0-SNAPSHOT`), а Go-модуль объявляет
+`github.com/viroge/go-shmem` из подкаталога
+(`/go/`), поэтому ни одна из сторон не разрешается «из коробки» через
+обычный `go get` / Maven Central.
 
-We carry upstream as a **git submodule** under `third_party/java-go-shmem/`
-and wire each language side against the local copy:
+Мы держим upstream как **git submodule** в `third_party/java-go-shmem/`
+и подключаем каждую языковую сторону к локальной копии:
 
-- **Go**: `go.mod` declares `require github.com/viroge/go-shmem` and
+- **Go**: `go.mod` объявляет `require github.com/viroge/go-shmem` и
   `replace github.com/viroge/go-shmem => ./third_party/java-go-shmem/go`.
-  Imports use the upstream module path (`github.com/viroge/go-shmem/pkg/ring`).
-  No publish or vendoring step is required.
-- **Java**: `make deps-shmem` runs `mvn install` on the submodule's pom and
-  drops `com.jgshmem:java-go-shmem:1.0.0-SNAPSHOT` into `~/.m2`. The bridge
-  pom then depends on it like any other Maven artifact.
+  Импорты используют upstream-путь модуля (`github.com/viroge/go-shmem/pkg/ring`).
+  Никакого шага publish или vendoring не требуется.
+- **Java**: `make deps-shmem` запускает `mvn install` на pom сабмодуля и
+  кладёт `com.jgshmem:java-go-shmem:1.0.0-SNAPSHOT` в `~/.m2`. После этого
+  pom моста зависит от него как от любого другого Maven-артефакта.
 
-### Why not other options
+### Почему не другие варианты
 
-- **Vendoring** (copying source into `third_party/` without git history):
-  loses the upstream SHA pin and easy update path. Submodules are the
-  smallest tool that records exactly which commit we built against.
-- **Maven Central**: not available; upstream is `*-SNAPSHOT`, no GA release.
-- **GitHub Packages Maven repo**: would require credentials at every clone
-  and CI run for a single SNAPSHOT artifact. Disproportionate.
+- **Vendoring** (копирование исходников в `third_party/` без git-истории):
+  теряется upstream SHA pin и простой путь обновления. Submodule — это
+  минимальный инструмент, который точно фиксирует, против какого коммита мы
+  собирались.
+- **Maven Central**: недоступен; upstream — это `*-SNAPSHOT`, GA-релиза нет.
+- **GitHub Packages Maven repo**: потребовал бы учётные данные при каждом
+  клонировании и каждом прогоне CI ради единственного SNAPSHOT-артефакта.
+  Несоразмерно.
 
 ## Pin
 
-Current submodule commit: see
-[`.gitmodules`](../.gitmodules) and
-[`git submodule status third_party/java-go-shmem`](#). The pinned SHA is
-the source of truth, not anything written here.
+Текущий коммит сабмодуля: см.
+[`.gitmodules`](../.gitmodules) и
+[`git submodule status third_party/java-go-shmem`](#). Источником истины
+является закреплённый SHA, а не то, что написано здесь.
 
-The upstream `viroge` vs `virogg` mismatch in the Go module path (and the
-fact that the Go module lives at `/go/`, not the repo root) means a direct
-`go get github.com/virogg/java-go-shmem/...` will not work; the replace
-directive is load-bearing.
+Расхождение upstream `viroge` против `virogg` в пути Go-модуля (и тот факт,
+что Go-модуль живёт в `/go/`, а не в корне репозитория) означает, что прямой
+`go get github.com/virogg/java-go-shmem/...` работать не будет; replace
+directive здесь несущая.
 
-## How to bump
+## Как обновить (bump)
 
 ```sh
 git submodule update --remote third_party/java-go-shmem
@@ -59,10 +61,10 @@ git add third_party/java-go-shmem
 git commit -m "deps: bump java-go-shmem to <sha>"
 ```
 
-If the upstream's Go module path changes from `github.com/viroge/go-shmem`,
-update `go.mod`'s `require`/`replace` lines accordingly.
+Если upstream-путь Go-модуля изменится с `github.com/viroge/go-shmem`,
+обновите строки `require`/`replace` в `go.mod` соответствующим образом.
 
-## How a fresh checkout works
+## Как работает свежий checkout
 
 ```sh
 git clone --recurse-submodules https://github.com/virogg/go-hbase.git
@@ -73,29 +75,31 @@ make deps-shmem    # one-time per ~/.m2; CI runs this on every job
 make all
 ```
 
-## CI integration
+## Интеграция с CI
 
-Both the `go` and `java` jobs in `.github/workflows/ci.yml` use
-`actions/checkout@v4` with `submodules: recursive`. The `java` job runs
-`make deps-shmem` before `make java-test` so the local SNAPSHOT is in the
-Maven cache when the bridge build runs.
+Оба job — `go` и `java` — в `.github/workflows/ci.yml` используют
+`actions/checkout@v4` с `submodules: recursive`. Job `java` запускает
+`make deps-shmem` перед `make java-test`, чтобы локальный SNAPSHOT был в
+кэше Maven к моменту сборки моста.
 
-## Supply-chain integrity (`make verify-deps`)
+## Целостность supply-chain (`make verify-deps`)
 
-This submodule is the most load-bearing dependency, yet sits outside the
-usual integrity nets: the Go side consumes it via a `replace` directive, so
-**`go.sum` carries no checksum for it**, and the Java artifact is a local
-`SNAPSHOT` (mutable). To compensate, the pin is recorded explicitly as
-`SHMEM_EXPECTED_SHA` in the `Makefile`, and both CI jobs run
-`make verify-deps` before building. That target fails the build unless the
-checked-out submodule is **exactly** the pinned commit with **no
-tracked-source modifications** (untracked build output such as
-`java/target/` is ignored). Bumping therefore requires updating
-`SHMEM_EXPECTED_SHA` and this document in the same change, so the bump can't
-slip through unreviewed and a tampered working tree is caught.
+Этот сабмодуль — самая несущая зависимость, и при этом он находится вне
+обычных контуров проверки целостности: Go-сторона потребляет его через
+`replace` directive, поэтому **`go.sum` не содержит контрольной суммы для
+него**, а Java-артефакт — это локальный `SNAPSHOT` (изменяемый). Чтобы это
+компенсировать, pin явно записан как `SHMEM_EXPECTED_SHA` в `Makefile`, и
+оба CI job запускают `make verify-deps` перед сборкой. Эта цель проваливает
+сборку, если только выгруженный сабмодуль не совпадает **в точности** с
+закреплённым коммитом и **без модификаций отслеживаемых исходников**
+(неотслеживаемый вывод сборки, такой как `java/target/`, игнорируется).
+Поэтому bump требует обновления `SHMEM_EXPECTED_SHA` и этого документа в
+рамках одного изменения, так что bump не сможет проскользнуть мимо ревью, а
+подделанное рабочее дерево будет обнаружено.
 
-Residual risk (follow-up, needs upstream action): pinned to a bare commit
-rather than a signed tag/release, and dropping the `replace` directive /
-publishing a non-`SNAPSHOT` Maven coordinate depends on upstream releasing
-the module at its declared path. `verify-deps` bounds in-repo exposure; it
-does not replace a published, checksummed release.
+Остаточный риск (follow-up, требует действий со стороны upstream): pin на
+голый коммит, а не на подписанный tag/release; а отказ от `replace`
+directive / публикация не-`SNAPSHOT` Maven-координаты зависит от того,
+выпустит ли upstream модуль по своему объявленному пути. `verify-deps`
+ограничивает экспозицию внутри репозитория; он не заменяет опубликованный
+релиз с контрольными суммами.

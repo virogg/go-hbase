@@ -1,16 +1,16 @@
-# Contributing
+# Участие в разработке
 
-go-hbase is in early development; see `tasks/plan.md` for the active roadmap.
+go-hbase находится на ранней стадии разработки; см. `tasks/plan.md` для актуального roadmap.
 
 ## Workflow
 
-1. Pick a pending task from `tasks/todo.md`.
-2. Branch from `main`.
-3. RED-GREEN: write a failing test before the implementation.
-4. Run `make lint test` before opening a PR.
-5. Reference the task ID (e.g. `T11`) in the commit subject.
+1. Выберите ожидающую задачу из `tasks/todo.md`.
+2. Создайте ветку от `main`.
+3. RED-GREEN: напишите падающий тест до реализации.
+4. Запустите `make lint test` перед открытием PR.
+5. Укажите ID задачи (например, `T11`) в теме коммита.
 
-## License
+## Лицензия
 
-By submitting a contribution you agree to license it under Apache 2.0
-(see `LICENSE`).
+Отправляя вклад, вы соглашаетесь лицензировать его под Apache 2.0
+(см. `LICENSE`).

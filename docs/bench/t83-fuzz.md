@@ -1,66 +1,66 @@
-# T83 - Wire-codec fuzzing report
+# T83 - Отчёт о fuzzing'е wire-кодека
 
-**Verifies:** plan task T83 "Go fuzz target на `wire.Decode`, Java fuzz
+**Проверяет:** задачу плана T83 "Go fuzz target на `wire.Decode`, Java fuzz
 target. 30 минут CPU. Найденные баги: фикс + regression test."
 
-The framing decoder reads length-prefixed, chunked frames off an untrusted
-shmem ring on both sides of the bridge: the project's primary
-adversarial-input surface. Invariant under fuzz: decode never panics/throws
-unchecked and never makes an unbounded allocation; every malformed input
-surfaces as a typed decode error.
+Декодер фрейминга читает с обеих сторон bridge кадры с префиксом длины, нарезанные на чанки,
+из недоверенного shmem-кольца: это основная для проекта
+поверхность для атак через вход. Инвариант под fuzz: decode никогда не паникует/не бросает
+непроверенных исключений и никогда не делает неограниченную аллокацию; каждый
+некорректный вход всплывает как типизированная ошибка декодирования.
 
 ## Targets
 
-| Side | Target | Framework | Entry |
+| Сторона | Target | Framework | Точка входа |
 |------|--------|-----------|-------|
-| Go   | `internal/wire.FuzzDecode` | native `go test -fuzz` | `make fuzz FUZZTIME=...` |
+| Go   | `internal/wire.FuzzDecode` | нативный `go test -fuzz` | `make fuzz FUZZTIME=...` |
 | Java | `bridge.wire.DecoderFuzzTest` | jazzer-junit (`@FuzzTest`, JUnit 5) | `make java-fuzz` |
 
-The Java target replaces the plan's jqf suggestion: jqf is JUnit4-runner
-based and would have dragged junit4 + vintage-engine into the Jupiter-only
-build; jazzer-junit is JUnit5-native, replays its seed corpus as a plain
-test in every `mvn verify` (regression mode), and fuzzes for real under
-`JAZZER_FUZZ=1`. Seeds: the golden wire corpus (`test/golden/wire/v1`),
-mapped onto the test classpath by the root pom.
+Java-target заменяет предложенный планом jqf: jqf основан на JUnit4-runner'е
+и затащил бы junit4 + vintage-engine в сборку, рассчитанную только на Jupiter;
+jazzer-junit нативен для JUnit5, проигрывает свой seed-corpus как обычный
+тест в каждом `mvn verify` (regression-режим) и по-настоящему фаззит под
+`JAZZER_FUZZ=1`. Seed'ы: золотой wire-corpus (`test/golden/wire/v1`),
+смапленный на test classpath корневым pom.
 
-## Campaign (2026-06-10): 30 min CPU total
+## Кампания (2026-06-10): 30 мин CPU суммарно
 
-| Side | Duration | Executions | Throughput | Coverage | Findings |
+| Сторона | Длительность | Исполнений | Throughput | Покрытие | Находки |
 |------|---------:|-----------:|-----------:|---------:|----------|
-| Go   | 20m      | 245.0M     | ~187k/s    | 28 interesting inputs | none |
-| Java | 10m      | 12.7M      | ~21k/s     | 104 edges, 348 features | none |
+| Go   | 20m      | 245.0M     | ~187k/s    | 28 interesting inputs | нет |
+| Java | 10m      | 12.7M      | ~21k/s     | 104 edges, 348 features | нет |
 
-## The bug the campaign was built around
+## Баг, вокруг которого строилась кампания
 
-Preparing the Java target surfaced that the **H2/H4 allocation bounds were
-missing from the Java decoder**: `RELEASE-BLOCKERS.md` claimed "both
-decoders", but only `internal/wire/decoder.go` enforced `MaxChunks` /
-`MaxPendingReassemblies`. A hostile 27-byte frame declaring
-`chunk_total=2^31−1` made `Decoder.java` allocate a ~16GiB reference array
-(instant OOM; jazzer finds it in seconds on the unfixed decoder), and
-abandoned multi-chunk req_ids grew the pending map without bound.
+При подготовке Java-target всплыло, что **границы аллокаций H2/H4 отсутствовали
+в Java-декодере**: `RELEASE-BLOCKERS.md` заявлял "both
+decoders", но только `internal/wire/decoder.go` обеспечивал `MaxChunks` /
+`MaxPendingReassemblies`. Враждебный 27-байтовый фрейм, объявляющий
+`chunk_total=2^31−1`, заставлял `Decoder.java` аллоцировать ~16GiB-массив ссылок
+(мгновенный OOM; jazzer находит это за секунды на неисправленном декодере), а
+брошенные многочанковые req_id'ы наращивали pending-map без границы.
 
-Fix: `WireFormat.MAX_CHUNKS=1024` / `MAX_PENDING_REASSEMBLIES=4096`,
-enforced in `Decoder.readChunk` before any allocation, with
-`TooManyChunksException` / `TooManyPendingException` mirroring the Go
-errors. Regressions: `DecoderBoundsTest` (ports `bounds_test.go`, plus a
-cap-doesn't-block-existing-reassembly case). With the fix in place the
-10-minute jazzer campaign ran clean at a flat ~1.5GB RSS.
+Фикс: `WireFormat.MAX_CHUNKS=1024` / `MAX_PENDING_REASSEMBLIES=4096`,
+проверяются в `Decoder.readChunk` до любой аллокации, с
+`TooManyChunksException` / `TooManyPendingException`, зеркалящими Go-ошибки.
+Регрессии: `DecoderBoundsTest` (портирует `bounds_test.go`, плюс кейс
+cap-doesn't-block-existing-reassembly). С установленным фиксом
+10-минутная jazzer-кампания отработала чисто на ровном ~1.5GB RSS.
 
-A follow-up adversarial review of the fix found a second-order gap in it,
-**on both sides**: the entry-count cap bounds how many reassemblies exist,
-not how many bytes they retain. Each abandoned near-complete reassembly may
-hold (MAX_CHUNKS-1) × MAX_PAYLOAD_BYTES ≈ 67 MB, so 4096 entries still
-permitted ~256 GiB of retained heap: an OOM at ~60 abandoned entries on a
-4 GiB heap, far below the count cap. Closed with a cumulative retained-byte
-bound (`MaxPendingBytes` / `WireFormat.MAX_PENDING_BYTES` = 96 MiB,
-decremented on completion) in both decoders; `ErrTooManyPendingBytes` /
-`TooManyPendingBytesException`. Regressions use max-size payloads and
-assert the byte cap fires well before the entry cap:
+Последующий adversarial review фикса нашёл в нём пробел второго порядка
+**на обеих сторонах**: cap по числу записей ограничивает, сколько reassembly существует,
+а не сколько байт они удерживают. Каждый брошенный почти-завершённый reassembly может
+держать (MAX_CHUNKS-1) × MAX_PAYLOAD_BYTES ≈ 67 MB, поэтому 4096 записей всё ещё
+допускали ~256 GiB удержанного heap: OOM на ~60 брошенных записях на
+4 GiB heap, далеко ниже cap по числу. Закрыто кумулятивной границей удержанных байт
+(`MaxPendingBytes` / `WireFormat.MAX_PENDING_BYTES` = 96 MiB,
+декрементируется при завершении) в обоих декодерах; `ErrTooManyPendingBytes` /
+`TooManyPendingBytesException`. Регрессии используют payload'ы максимального размера и
+утверждают, что byte-cap срабатывает заметно раньше entry-cap'а:
 `TestDecodeCapsPendingBytes` (Go), `capsPendingBytesBeforeEntryCap` (Java).
 
 ## CI
 
-- Every CI run: 30s Go fuzz smoke (`go` job) + jazzer seed-replay (rides in
+- Каждый CI-прогон: 30s Go fuzz smoke (`go` job) + jazzer seed-replay (едет в
   `mvn verify`).
 - Nightly: 15m Go + 10m Java (`fuzz-nightly` job).

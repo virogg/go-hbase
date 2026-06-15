@@ -1,10 +1,10 @@
-# Architecture
+# Архитектура
 
-How a single HBase operation flows through go-hbase, what runs where, and
-what happens when things fail. Describes the system **as
-implemented**; the failure-mode contract it realizes is SPEC.md §3.
+Как одна операция HBase проходит через go-hbase, что где выполняется и
+что происходит при сбоях. Описывает систему **как она
+реализована**; контракт по режимам отказа, который она воплощает, — это SPEC.md §3.
 
-## Components
+## Компоненты
 
 ```
 RegionServer JVM                                Go process (one per coproc-jar per RS)
@@ -30,112 +30,112 @@ RegionServer JVM                                Go process (one per coproc-jar p
 └─────────────────────────────────────────┘
 ```
 
-| Layer | Java | Go |
+| Слой | Java | Go |
 |---|---|---|
-| Observer surface | `bridge.observer.*ObserverAdapter` (Region/Master/RegionServer/WAL/BulkLoad) | `pkg/hbasecop` interfaces + `Unimplemented*` embeddings |
-| Dispatch | `MuxHookDispatcher` → `multiplex.Multiplexer` | `dispatch.go` + per-surface hook tables |
-| Wire codec | `bridge.wire.Encoder/Decoder` | `internal/wire` |
-| Transport | `bridge.shmem.Channel` | `internal/shmem.Channel` |
-| Lifecycle | `CoprocessorRuntime`, `SharedRuntime`, `supervisor.*` | `internal/cpruntime.Loop` |
+| Поверхность observer | `bridge.observer.*ObserverAdapter` (Region/Master/RegionServer/WAL/BulkLoad) | интерфейсы `pkg/hbasecop` + встраивания `Unimplemented*` |
+| Dispatch | `MuxHookDispatcher` → `multiplex.Multiplexer` | `dispatch.go` + hook-таблицы для каждой поверхности |
+| Wire-кодек | `bridge.wire.Encoder/Decoder` | `internal/wire` |
+| Транспорт | `bridge.shmem.Channel` | `internal/shmem.Channel` |
+| Жизненный цикл | `CoprocessorRuntime`, `SharedRuntime`, `supervisor.*` | `internal/cpruntime.Loop` |
 
-## Request flow (a strict pre-hook, e.g. `prePut`)
+## Поток запроса (строгий pre-hook, например `prePut`)
 
-1. **Hook fires.** HBase invokes `RegionObserverAdapter.prePut(...)` on an
-   RPC handler thread.
-2. **Serialize.** The adapter converts HBase types to the vendored protobuf
-   messages (`MutationConverter`, `CellConverter`, ...), wraps them in the
-   per-hook request (`PrePutRequest`) plus `HookContext` (table, region).
-3. **Dispatch.** `MuxHookDispatcher` resolves the per-hook policy + timeout
-   (`PolicyConfig`); `Multiplexer.callTracked` allocates a monotonic
-   `req_id`, registers a `CompletableFuture`, encodes a `REQUEST` frame and
-   sends it on the Java→Go ring (sends serialized: the ring is
+1. **Срабатывает hook.** HBase вызывает `RegionObserverAdapter.prePut(...)` в
+   потоке RPC-обработчика.
+2. **Сериализация.** Адаптер конвертирует типы HBase в вендорённые protobuf-
+   сообщения (`MutationConverter`, `CellConverter`, ...), оборачивает их в
+   per-hook-запрос (`PrePutRequest`) плюс `HookContext` (table, region).
+3. **Dispatch.** `MuxHookDispatcher` разрешает per-hook политику + таймаут
+   (`PolicyConfig`); `Multiplexer.callTracked` выделяет монотонный
+   `req_id`, регистрирует `CompletableFuture`, кодирует `REQUEST`-фрейм и
+   отправляет его в ring Java→Go (отправка сериализована: ring —
    single-producer).
-4. **Wire.** One frame:
+4. **Wire.** Один фрейм:
    `[u32 len][u8 type][u64 req_id][u32 region_id][u8 hook_id][u8 flags][u32 chunk_idx][u32 chunk_total][protobuf]`,
-   big-endian, max 64 KiB (`MaxFrameSize`). Decoders bound `chunk_total`
-   (`MaxChunks` = 1024) and concurrent reassemblies. Production payloads are
-   single-chunk, so size payloads below the frame cap.
-5. **Go receives.** The `cpruntime` reader goroutine polls the ring, decodes
-   the frame, and spawns one goroutine for the request.
-6. **User code.** The dispatcher unmarshals the per-hook request, looks up
-   the hook table, and calls your observer method. A returned error (or a
-   recovered **panic**) becomes `HookResponse.error`; `Bypass`,
-   `BlockedIndices` and `ResultCells` are copied into the `HookResponse`.
-7. **Respond.** The response frame goes to the single writer goroutine and
-   onto the Go→Java ring.
-8. **Java completes.** `ChannelReader` decodes it, `Multiplexer.deliver`
-   completes the future for that `req_id`. On timeout the dispatcher cancels
-   the call and drops it from the pending map.
-9. **Apply.** The adapter maps the `HookResponse`: `bypass=true` →
-   `ObserverContext.bypass()` (guarded: a WARN where HBase doesn't allow
-   it); `error` → policy (`strict` → `IOException`, the client's operation
-   aborts; `best-effort` → WARN + proceed); `PreAppend`/`PreIncrement`
-   bypass returns a `Result` built from `ResultCells`.
+   big-endian, максимум 64 KiB (`MaxFrameSize`). Декодеры ограничивают `chunk_total`
+   (`MaxChunks` = 1024) и число одновременных пересборок. Боевые payload'ы
+   укладываются в один chunk, так что держите размер payload ниже потолка фрейма.
+5. **Go получает.** Reader-goroutine из `cpruntime` опрашивает ring, декодирует
+   фрейм и порождает по одной goroutine на запрос.
+6. **Пользовательский код.** Dispatcher разбирает per-hook-запрос, ищет
+   запись в hook-таблице и вызывает ваш метод observer'а. Возвращённая ошибка (или
+   восстановленная **паника**) становится `HookResponse.error`; `Bypass`,
+   `BlockedIndices` и `ResultCells` копируются в `HookResponse`.
+7. **Ответ.** Фрейм ответа идёт в единственную writer-goroutine и
+   далее в ring Go→Java.
+8. **Java завершает.** `ChannelReader` декодирует его, `Multiplexer.deliver`
+   завершает future для этого `req_id`. По таймауту dispatcher отменяет
+   вызов и удаляет его из map ожидающих.
+9. **Применение.** Адаптер отображает `HookResponse`: `bypass=true` →
+   `ObserverContext.bypass()` (с защитой: WARN там, где HBase это не разрешает);
+   `error` → политика (`strict` → `IOException`, операция клиента
+   прерывается; `best-effort` → WARN + продолжение); bypass для
+   `PreAppend`/`PreIncrement` возвращает `Result`, построенный из `ResultCells`.
 
-Post-hooks follow the same path; under the default best-effort policy their
-failures never abort the host operation. They currently still *wait* for
-the Go response synchronously, bounded by the hook timeout.
+Post-hook'и идут тем же путём; при дефолтной best-effort политике их
+сбои никогда не прерывают host-операцию. Сейчас они всё ещё *ждут*
+ответ от Go синхронно, ограниченные таймаутом hook'а.
 
-## Process model
+## Модель процесса
 
-**One Go process per coproc-jar per RegionServer**, shared across all
-regions and tables using that jar: the first `start()` spawns it via
-`SharedRuntime.acquire(key, ...)` (refcounted), later starts attach, the last
-`stop()` shuts it down (`SHUTDOWN` frame → graceful wait → force-kill).
-Each region gets a `region_id` from `RegionIdAllocator` at observer start;
-it rides the frame header so the Go side scopes `ObserverEnv` per region.
+**Один Go-процесс на coproc-jar на RegionServer**, разделяемый между всеми
+регионами и таблицами, использующими этот jar: первый `start()` порождает его через
+`SharedRuntime.acquire(key, ...)` (с подсчётом ссылок), последующие start'ы
+подключаются, последний `stop()` останавливает его (`SHUTDOWN`-фрейм →
+graceful-ожидание → force-kill).
+Каждый регион получает `region_id` от `RegionIdAllocator` при старте observer'а;
+он едет в заголовке фрейма, так что сторона Go скоупит `ObserverEnv` per region.
 
-**Startup:** `CoprocessorRuntime.start()` opens the two mmap ring files,
-reads the jar manifest's `HbaseCop-Go-Bin-SHA256`, extracts the embedded
-ELF, **verifies the digest** (mismatch → fail-fast; protects against
-corruption/wrong-arch, not a signature scheme), exec's it with the
-`HBASECOP_*` environment, and starts the reader thread + supervisor
-scheduler.
+**Запуск:** `CoprocessorRuntime.start()` открывает два mmap-файла ring'ов,
+читает `HbaseCop-Go-Bin-SHA256` из манифеста jar'а, извлекает встроенный
+ELF, **проверяет дайджест** (несовпадение → fail-fast; защищает от
+повреждения/неверной архитектуры, это не схема подписи), запускает его с
+окружением `HBASECOP_*` и стартует reader-поток + планировщик supervisor'а.
 
-## Concurrency model (as built)
+## Модель конкурентности (как построено)
 
-- **Go:** one reader goroutine, one writer goroutine, one heartbeat
-  goroutine, and **one goroutine per in-flight request**. No global mutex on
-  the hot path; backpressure via a bounded outbound queue (256).
-- **Java:** one reader thread per runtime; hook callers block on their
-  future; ring sends serialized by a lock (SPSC ring).
-- **Ordering: none beyond HBase's own.** Requests from different regions,
-  and concurrent requests from the same region, execute concurrently on the
-  Go side. There is **no per-region serialization and no lifecycle barrier**:
-  observer state must be safe for concurrent use (use atomics/locks).
-  `docs/architecture/concurrency.md` describes a *future* per-region actor
-  design that is **not implemented**.
+- **Go:** одна reader-goroutine, одна writer-goroutine, одна heartbeat-
+  goroutine и **по одной goroutine на каждый запрос в полёте**. Никакого глобального mutex на
+  горячем пути; backpressure через ограниченную исходящую очередь (256).
+- **Java:** один reader-поток на runtime; вызывающие hook блокируются на своём
+  future; отправки в ring сериализованы lock'ом (SPSC ring).
+- **Упорядочивание: никакого, кроме собственного у HBase.** Запросы из разных регионов
+  и конкурентные запросы из одного региона выполняются конкурентно на
+  стороне Go. Здесь **нет per-region сериализации и нет lifecycle-барьера**:
+  состояние observer'а должно быть безопасным для конкурентного использования (используйте атомики/локи).
+  `docs/architecture/concurrency.md` описывает *будущий* per-region actor-
+  дизайн, который **не реализован**.
 
-Throughput scales with cores and shows no head-of-line blocking across
-regions (T62 bench: `docs/bench/t62-region-concurrency.md`).
+Пропускная способность масштабируется с числом ядер и не показывает head-of-line blocking между
+регионами (бенч T62: `docs/bench/t62-region-concurrency.md`).
 
-## Failure modes (SPEC §3)
+## Режимы отказа (SPEC §3)
 
-| Failure | Detection | Consequence |
+| Отказ | Обнаружение | Последствие |
 |---|---|---|
-| Go returns an error / panics | response carries `HookResponse.error` | per-hook policy: strict → client `IOException`; best-effort → WARN + proceed |
-| Go slow / unresponsive | per-hook timeout (default 5s) | policy, as above; the pending call is cancelled |
-| Go process exits | supervisor tick (`detectExitedGoProcess`, runs even with heartbeats disabled) | in-flight futures fail (`GoSideCrashed`); restart with backoff 200 ms to 5 s (×2, jitter ±20%) |
-| Go process hung | 3 missed 500 ms heartbeats | SIGKILL, then the restart path above |
-| Restarts keep failing | `max-fails` (5) consecutive failures | marked unhealthy; hooks fail by policy immediately; probe every 30 s |
-| Calls during a restart window | n/a | parked up to `hbasecop.restart.deadline` (3 s), then fail by policy |
-| Corrupted/wrong ELF in jar | SHA-256 vs manifest at extract | coprocessor fails to start, clear log message |
-| Malformed/oversized wire frames | decoder bounds (length, type, `MaxChunks`, pending cap) | frame rejected with an error; never an unbounded allocation |
+| Go возвращает ошибку / паникует | ответ несёт `HookResponse.error` | per-hook политика: strict → клиентский `IOException`; best-effort → WARN + продолжение |
+| Go медленный / не отвечает | per-hook таймаут (по умолчанию 5s) | политика, как выше; ожидающий вызов отменяется |
+| Go-процесс завершается | тик supervisor'а (`detectExitedGoProcess`, работает даже при отключённых heartbeat'ах) | future в полёте падают (`GoSideCrashed`); рестарт с backoff от 200 ms до 5 s (×2, jitter ±20%) |
+| Go-процесс завис | 3 пропущенных heartbeat'а по 500 ms | SIGKILL, затем путь рестарта выше |
+| Рестарты продолжают падать | `max-fails` (5) последовательных отказов | помечен как нездоровый; hook'и сразу падают по политике; проба каждые 30 s |
+| Вызовы во время окна рестарта | n/a | паркуются до `hbasecop.restart.deadline` (3 s), затем падают по политике |
+| Повреждённый/неверный ELF в jar | SHA-256 против манифеста при извлечении | coprocessor не стартует, понятное сообщение в логе |
+| Некорректные/слишком большие wire-фреймы | границы декодера (длина, тип, `MaxChunks`, потолок ожидающих) | фрейм отвергается с ошибкой; никогда не происходит неограниченной аллокации |
 
-Validated end-to-end by the fault-injection matrix (`make test-fault`,
-10 cases: {strict, best-effort} × {kill -9, hang, exit-1, OOM, error}),
-asserting correct semantics, no data loss, no double-apply, and recovery.
+Проверено end-to-end матрицей fault-injection (`make test-fault`,
+10 кейсов: {strict, best-effort} × {kill -9, hang, exit-1, OOM, error}),
+утверждающей корректную семантику, отсутствие потери данных, отсутствие двойного применения и восстановление.
 
-## Key limits & defaults
+## Ключевые лимиты и значения по умолчанию
 
-| Limit | Value | Where |
+| Лимит | Значение | Где |
 |---|---|---|
-| Max wire frame | 64 KiB | `internal/wire.MaxFrameSize` / `WireFormat.MAX_FRAME_SIZE` |
-| Max chunks / pending reassemblies | 1024 / 4096 | both decoders |
-| Ring | capacity 16 slots × 1 MiB | `CoprocessorRuntime.Config` defaults |
-| Hook timeout | 5 s | `hbasecop.timeout.default` |
-| Heartbeat / miss threshold | 500 ms / 3 | `hbasecop.heartbeat.*` |
-| Restart backoff / unhealthy / probe | 200 ms→5 s ±20% / 5 fails / 30 s | `hbasecop.restart.*` |
+| Максимальный wire-фрейм | 64 KiB | `internal/wire.MaxFrameSize` / `WireFormat.MAX_FRAME_SIZE` |
+| Максимум chunk'ов / ожидающих пересборок | 1024 / 4096 | оба декодера |
+| Ring | ёмкость 16 слотов × 1 MiB | значения по умолчанию `CoprocessorRuntime.Config` |
+| Таймаут hook'а | 5 s | `hbasecop.timeout.default` |
+| Heartbeat / порог пропусков | 500 ms / 3 | `hbasecop.heartbeat.*` |
+| Backoff рестарта / нездоровый / проба | 200 ms→5 s ±20% / 5 отказов / 30 s | `hbasecop.restart.*` |
 
-The full configuration reference lives in the top-level
+Полный справочник по конфигурации находится в верхнеуровневом
 [README](../README.md#configuration-reference).

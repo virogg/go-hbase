@@ -1,6 +1,6 @@
-# Code of Conduct
+# Кодекс поведения
 
-This project adopts the [Contributor Covenant](https://www.contributor-covenant.org/),
-version 2.1. Be respectful, assume good intent, focus on the work.
+Этот проект принимает [Contributor Covenant](https://www.contributor-covenant.org/),
+версии 2.1. Будьте уважительны, предполагайте добрые намерения, фокусируйтесь на работе.
 
-Report unacceptable behaviour to the project maintainers via GitHub.
+Сообщайте о неприемлемом поведении мейнтейнерам проекта через GitHub.

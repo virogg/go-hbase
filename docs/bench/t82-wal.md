@@ -1,20 +1,20 @@
-# T82 - WAL write throughput: WALObserver on vs off
+# T82 — WAL write throughput: WALObserver вкл. vs выкл.
 
-**Verifies:** plan task T82 "throughput WAL writes с WALObserver vs без,
-regression < 50%".
+**Проверяет:** задачу плана T82 «throughput WAL writes с WALObserver vs без,
+regression < 50%».
 
-A/B comparison on a live dockerized HBase 2.5 standalone cluster. Cycle A
-boots the cluster bare; cycle B boots it with the `wal-observer` coproc-jar
-registered cluster-wide (`hbase.coprocessor.wal.classes`; WAL coprocessors
-cannot attach per-table), whose Go side is a **no-op WALObserver**
-(`examples/wal-observer`), so the delta is pure bridge dispatch cost on the
-WAL append path (preWALWrite/postWALWrite, hooks 220/221). Both cycles run
-the same `WalThroughputBenchIT`: 20 000 puts in batches of 100 against one
-table, wall-clocked from the client. The IT verifies coproc presence
-(`pgrep -f hbasecop-runtime` in the container) matches the leg, so a stale
-cluster can't contaminate the baseline.
+A/B-сравнение на живом dockerized HBase 2.5 standalone-кластере. Цикл A
+поднимает кластер «голым»; цикл B поднимает его с зарегистрированным
+cluster-wide coproc-jar `wal-observer` (`hbase.coprocessor.wal.classes`; WAL-
+копроцессоры нельзя подключить per-table), чья Go-сторона — **no-op
+WALObserver** (`examples/wal-observer`), так что дельта — это чистая стоимость
+bridge-dispatch на пути WAL append (preWALWrite/postWALWrite, hooks 220/221).
+Оба цикла гоняют один и тот же `WalThroughputBenchIT`: 20 000 puts батчами по
+100 против одной таблицы, замер по wall-clock со стороны клиента. IT проверяет,
+что присутствие coproc (`pgrep -f hbasecop-runtime` в контейнере) соответствует
+плечу, так что устаревший кластер не может загрязнить baseline.
 
-## How to reproduce
+## Как воспроизвести
 
 ```
 make bench-wal                       # both cycles + gate
@@ -22,30 +22,31 @@ make bench-wal                       # both cycles + gate
 make bench-wal BENCH_WAL_OPS=20000 BENCH_WAL_MAX_REGRESSION_PCT=50
 ```
 
-## Result (2026-06-10)
+## Результат (2026-06-10)
 
-Hardware: AMD Ryzen 7 5800H, WSL2 + Docker, HBase 2.5.11 standalone.
+Железо: AMD Ryzen 7 5800H, WSL2 + Docker, HBase 2.5.11 standalone.
 
-| Leg | Throughput |
+| Плечо | Throughput |
 |-----|-----------:|
-| A: no WAL coprocessor | 16 170 ops/s |
+| A: без WAL-копроцессора | 16 170 ops/s |
 | B: go-hbase no-op WALObserver | 13 685 ops/s |
 
 **Regression: 15.4%, PASS (< 50% gate).**
 
-## Read
+## Как читать
 
-- The WAL path amortizes well: one batch of 100 puts produces roughly one
-  WAL append per region, so the per-append hook cost (~2× dispatch round
-  trip at ~70µs each) spreads across the batch. Workloads of unbatched
-  single puts would see a higher relative hit; the plan's risk table flags
-  sampling-only WAL hooks as the fallback if a real workload needs it.
-- The measurement is end-to-end client put throughput, not isolated WAL
-  append rate: it is the regression a user actually experiences.
+- Путь WAL хорошо амортизируется: один батч из 100 puts даёт примерно один
+  WAL append на регион, так что стоимость hook на каждый append (~2× dispatch
+  round trip по ~70µs каждый) размазывается по батчу. Нагрузки из небатчованных
+  одиночных puts увидели бы более высокий относительный удар; таблица рисков в
+  плане отмечает sampling-only WAL hooks как fallback, если реальная нагрузка
+  этого потребует.
+- Измеряется end-to-end client put throughput, а не изолированная скорость
+  WAL append: это та regression, которую пользователь реально ощущает.
 
-## Caveats
+## Оговорки
 
-- Standalone single-JVM HBase under WSL2/Docker; absolute numbers are not
-  representative of a production cluster, but the A/B ratio is the metric
-  and both legs share the environment.
-- Run-to-run variance ±10%; the 50% gate has ample margin.
+- Standalone single-JVM HBase под WSL2/Docker; абсолютные числа не
+  репрезентативны для production-кластера, но метрикой является A/B-отношение,
+  а оба плеча делят одно и то же окружение.
+- Разброс от запуска к запуску ±10%; у 50% gate достаточный запас.
