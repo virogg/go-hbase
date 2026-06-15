@@ -40,6 +40,13 @@ func main() {
 		}
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "config" {
+		if err := runConfig(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "hbasecop-build config:", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	opts, err := parseFlags(os.Args[1:])
 	if err != nil {

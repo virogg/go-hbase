@@ -223,7 +223,26 @@ letting one process serve Region+Master+WAL together. Wire/shmem untouched.
 **AC.** two region observers chain in one process; one `Run` serves two
 surfaces. **Verify.** new chain + multi-surface dispatch tests.
 
-## DX7 — Admin CLI + config preflight (P2)
+## DX7 — Admin CLI + config preflight (P2) — DONE (preflight + config CLI)
+
+> **Startup preflight (the fix):** `ConfigPreflight.validate` runs in
+> `CoprocessorRuntime` (via buildPolicyConfig, on start) and fails fast on a
+> malformed `hbasecop.*` value (bad policy, unit-less duration, non-positive int)
+> instead of the old lazy IllegalArgumentException on the first hook of a live
+> write path; unknown keys / unknown per-hook suffixes are WARN. All malformed
+> values are reported at once. Unit-tested (6 cases).
+>
+> **Config CLI:** `hbasecop-build config --list` prints every key + default +
+> accepted values; `--check <hbase-site.xml>` validates against the same rules
+> (exit non-zero on malformed, notice on unknown). Go rules mirror the Java
+> preflight. Unit-tested + smoke-checked.
+>
+> Deferred: `deploy`/`list`/`remove` admin subcommands — they need a real HBase
+> Admin client (disable/alter/enable cycle); a print-only stub adds little. Track
+> separately if operators want one-command registration.
+
+### (original notes)
+
 
 `hbasecop deploy --jar --table` (disable/alter/enable, FQ class read from
 manifest), `hbasecop list`, `hbasecop remove`; `hbasecop config --list` /
