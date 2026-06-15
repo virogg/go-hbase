@@ -168,14 +168,18 @@ java-fuzz: ## T83: run the Java wire-decoder fuzzer (jazzer, 10m per run).
 
 # Coverage gate set excludes generated protobuf, thin mains, and examples -
 # the gate measures hand-written, testable code.
-GO_COVER_PKGS := $(shell $(GO) list ./... | grep -vE '/(examples|internal/wire/hbasepb|internal/wire/hookpb|internal/wire/wirepb|internal/wiregolden|cmd/wire-golden|cmd/hbasecop-runtime|test/bench/noop-observer)$$')
+GO_COVER_PKGS := $(shell $(GO) list ./... | grep -vE '/(examples|internal/wire/hbasepb|internal/wire/hookpb|internal/wire/wirepb|internal/wiregolden|cmd/wire-golden|cmd/hbasecop-runtime|tools/gen-builder|tools/gen-wiretypes|test/bench/noop-observer)$$')
 # SPEC §7 gate: Go hand-written line coverage ≥80% (generated protobuf, thin
-# mains and examples excluded above). Met as of the Phase-7 coverage work.
+# mains and examples excluded above; generated files in covered packages are
+# stripped from the profile by the "DO NOT EDIT" marker). Met as of Phase-7.
 GO_COVER_MIN  ?= 80.0
 .PHONY: go-cover
 go-cover: ## SPEC §7 gate: fail if Go line coverage (hand-written) drops below 80%.
 	$(GO) test -race -covermode=atomic -coverprofile=coverage.out $(GO_COVER_PKGS)
-	@total=$$($(GO) tool cover -func=coverage.out | awk '/^total:/ {print $$3}'); \
+	@gen=$$(grep -rlE '^// Code generated .* DO NOT EDIT\.$$' --include='*.go' pkg cmd internal | sort -u | sed 's/[.]/\\./g' | paste -sd'|' -); \
+	  if [ -n "$$gen" ]; then grep -vE "($$gen):" coverage.out > coverage.cov; else cp coverage.out coverage.cov; fi; \
+	  total=$$($(GO) tool cover -func=coverage.cov | awk '/^total:/ {print $$3}'); \
+	  rm -f coverage.cov; \
 	  echo "Go line coverage (excl. generated): $$total (gate: $(GO_COVER_MIN)%)"; \
 	  pct=$$(printf '%s' "$$total" | tr -d '%'); \
 	  awk "BEGIN { exit !($$pct >= $(GO_COVER_MIN)) }" \
