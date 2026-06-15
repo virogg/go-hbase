@@ -13,3 +13,5 @@
 // the Observer surface lands in T41+. See SPEC.md for the architecture
 // and tasks/plan.md for delivery state.
 package hbasecop
+
+//go:generate go run ../../tools/gen-wiretypes -hookpb ../../internal/wire/hookpb -hbasepb ../../internal/wire/hbasepb -out wiretypes.go
