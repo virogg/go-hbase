@@ -76,7 +76,22 @@ guard fails if a new `*Request` type appears in `hookpb` without an alias.
 `hookpb` `*Request` types vs exported aliases; an out-of-module smoke
 (doc-example / scratch module) overriding a non-Put hook compiles.
 
-## DX2 — Stock generic Java delegate
+## DX2 — Stock generic Java delegate — DONE (4 surfaces)
+
+> `com.virogg.hbasecop.bridge.entrypoint.Generic{Region,Master,RegionServer,WAL}Observer`
+> ship in the bridge jar: name one in `setCoprocessor` and write zero Java. The
+> shared `GenericCoprocessor` reads ring sizes / hook+graceful timeouts from the
+> host Configuration (documented defaults; `hbasecop.ring.capacity`,
+> `hbasecop.ring.max-object-size`, `hbasecop.timeout.default`,
+> `hbasecop.shutdown.graceful-timeout`) and keys the SharedRuntime on the
+> coproc-jar's **coproc-id** (the previously-dead manifest field), falling back
+> to the class name — so two coproc-jars on one RegionServer don't collide on a
+> single Go process. Unit-tested (config defaults/overrides, key fallback);
+> compiles vs HBase 2.5; spotless-clean.
+>
+> Deferred: BulkLoad (exposed via RegionCoprocessor.getBulkLoadObserver — couples
+> to the one-process-one-surface split, revisit with DX6). End-to-end IT with the
+> generic delegate runs in CI (Docker); not exercised locally.
 
 **Problem.** Every observer author hand-writes a ~30–86-line Java
 `RegionCoprocessor` delegate (`CounterRegionObserver.java`) that is pure
