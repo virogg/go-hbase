@@ -112,7 +112,17 @@ optional/inferred.
 **AC.** one command, one jar, no Maven/Java step touched by the user.
 **Verify.** packaged jar deploys and the counter IT passes.
 
-## DX4 — Exported test harness (no cluster)
+## DX4 — Exported test harness (no cluster) — DONE
+
+> `hbasecop.InvokeRegion(obs, hookID, req)` drives the production dispatcher in
+> process (env decode + panic recovery + result mapping) and returns the
+> decoded HookResult/error. `pkg/hbasecop/hbasecoptest` wraps it with an Env →
+> HookContext builder and typed PrePut/PostPut/Invoke helpers, using only public
+> aliases (no internal imports), so external authors `go test` with zero Docker.
+> Other surfaces (Master/RS/WAL/BulkLoad) + a `make test-local` demo are a
+> follow-up.
+
+
 
 **Problem.** The only "see it work" path is `make test-integration*`
 (Docker + HBase). A full in-process rig exists (`loopHarness`,
