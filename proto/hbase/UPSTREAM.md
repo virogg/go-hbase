@@ -1,49 +1,48 @@
-# Vendored HBase proto subset
+# Вендорённое подмножество proto-файлов HBase
 
-The `.proto` files in this directory are a **trimmed copy** of
-`hbase-protocol-shaded/src/main/protobuf/` from upstream
-[apache/hbase][hbase], rewritten to live under our own package alias so
-generated code can be linked into this project without dragging in HBase's
-runtime jars.
+Файлы `.proto` в этом каталоге — это **урезанная копия**
+`hbase-protocol-shaded/src/main/protobuf/` из upstream
+[apache/hbase][hbase], переписанная под наш собственный алиас пакета, чтобы
+сгенерированный код линковался в этот проект, не затягивая runtime-jar'ы HBase.
 
 [hbase]: https://github.com/apache/hbase
 
 ## Pin
 
-| Field      | Value                                       |
+| Поле       | Значение                                    |
 |------------|---------------------------------------------|
 | Tag        | `rel/2.5.10`                                |
 | SHA        | `1a89f98d268eab842ee376563b6961b030fee916`  |
 | Subtree    | `hbase-protocol-shaded/src/main/protobuf/`  |
-| Fetched on | 2026-05-13                                  |
+| Получено   | 2026-05-13                                  |
 
-## Files in this vendor
+## Файлы в этом вендоре
 
-| File           | Upstream                | Trim notes                                                                 |
+| Файл           | Upstream                | Заметки по урезанию                                                         |
 |----------------|-------------------------|----------------------------------------------------------------------------|
-| `Cell.proto`   | `Cell.proto`            | Verbatim message bodies (`Cell`, `KeyValue`, `CellType`).                  |
-| `HBase.proto`  | `HBase.proto`           | Slim: `TableName`, `TimeRange`, `ColumnFamilyTimeRange`, `NameBytesPair`, `RegionSpecifier`, `ServerName`, `RegionInfo`. Other top-level messages dropped — re-add as later tasks need them. |
-| `Client.proto` | `Client.proto`          | Slim: `MutationProto` (with nested `ColumnValue`, `QualifierValue`, `Durability`, `MutationType`, `DeleteType`) only. `Get`, `Result`, `Scan`, `MutateRequest`/`Response`, etc. defer to T43+. |
+| `Cell.proto`   | `Cell.proto`            | Тела сообщений дословно (`Cell`, `KeyValue`, `CellType`).                  |
+| `HBase.proto`  | `HBase.proto`           | Урезано: `TableName`, `TimeRange`, `ColumnFamilyTimeRange`, `NameBytesPair`, `RegionSpecifier`, `ServerName`, `RegionInfo`. Остальные сообщения верхнего уровня выброшены; добавляйте обратно по мере необходимости в будущих задачах. |
+| `Client.proto` | `Client.proto`          | Урезано: только `MutationProto` (с вложенными `ColumnValue`, `QualifierValue`, `Durability`, `MutationType`, `DeleteType`). `Get`, `Result`, `Scan`, `MutateRequest`/`Response` и т. д. откладываются до T43+. |
 
-## Rewrites applied to every file
+## Правки, применённые к каждому файлу
 
-- `package hbase.pb;` → `package virogg.hbasecop.hbase.v1;`
+- `package hbase.pb;` становится `package virogg.hbasecop.hbase.v1;`
 - `option java_package = "org.apache.hadoop.hbase.shaded.protobuf.generated";`
-  → `option java_package = "com.virogg.hbasecop.hbase.v1";`
-- Added `option go_package = "github.com/virogg/go-hbase/internal/wire/hbasepb";`
-- Added SPDX header (Apache-2.0; upstream copyright preserved verbatim).
-- `import "X.proto";` → `import "hbase/X.proto";` so a single
-  `--proto_path=proto` resolves both vendored and project-level files.
+  становится `option java_package = "com.virogg.hbasecop.hbase.v1";`
+- Добавлен `option go_package = "github.com/virogg/go-hbase/internal/wire/hbasepb";`
+- Добавлен SPDX-заголовок (Apache-2.0; copyright upstream сохранён дословно).
+- `import "X.proto";` становится `import "hbase/X.proto";`, чтобы один
+  `--proto_path=proto` разрешал и вендорённые, и проектные файлы.
 
-Field numbers and message bodies are kept byte-identical to upstream so PB
-wire encoding stays compatible with HBase itself — this is what lets a
-RegionObserver hand a `Put` straight to the Go side without translation.
+Номера полей и тела сообщений сохранены побайтово идентичными upstream, чтобы
+PB-кодирование на проводе оставалось совместимым с самим HBase; это позволяет
+RegionObserver передать `Put` прямо на сторону Go без трансляции.
 
-## How to bump
+## Как поднять версию
 
-1. Pick a new HBase tag (e.g. `rel/2.5.11`).
-2. Diff the upstream subtree against this directory; re-apply the rewrites
-   above. Most fields are stable across patch releases — keep the slim
-   subset slim.
-3. Update the table above with the new tag/SHA.
-4. `make proto && make all` — golden tests reject silent wire changes.
+1. Выберите новый тег HBase (например, `rel/2.5.11`).
+2. Сравните upstream-subtree с этим каталогом; заново примените правки
+   выше. Большинство полей стабильны между patch-релизами; держите урезанное
+   подмножество урезанным.
+3. Обновите таблицу выше новым тегом/SHA.
+4. `make proto && make all`; golden-тесты отвергают молчаливые изменения на проводе.

@@ -15,7 +15,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * T33 acceptance — verifies the {@link HeartbeatWatchdog} detection logic in isolation using a
+ * T33 acceptance - verifies the {@link HeartbeatWatchdog} detection logic in isolation using a
  * deterministic fake clock. Wiring into {@code CoprocessorRuntime} is covered separately.
  */
 final class HeartbeatWatchdogTest {
@@ -46,7 +46,7 @@ final class HeartbeatWatchdogTest {
 
   @Test
   void tickWithinThresholdDoesNotFire() {
-    // 2 periods elapsed — under the 3-miss threshold.
+    // 2 periods elapsed - under the 3-miss threshold.
     nowMs.addAndGet(2 * PERIOD.toMillis());
     assertFalse(wd.tick(), "tick must not fire below threshold");
     assertEquals(0, hungCalls.get());
@@ -98,7 +98,7 @@ final class HeartbeatWatchdogTest {
     nowMs.addAndGet(2 * PERIOD.toMillis());
     // Heartbeat arrives just before the third.
     wd.recordHeartbeat();
-    // Tick one more period — only 1 period since last heartbeat.
+    // Tick one more period - only 1 period since last heartbeat.
     nowMs.addAndGet(PERIOD.toMillis());
     assertFalse(wd.tick(), "fresh heartbeat must reset the deadline");
     assertEquals(0, hungCalls.get());

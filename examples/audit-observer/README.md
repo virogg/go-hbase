@@ -1,48 +1,48 @@
 # audit-observer
 
-Post-hook audit example (T72): a Go observer that emits one structured JSON
-audit record for every completed `Put` and `Delete` on the table it is
-attached to.
+Пример post-hook audit (T72): Go-observer, который эмитит одну структурированную
+JSON-запись audit на каждый завершённый `Put` и `Delete` в таблице, к которой
+он подключён.
 
-## What it demonstrates
+## Что демонстрирует
 
-- **Post-hooks** (`PostPut`, `PostDelete`) running under the default
-  **best-effort** policy: auditing can never block or fail the client's
-  write — if the Go side is down, the operation proceeds and the bridge
-  logs a WARN.
-- **Log-based observability** (SPEC §6): records go through `slog` as JSON
-  on stderr; the bridge forwards them into the RegionServer log, ready for
-  any log aggregator.
-- **Payload privacy** (SPEC §8): audit records carry a short SHA-256 digest
-  of the row key (`row_digest`), never the raw key or cell values. The
-  digest is stable per row, so repeated operations on the same row
-  correlate, but the key cannot be recovered.
+- **Post-hooks** (`PostPut`, `PostDelete`), работающие под политикой
+  **best-effort** по умолчанию: audit никогда не может заблокировать или
+  завалить запись клиента — если Go-сторона недоступна, операция продолжается, а
+  bridge логирует WARN.
+- **Log-based observability** (SPEC §6): записи проходят через `slog` как JSON
+  на stderr; bridge пересылает их в лог RegionServer, готовые для любого
+  log-агрегатора.
+- **Приватность payload** (SPEC §8): записи audit несут короткий SHA-256 digest
+  от row key (`row_digest`), никогда — сырой ключ или cell values. Digest
+  стабилен для каждой строки, так что повторные операции над одной и той же
+  строкой коррелируют, но ключ восстановить нельзя.
 
-One audit record looks like:
+Одна запись audit выглядит так:
 
 ```json
 {"level":"INFO","msg":"audit-observer: audit","op":"put","table":"ns:users",
  "region":"d5a1...","row_digest":"9f86d081884c7d65","cells":1,"seq":42}
 ```
 
-## Build
+## Сборка
 
 ```bash
 make audit-observer-jar
 # → examples/audit-observer/target/audit-observer.jar
 ```
 
-## Run the integration test
+## Запуск integration-теста
 
-Brings up the dockerized HBase 2.5 standalone, attaches the coproc to a test
-table, performs 25 Puts + 25 Deletes, and asserts exactly 50 audit records
-in the RegionServer log:
+Поднимает dockerized HBase 2.5 standalone, подключает coproc к тестовой
+таблице, выполняет 25 Puts + 25 Deletes и утверждает ровно 50 записей audit в
+логе RegionServer:
 
 ```bash
 make test-integration-audit
 ```
 
-## Attach to your own table
+## Подключение к своей таблице
 
 ```java
 admin.modifyTable(TableDescriptorBuilder.newBuilder(existing)

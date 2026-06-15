@@ -17,11 +17,11 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
 /**
- * T61 — {@link RegionIdAllocator} acceptance.
+ * T61 - {@link RegionIdAllocator} acceptance.
  *
  * <p>The allocator owns the per-process mapping {@code encodedRegionName → uint32 region_id}
  * referenced by the wire-level frame header. Allocation is monotonic per process lifetime and
- * stable across the lifetime of a region in this process — restarts of the Go process or the region
+ * stable across the lifetime of a region in this process - restarts of the Go process or the region
  * itself produce a fresh id. {@code release} drops the mapping but does <em>not</em> reuse the
  * freed id, so logs and metrics correlated by region_id remain unambiguous after region open/close
  * cycles.

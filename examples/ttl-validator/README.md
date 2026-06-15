@@ -1,55 +1,56 @@
 # ttl-validator
 
-Pre-hook validation example (T73): a Go observer that rejects any `Put`
-whose cell values do not declare a TTL envelope — demonstrating the
-**strict** failure policy, where a Go-side rejection aborts the client's
-write with an `IOException`.
+Пример pre-hook валидации (T73): Go-observer, который отклоняет любой `Put`,
+чьи cell values не объявляют TTL-конверт. Демонстрирует политику отказа
+**strict**, при которой отклонение со стороны Go прерывает запись клиента с
+`IOException`.
 
-## What it demonstrates
+## Что демонстрирует
 
-- **Pre-hooks** (`PrePut`) under the default **strict** policy: returning an
-  error from Go maps to an `IOException` at the HBase client; the write
-  never lands.
-- **In-database validation in Go**: domain rules run inside the
-  RegionServer, on every write path (API, MR jobs, other clients), not just
-  in application code.
-- **Payload privacy** (SPEC §8): rejection reasons name column coordinates
-  (family/qualifier — schema, not data) but never echo cell values.
+- **Pre-hooks** (`PrePut`) под политикой **strict** по умолчанию: возврат
+  ошибки из Go отображается в `IOException` на стороне HBase-клиента; запись
+  никогда не попадает в хранилище.
+- **In-database валидация на Go**: доменные правила выполняются внутри
+  RegionServer, на каждом пути записи (API, MR jobs, другие клиенты), а не
+  только в коде приложения.
+- **Приватность payload** (SPEC §8): причины отклонения называют координаты
+  колонки (family/qualifier: схема, не данные), но никогда не отражают cell
+  values.
 
-## The validation rule
+## Правило валидации
 
-Every cell value must start with a textual TTL envelope:
+Каждое cell value должно начинаться с текстового TTL-конверта:
 
 ```
 ttl=<seconds>;<payload>      e.g.  ttl=3600;{"name":"alice"}
 ```
 
-`<seconds>` is 1–9 digits, > 0. Anything else — missing prefix, zero TTL,
-no `;` terminator — rejects the whole `Put`:
+`<seconds>` — это 1-9 цифр, > 0. Всё остальное (отсутствующий префикс, нулевой
+TTL, отсутствие терминатора `;`) отклоняет весь `Put`:
 
 ```
 org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException:
-  ... ttl-validator: cf:q — value lacks the "ttl=" TTL envelope ...
+  ... ttl-validator: cf:q - value lacks the "ttl=" TTL envelope ...
 ```
 
-## Build
+## Сборка
 
 ```bash
 make ttl-validator-jar
 # → examples/ttl-validator/target/ttl-validator.jar
 ```
 
-## Run the integration test
+## Запуск integration-теста
 
-Brings up the dockerized HBase 2.5 standalone, attaches the coproc, and
-asserts: valid Put succeeds and is readable; invalid Put throws
-`IOException` and leaves no row behind:
+Поднимает dockerized HBase 2.5 standalone, подключает coproc и утверждает:
+валидный Put проходит и доступен на чтение; невалидный Put бросает
+`IOException` и не оставляет за собой строки:
 
 ```bash
 make test-integration-ttl
 ```
 
-## Attach to your own table
+## Подключение к своей таблице
 
 ```java
 admin.modifyTable(TableDescriptorBuilder.newBuilder(existing)

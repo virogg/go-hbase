@@ -23,7 +23,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 /**
- * T21 acceptance — per-message round-trip and deterministic re-encode for every vendored HBase type
+ * T21 acceptance - per-message round-trip and deterministic re-encode for every vendored HBase type
  * and the Phase 2 hook envelopes. We keep upstream field numbers byte-identical (see
  * proto/hbase/UPSTREAM.md) so anything that survives this test is wire-compatible with HBase itself
  * and with the protoc-gen-go side (cf. {@code internal/wire/hbasepb/hbase_roundtrip_test.go}).

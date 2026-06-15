@@ -32,7 +32,7 @@ import org.junit.jupiter.api.Test;
 /**
  * T73 integration test: strict-mode validation on a live HBase 2.5 standalone cluster. A Put whose
  * value carries the {@code ttl=<seconds>;} envelope succeeds and is readable; a Put without it is
- * rejected by the Go observer — the client sees an {@link IOException} and no row is written.
+ * rejected by the Go observer - the client sees an {@link IOException} and no row is written.
  *
  * <p>Invoked by {@code make test-integration-ttl}, which stages {@code ttl-validator.jar} into the
  * container bind-mount and manages the cluster lifecycle. Not part of {@code mvn test}.
@@ -62,7 +62,7 @@ final class TtlValidatorIT {
     cfg.set("hbase.zookeeper.quorum", "localhost");
     cfg.set("hbase.zookeeper.property.clientPort", "2181");
     // The invalid Put fails deterministically on every attempt (validation,
-    // not a transient fault) — keep retries low so the negative case is fast.
+    // not a transient fault) - keep retries low so the negative case is fast.
     cfg.set("hbase.client.retries.number", "2");
     cfg.set("hbase.client.pause", "300");
     cfg.set("hbase.rpc.timeout", "30000");

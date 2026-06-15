@@ -25,20 +25,19 @@ const HookPing uint8 = 0xFF
 const (
 	defaultHeartbeatPeriod = 500 * time.Millisecond
 
-	// outboundQueueSize bounds the in-flight backlog between handler
-	// goroutines and the single writer. A handler that finds the queue
-	// full blocks until either the writer drains or the run context is
-	// canceled — backpressure rather than silent drop.
+	// outboundQueueSize bounds in-flight backlog between handler goroutines
+	// and the single writer. A handler hitting a full queue blocks until the
+	// writer drains or the run context is canceled: backpressure, not drop.
 	outboundQueueSize = 256
 )
 
-// Handler processes one inbound Request frame and returns the frame
-// to send back to the Java side. Returning nil drops the request
-// silently — appropriate for fire-and-forget hooks that have no reply.
+// Handler processes one inbound Request frame and returns the frame to send
+// back to Java. Returning nil drops the request silently (fire-and-forget
+// hooks with no reply).
 //
-// Handler is invoked on a fresh goroutine per request, so blocking
-// inside a Handler does not stall the reader; the Loop's outbound
-// queue applies backpressure when handlers outrun the writer.
+// Runs on a fresh goroutine per request, so blocking inside a Handler does
+// not stall the reader; the Loop's outbound queue applies backpressure when
+// handlers outrun the writer.
 type Handler func(ctx context.Context, req *wire.Message) *wire.Message
 
 // Config configures a Loop.
@@ -57,11 +56,10 @@ type Config struct {
 	// slog.Default().
 	Logger *slog.Logger
 
-	// Handler dispatches inbound Request frames. When nil the Loop
-	// falls back to a default that echoes HookPing (test probe) and
-	// warns for every other hook id — sufficient for T17/T19 but not
-	// for real coprocessors. The SDK (pkg/hbasecop) supplies a
-	// dispatcher that routes to user-implemented Observer methods.
+	// Handler dispatches inbound Request frames. Nil falls back to a default
+	// that echoes HookPing (test probe) and warns for every other hook id:
+	// fine for T17/T19, not for real coprocessors. The SDK (pkg/hbasecop)
+	// supplies a dispatcher routing to user-implemented Observer methods.
 	Handler Handler
 }
 
@@ -94,10 +92,9 @@ func New(cfg Config) (*Loop, error) {
 	return &Loop{cfg: cfg, out: make(chan *wire.Message, outboundQueueSize)}, nil
 }
 
-// defaultHandler is installed when Config.Handler is nil. It exists so
-// the pre-SDK tests (T17/T19 ping/pong) keep working without forcing
-// callers to register their own handler. Real coprocessors install a
-// Handler via pkg/hbasecop.Run.
+// defaultHandler is installed when Config.Handler is nil, so the pre-SDK
+// tests (T17/T19 ping/pong) keep working without callers registering their
+// own. Real coprocessors install a Handler via pkg/hbasecop.Run.
 func defaultHandler(logger *slog.Logger) Handler {
 	return func(_ context.Context, req *wire.Message) *wire.Message {
 		if req.HookID == HookPing {
@@ -120,8 +117,8 @@ func defaultHandler(logger *slog.Logger) Handler {
 
 // Run starts the reader, writer and heartbeat goroutines and blocks
 // until either the parent context is canceled or an inbound SHUTDOWN
-// frame arrives. Returns parent.Err() — nil if the loop stopped via
-// SHUTDOWN.
+// frame arrives. Returns parent.Err(), which is nil if the loop stopped
+// via SHUTDOWN.
 func (l *Loop) Run(parent context.Context) error {
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
@@ -152,10 +149,10 @@ func (l *Loop) runReader(ctx context.Context, cancel context.CancelFunc) {
 		}
 		if err != nil {
 			l.cfg.Logger.Error("cpruntime: inbound recv failed", "err", err)
-			// Cancel the run context so the writer and heartbeat
-			// goroutines also exit; otherwise they block on ctx.Done()
-			// forever and Run() hangs on wg.Wait() (the SHUTDOWN path
-			// already cancels — a transport error must too).
+			// Cancel the run context so writer and heartbeat goroutines
+			// also exit; otherwise they block on ctx.Done() forever and
+			// Run() hangs on wg.Wait(). SHUTDOWN already cancels; a
+			// transport error must too.
 			cancel()
 			return
 		}
@@ -174,19 +171,18 @@ func (l *Loop) runReader(ctx context.Context, cancel context.CancelFunc) {
 			cancel()
 			return
 		}
-		// Other inbound types (Heartbeat, Log, Response, Error) are
-		// ignored at this layer; the supervisor (T18+) drives them
-		// from the Java side.
+		// Other inbound types (Heartbeat, Log, Response, Error) are ignored
+		// here; the supervisor (T18+) drives them from the Java side.
 	}
 }
 
 func (l *Loop) handle(ctx context.Context, req *wire.Message) {
 	defer func() {
-		// Backstop: a panic from a Handler (e.g. user observer code)
-		// must never escape this per-request goroutine and crash the
-		// shared Go process for every region on the RegionServer. The
-		// SDK dispatcher (pkg/hbasecop) recovers first and turns the
-		// panic into an Error frame; this catches any non-SDK Handler.
+		// Backstop: a Handler panic (e.g. user observer code) must never
+		// escape this per-request goroutine and crash the shared Go process
+		// for every region on the RegionServer. The SDK dispatcher
+		// (pkg/hbasecop) recovers first and turns the panic into an Error
+		// frame; this catches any non-SDK Handler.
 		if r := recover(); r != nil {
 			l.cfg.Logger.Error("cpruntime: handler panic recovered",
 				"req_id", req.ReqID, "hook_id", req.HookID, "panic", r)
@@ -248,9 +244,9 @@ func (l *Loop) runHeartbeat(ctx context.Context) {
 			select {
 			case l.out <- &wire.Message{Type: wire.TypeHeartbeat}:
 			default:
-				// Outbound queue saturated — drop this beat rather
-				// than block the ticker. A missed heartbeat surfaces
-				// via the Java supervisor's watchdog (T33).
+				// Outbound queue saturated; drop this beat rather than
+				// block the ticker. A missed heartbeat surfaces via the
+				// Java supervisor's watchdog (T33).
 				l.cfg.Logger.Warn("cpruntime: heartbeat dropped (outbound queue full)")
 			}
 		}
@@ -266,12 +262,11 @@ func encodeFrame(m *wire.Message) ([]byte, error) {
 }
 
 // decodeFrame reassembles one logical message from a single ring slot.
-// The transport is one-message-per-slot: a multi-chunk message arrives
-// with all its chunk frames concatenated in the slot, and the Decoder's
-// internal loop reassembles them. Any bytes left after the first complete
-// message mean the slot is corrupt or carried more than one message — we
-// surface that as a clear error rather than silently dropping the
-// remainder (the reader logs and skips the slot).
+// Transport is one-message-per-slot: a multi-chunk message arrives with all
+// chunk frames concatenated in the slot, reassembled by the Decoder's internal
+// loop. Bytes left after the first complete message mean the slot is corrupt
+// or carried more than one message; we surface that as an error rather than
+// silently dropping the remainder (the reader logs and skips the slot).
 func decodeFrame(data []byte) (*wire.Message, error) {
 	r := bytes.NewReader(data)
 	msg, err := wire.NewDecoder(r).Decode()

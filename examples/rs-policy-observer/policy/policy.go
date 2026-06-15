@@ -6,7 +6,7 @@
 // and, when WAL-roll vetoing is enabled, rejects preRollWALWriterRequest
 // by returning an error so the (strict-by-default) Java
 // RegionServerObserverAdapter surfaces it as an IOException back to the
-// HBase admin client — the failure path required by T52's AC.
+// HBase admin client - the failure path required by T52's AC.
 package policy
 
 import (
@@ -39,7 +39,7 @@ func New(vetoWalRoll bool) *Observer {
 }
 
 // PreStopRegionServer records that the RegionServer is shutting down.
-// The hook is observe-only — it never vetoes a stop.
+// The hook is observe-only - it never vetoes a stop.
 func (o *Observer) PreStopRegionServer(
 	_ context.Context,
 	_ hbasecop.ObserverEnv,

@@ -147,7 +147,7 @@
                 load on the HMaster's *system* classloader (region coproc-jars get
                 an isolated CoprocessorClassLoader; master ones do not). HBase 2.5
                 bundles protobuf-java 2.5.0 there, whose AbstractMessage has a
-                private memoizedSize field — our generated proto classes are built
+                private memoizedSize field - our generated proto classes are built
                 against protobuf 3.25.5 and access that field directly, so the
                 2.5.0 class on the shared classloader triggers IllegalAccessError
                 and aborts the master. Relocating com.google.protobuf into a

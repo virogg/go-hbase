@@ -10,9 +10,9 @@
 //
 // Phase 2 wired PrePut/PostPut end-to-end with real HBase types
 // (vendored under proto/hbase/). T41 extends the surface to every
-// RegionObserver hook from HBase 2.5 — the messages other than
+// RegionObserver hook from HBase 2.5 - the messages other than
 // Pre/PostPutRequest carry only HookContext for now; T42 grows each
-// stub with its per-hook payload (Cell, Get, Scan, …).
+// stub with its per-hook payload (Cell, Get, Scan, ...).
 //
 // Stability: alpha.
 
@@ -199,7 +199,7 @@ enum HookId {
 
   // --- WALObserver (T53). IDs 220-255 reserved for the WAL surface. ---
 
-  // WAL write — latency-critical hot path.
+  // WAL write - latency-critical hot path.
   HOOK_ID_PRE_WAL_WRITE = 220;
   HOOK_ID_POST_WAL_WRITE = 221;
 
@@ -252,7 +252,7 @@ message HookResponse {
   // (preAppend / preIncrement and their after-row-lock variants). When
   // bypass = true on one of those hooks, these cells are returned to the
   // client as the operation's Result (an empty list yields an empty
-  // Result). Ignored by every other hook. Additive (field 4) — minor
+  // Result). Ignored by every other hook. Additive (field 4) - minor
   // version compatible; older peers simply don't read it.
   repeated virogg.hbasecop.hbase.v1.Cell result = 4;
 }
@@ -271,8 +271,8 @@ message PostPutRequest {
 }
 
 // ---------------------------------------------------------------------
-// T41 stub requests. Each carries HookContext only — per-hook payload
-// (Cell, Get, Scan, …) lands in T42 as fields are appended. The proto
+// T41 stub requests. Each carries HookContext only - per-hook payload
+// (Cell, Get, Scan, ...) lands in T42 as fields are appended. The proto
 // number-1 ctx field stays stable for forward compatibility.
 // ---------------------------------------------------------------------
 
@@ -371,7 +371,7 @@ message PostExistsRequest {
   bool exists = 3;
 }
 
-// Write path — Delete + version-stamp prepare (T42 Wave 2).
+// Write path - Delete + version-stamp prepare (T42 Wave 2).
 message PreDeleteRequest {
   HookContext ctx = 1;
   virogg.hbasecop.hbase.v1.MutationProto mutation = 2;
@@ -607,7 +607,7 @@ message PreStoreScannerOpenRequest {
 }
 
 // WAL replay/restore (T42 Wave 4). RegionInfo is already vendored under
-// proto/hbase/HBase.proto. WALKey/WALEdit are slim envelopes — we ship
+// proto/hbase/HBase.proto. WALKey/WALEdit are slim envelopes - we ship
 // the shippable scalars (seq num, write time, table, encoded region)
 // plus the WALEdit cell array; runtime-only fields (e.g. cluster ids)
 // are dropped today.
@@ -622,7 +622,7 @@ message WalKeyProto {
 
 message WalEditProto {
   repeated virogg.hbasecop.hbase.v1.Cell cell = 1;
-  // Replay metadata stays a serialized Cell list — HBase already encodes
+  // Replay metadata stays a serialized Cell list - HBase already encodes
   // it that way internally.
   bool has_replay_meta = 2;
 }
@@ -721,7 +721,7 @@ message PostMutationBeforeWALRequest {
   // Discriminator carrying the value of RegionObserver.MutationType, mapped
   // 1:1 onto MutationProto.MutationType (APPEND=0, INCREMENT=1, PUT=2, DELETE=3).
   // Held as int32 because proto3 messages cannot reference proto2 enums
-  // directly — the vendored MutationProto.MutationType is proto2.
+  // directly - the vendored MutationProto.MutationType is proto2.
   int32 mutation_type = 2;
   virogg.hbasecop.hbase.v1.MutationProto mutation = 3;
   virogg.hbasecop.hbase.v1.Cell old_cell = 4;
@@ -760,7 +760,7 @@ message PreWALAppendRequest {
 // concrete table affected travels in the per-hook payload. The encoded
 // TableDescriptor / RegionInfo bytes are the canonical HBase 2.5
 // protobuf serialisations (TableDescriptor.toByteArray /
-// RegionInfo.toByteArray) — opaque to the Go side except as identifiers.
+// RegionInfo.toByteArray) - opaque to the Go side except as identifiers.
 // ---------------------------------------------------------------------
 
 message PreCreateTableRequest {
@@ -864,7 +864,7 @@ message PostUnassignRequest {
 
 message PreBalanceRequest {
   HookContext ctx = 1;
-  // 0=NONE, 1=NORMAL, 2=FORCE — mirrors HBase BalanceRequest.BalanceMode.
+  // 0=NONE, 1=NORMAL, 2=FORCE - mirrors HBase BalanceRequest.BalanceMode.
   int32 balance_mode = 2;
 }
 message PostBalanceRequest {
@@ -962,7 +962,7 @@ message PostWALRollRequest {
 // BulkLoadObserver Request messages (T54).
 //
 // HBase 2.5's BulkLoadObserver hooks take no payload arguments beyond
-// the observer context — the table/region the bulk load targets travels
+// the observer context - the table/region the bulk load targets travels
 // in HookContext (filled from the RegionCoprocessorEnvironment on the
 // Java side).
 // ---------------------------------------------------------------------

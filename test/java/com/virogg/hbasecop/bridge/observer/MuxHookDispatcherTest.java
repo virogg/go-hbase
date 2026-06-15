@@ -21,7 +21,7 @@ import org.junit.jupiter.api.Test;
 /**
  * Unit coverage for {@link MuxHookDispatcher}: the synchronous request/response gateway over a
  * {@link Multiplexer}. Exercises the RESPONSE-unwrap path, the ERROR-frame → IOException mapping,
- * and the timeout path (which must cancel the pending entry so it is not leaked — the H3 fix).
+ * and the timeout path (which must cancel the pending entry so it is not leaked; the H3 fix).
  */
 class MuxHookDispatcherTest {
 

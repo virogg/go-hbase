@@ -33,7 +33,7 @@ public final class MuxHookDispatcher implements HookDispatcher {
   /**
    * Budget for spin-polling the response future before parking in {@code fut.get(timeout)}. Round
    * trips through the no-op Go observer complete in ~100µs (T81 bench), so a parked caller pays two
-   * context switches per hook — measurably more than the remaining wait. Spinning just past the
+   * context switches per hook - measurably more than the remaining wait. Spinning just past the
    * typical completion keeps the fast path park-free; slow or failing hooks fall through to the
    * blocking wait after at most this budget, so timeout semantics are unchanged.
    */

@@ -60,7 +60,7 @@ public final class GoProcess implements AutoCloseable {
    * @param cfg spawn configuration
    * @param commandChannel a {@code RoleProducer} channel on the Java→Go ring; used by {@link
    *     #stop()} to deliver the SHUTDOWN frame. Lifecycle (open/close) is the caller's
-   *     responsibility — {@code GoProcess} only writes one frame to it.
+   *     responsibility; {@code GoProcess} only writes one frame to it.
    */
   public GoProcess(GoProcessConfig cfg, Channel commandChannel) {
     this.cfg = Objects.requireNonNull(cfg, "cfg");
@@ -159,12 +159,12 @@ public final class GoProcess implements AutoCloseable {
 
   /**
    * Force-kill the underlying process with {@code SIGKILL} (via {@link Process#destroyForcibly()})
-   * and wait for it to exit. Used by the heartbeat watchdog (T33) when the Go side is hung. Safe to
-   * call on a never-started or already-dead process — both are no-ops. Idempotent.
+   * and wait for it to exit. Used by the heartbeat watchdog (T33) when the Go side is hung. No-op
+   * on a never-started or already-dead process. Idempotent.
    *
    * <p>Unlike {@link #stop()}, this does <em>not</em> send a {@code SHUTDOWN} frame and does
    * <em>not</em> wait for graceful exit. Stdout/stderr pumps and the extracted ELF are not cleaned
-   * up here — call {@link #stop()} afterwards (it tolerates an already-dead process) to finish the
+   * up here; call {@link #stop()} afterwards (it tolerates an already-dead process) to finish
    * teardown.
    */
   public synchronized void destroyForcibly() {
@@ -219,16 +219,16 @@ public final class GoProcess implements AutoCloseable {
   }
 
   /**
-   * Compute the SHA-256 digest of {@code file} as 64 lower-case hex characters. Package-private so
-   * the supervisor test suite (and a future {@code hbasecop-build} verifier) can exercise it
-   * directly without spawning a Go process.
+   * SHA-256 digest of {@code file} as 64 lower-case hex chars. Package-private so the supervisor
+   * test suite (and a future {@code hbasecop-build} verifier) can exercise it without spawning a Go
+   * process.
    */
   static String computeSha256Hex(Path file) throws IOException {
     MessageDigest md;
     try {
       md = MessageDigest.getInstance("SHA-256");
     } catch (NoSuchAlgorithmException e) {
-      // SHA-256 is mandated by every JRE since 7 — surface clearly if the impossible happens.
+      // SHA-256 is mandated on every JRE since 7; surface clearly if it's somehow absent.
       throw new IOException("SHA-256 not available on this JRE", e);
     }
     byte[] buf = new byte[8192];
@@ -265,7 +265,7 @@ public final class GoProcess implements AutoCloseable {
       throw new IOException(
           "GoProcess: ELF SHA-256 mismatch for "
               + file
-              + " — expected="
+              + " - expected="
               + expected
               + " actual="
               + actual);

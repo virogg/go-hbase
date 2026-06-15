@@ -22,12 +22,12 @@ import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 
 /**
  * T36 fault-injection RegionCoprocessor. Acquires a shared {@link CoprocessorRuntime} via {@link
- * SharedRuntime} keyed on this class — the embedded Go binary is the {@code fault-observer} ELF
+ * SharedRuntime} keyed on this class - the embedded Go binary is the {@code fault-observer} ELF
  * which dispatches a configurable fault on every prePut. The fault mode is selected by the {@code
  * HBASECOP_FAULT_MODE} env var on the Go side, propagated via {@link
  * CoprocessorRuntime.Config#extraEnv()} from the per-table {@link #KEY_FAULT_MODE} config.
  *
- * <p>Heartbeats and the restart controller (T33–T35) are wired with aggressive defaults so the
+ * <p>Heartbeats and the restart controller (T33-T35) are wired with aggressive defaults so the
  * fault matrix observes the supervisor's recovery within the test's time budget.
  */
 public final class FaultRegionObserver implements RegionCoprocessor {

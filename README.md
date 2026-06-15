@@ -1,11 +1,11 @@
 # go-hbase
 
-Write HBase Observer-coprocessors in **Go**.
+Пишите HBase Observer-coprocessor'ы на **Go**.
 
-A long-lived Go process runs next to each RegionServer and talks to a thin
-Java bridge over a lock-free **shared-memory ring buffer** (protobuf frames,
-no sockets, no fork-per-call as in Hadoop Streaming). Your domain logic runs
-*inside the database*, on every write/read path, in Go.
+Долгоживущий Go-процесс работает рядом с каждым RegionServer и общается с
+тонким Java-мостом через lock-free **shared-memory ring buffer** (protobuf-фреймы,
+без сокетов, без fork-per-call как в Hadoop Streaming). Ваша доменная логика
+выполняется *внутри базы данных*, на каждом пути записи/чтения, на Go.
 
 ```
 HBase client ──RPC──▶ RegionServer
@@ -14,35 +14,35 @@ HBase client ──RPC──▶ RegionServer
                       Go process (your observer, pkg/hbasecop SDK)
 ```
 
-> **Status: pre-release.** Implemented through Phase 7 of
-> [`tasks/plan.md`](tasks/plan.md); v0.1.0 is gated on
+> **Статус: pre-release.** Реализовано по Phase 7 включительно из
+> [`tasks/plan.md`](tasks/plan.md); v0.1.0 заблокирован
 > [`tasks/RELEASE-BLOCKERS.md`](tasks/RELEASE-BLOCKERS.md).
-> Targets HBase **2.5.x**, Java 11, Linux x86-64 only.
+> Целевая платформа — HBase **2.5.x**, Java 11, только Linux x86-64.
 
-- Full spec: [`SPEC.md`](SPEC.md) · architecture: [`docs/architecture.md`](docs/architecture.md)
-- IPC primitive: [`virogg/java-go-shmem`](https://github.com/virogg/java-go-shmem)
+- Полная спецификация: [`SPEC.md`](SPEC.md) · архитектура: [`docs/architecture.md`](docs/architecture.md)
+- IPC-примитив: [`virogg/java-go-shmem`](https://github.com/virogg/java-go-shmem)
 
-## Install from a release
+## Установка из релиза
 
-Each [GitHub release](https://github.com/virogg/go-hbase/releases) ships two
-artifacts:
+Каждый [GitHub release](https://github.com/virogg/go-hbase/releases) поставляет
+два артефакта:
 
-- `hbasecop-bridge-<version>.jar` — the Java bridge your coproc-jar shades in
-  (install into your Maven repo: `mvn install:install-file
+- `hbasecop-bridge-<version>.jar`: Java-мост, который ваш coproc-jar shade'ит в себя
+  (установите в свой Maven-репозиторий: `mvn install:install-file
   -Dfile=hbasecop-bridge-<version>.jar -DgroupId=com.virogg
   -DartifactId=hbasecop-bridge -Dversion=<version> -Dpackaging=jar`).
-- `hbasecop-build-linux-amd64` — the packaging CLI; `chmod +x` and use it as
-  `hbasecop-build` in step 3 below.
+- `hbasecop-build-linux-amd64`: CLI для упаковки; сделайте `chmod +x` и используйте
+  как `hbasecop-build` в шаге 3 ниже.
 
-The Go SDK is fetched as a normal module:
-`go get github.com/virogg/go-hbase/pkg/hbasecop@v<version>`. To build
-everything from source instead, follow the quick start.
+Go SDK подтягивается как обычный модуль:
+`go get github.com/virogg/go-hbase/pkg/hbasecop@v<version>`. Чтобы собрать
+всё из исходников, следуйте quick start.
 
-## Quick start — your first observer in ~5 minutes
+## Quick start: ваш первый observer за ~5 минут
 
-Prereqs: Go ≥ 1.24, JDK 11, Maven, Docker (for the dev cluster), Linux x86-64.
+Требования: Go >= 1.24, JDK 11, Maven, Docker (для dev-кластера), Linux x86-64.
 
-**1. Clone + bootstrap** (the shmem dependency is a git submodule):
+**1. Clone + bootstrap** (зависимость shmem — это git-submodule):
 
 ```bash
 git clone --recursive https://github.com/virogg/go-hbase
@@ -51,8 +51,8 @@ make deps          # go mod download + installs java-go-shmem into ~/.m2
 make all           # lint + build + test, both languages
 ```
 
-**2. Write the Go observer.** Embed `UnimplementedRegionObserver`, override
-only the hooks you need:
+**2. Напишите Go-observer.** Встройте `UnimplementedRegionObserver`, переопределите
+только нужные вам хуки:
 
 ```go
 package main
@@ -88,12 +88,12 @@ func main() {
 }
 ```
 
-`hbasecop.Run` blocks for the life of the coprocessor; configuration comes
-from environment variables set by the Java supervisor. Master / RegionServer
-/ WAL / BulkLoad surfaces use `RunMaster` / `RunRegionServer` / `RunWAL` /
-`RunBulkLoad`.
+`hbasecop.Run` блокируется на всё время жизни coprocessor'а; конфигурация
+приходит из переменных окружения, выставленных Java-supervisor'ом. Поверхности
+Master / RegionServer / WAL / BulkLoad используют `RunMaster` / `RunRegionServer` /
+`RunWAL` / `RunBulkLoad`.
 
-**3. Build the ELF and pack the coproc-jar** with the `hbasecop-build` CLI:
+**3. Соберите ELF и упакуйте coproc-jar** с помощью CLI `hbasecop-build`:
 
 ```bash
 GOOS=linux GOARCH=amd64 go build -o myobserver ./path/to/your/observer
@@ -107,17 +107,17 @@ go run ./cmd/hbasecop-build \
   --out            my-observer.jar
 ```
 
-The CLI shades the bridge, embeds your ELF at
-`bin/linux-amd64/hbasecop-runtime`, and writes its SHA-256 into the manifest
-(`HbaseCop-Go-Bin-SHA256`) — the supervisor verifies the digest before exec
-and refuses a corrupted or wrong-arch binary.
+CLI shade'ит мост, встраивает ваш ELF по пути
+`bin/linux-amd64/hbasecop-runtime` и записывает его SHA-256 в манифест
+(`HbaseCop-Go-Bin-SHA256`); supervisor проверяет дайджест перед exec
+и отказывается запускать повреждённый бинарь или бинарь не той архитектуры.
 
-`--observer-class` is the Java `RegionCoprocessor` HBase instantiates. The
-examples each ship a small delegating class (~30 lines of boilerplate; see
-[`examples/counter-observer`](examples/counter-observer)); reuse one or copy
-it under your own package name into the jar.
+`--observer-class` — это Java-класс `RegionCoprocessor`, который инстанцирует HBase.
+Каждый пример поставляет небольшой делегирующий класс (~30 строк boilerplate; см.
+[`examples/counter-observer`](examples/counter-observer)); переиспользуйте один
+из них или скопируйте под своим именем пакета в jar.
 
-**4. Deploy on a table:**
+**4. Разверните на таблице:**
 
 ```bash
 make hbase-up      # dockerized HBase 2.5 standalone with a /coproc-jars bind-mount
@@ -134,114 +134,114 @@ admin.createTable(TableDescriptorBuilder.newBuilder(tableName)
     .build());
 ```
 
-Every Put on that table now flows through your Go code. To see it working
-end-to-end right away: `make test-integration` (counter example, 100 Puts →
-100 Go-side hook invocations, asserted).
+Теперь каждый Put по этой таблице проходит через ваш Go-код. Чтобы сразу увидеть
+работу end-to-end: `make test-integration` (пример counter, 100 Put'ов →
+100 вызовов хука на Go-стороне, с проверкой).
 
-## Examples
+## Примеры
 
-| Example | Hooks | Demonstrates | IT |
+| Пример | Хуки | Демонстрирует | IT |
 |---|---|---|---|
-| [`counter-observer`](examples/counter-observer) | PrePut | minimal observer, log-based assertion | `make test-integration` |
-| [`audit-observer`](examples/audit-observer) | PostPut/PostDelete | best-effort post-hook audit, payload privacy | `make test-integration-audit` |
-| [`ttl-validator`](examples/ttl-validator) | PrePut | strict validation → client IOException | `make test-integration-ttl` |
-| [`filter-observer`](examples/filter-observer) | PreGetOp/Scan/Batch/Flush/Compact | read-path bypass, storage hooks | `make test-integration-read` |
-| [`fault-observer`](examples/fault-observer) | PrePut/PostPut | crash/hang/OOM injection (fault matrix) | `make test-fault` |
-| [`master-policy-observer`](examples/master-policy-observer) | PreCreateTable | MasterObserver policy veto | `make test-integration-master` |
+| [`counter-observer`](examples/counter-observer) | PrePut | минимальный observer, проверка по логам | `make test-integration` |
+| [`audit-observer`](examples/audit-observer) | PostPut/PostDelete | best-effort post-хук аудита, приватность payload | `make test-integration-audit` |
+| [`ttl-validator`](examples/ttl-validator) | PrePut | strict-валидация → client IOException | `make test-integration-ttl` |
+| [`filter-observer`](examples/filter-observer) | PreGetOp/Scan/Batch/Flush/Compact | bypass на пути чтения, хуки хранилища | `make test-integration-read` |
+| [`fault-observer`](examples/fault-observer) | PrePut/PostPut | инъекция crash/hang/OOM (fault matrix) | `make test-fault` |
+| [`master-policy-observer`](examples/master-policy-observer) | PreCreateTable | veto политики MasterObserver | `make test-integration-master` |
 | [`rs-policy-observer`](examples/rs-policy-observer) | PreRollWALWriterRequest | RegionServerObserver | `make test-integration-rs` |
 
-## Configuration reference
+## Справочник по конфигурации
 
-All keys are read from the HBase `Configuration` (`hbase-site.xml` or table
-descriptor). Defaults are what ships; every timeout/buffer is configurable
-(SPEC §8).
+Все ключи читаются из HBase `Configuration` (`hbase-site.xml` или дескриптор
+таблицы). Значения по умолчанию — это то, что поставляется; каждый таймаут/буфер
+настраивается (SPEC §8).
 
-### Failure policy (per hook)
+### Политика отказов (per-hook)
 
-| Key | Values / default |
+| Ключ | Значения / по умолчанию |
 |---|---|
-| `hbasecop.policy.<hook>` (e.g. `hbasecop.policy.prePut`) | `strict` \| `best-effort`. Default: `pre*` → **strict**, `post*` → **best-effort**, anything else → strict |
-| `hbasecop.timeout.<hook>` | Hadoop duration (**include the unit**: `500ms`, `2s`). Per-hook wait for the Go response |
-| `hbasecop.timeout.default` | Fallback timeout. Default **5s** |
+| `hbasecop.policy.<hook>` (напр. `hbasecop.policy.prePut`) | `strict` \| `best-effort`. По умолчанию: `pre*` → **strict**, `post*` → **best-effort**, всё остальное → strict |
+| `hbasecop.timeout.<hook>` | Hadoop duration (**указывайте единицу**: `500ms`, `2s`). Per-hook ожидание ответа от Go |
+| `hbasecop.timeout.default` | Резервный таймаут. По умолчанию **5s** |
 
-**strict**: Go error / timeout / process-down → `IOException` to the client,
-operation aborts. **best-effort**: WARN in the RegionServer log, hook is a
-no-op, operation proceeds. Note: hooks whose HBase signature cannot throw
-(`postOpen`, `postClose`, `postCompactSelection`) are effectively
-best-effort regardless of configuration.
+**strict**: ошибка Go / таймаут / процесс упал → `IOException` клиенту,
+операция прерывается. **best-effort**: WARN в логе RegionServer, хук становится
+no-op, операция продолжается. Замечание: хуки, чья сигнатура в HBase не может
+бросать исключение (`postOpen`, `postClose`, `postCompactSelection`), фактически
+работают как best-effort независимо от конфигурации.
 
-### Supervisor: heartbeat, restart
+### Supervisor: heartbeat, рестарт
 
-| Key | Default | Meaning |
+| Ключ | По умолчанию | Значение |
 |---|---|---|
-| `hbasecop.heartbeat.period` | `500ms` | Go→Java heartbeat interval |
-| `hbasecop.heartbeat.miss-threshold` | `3` | consecutive misses → SIGKILL + restart |
-| `hbasecop.restart.initial-delay` | `200ms` | first restart backoff (doubles each failure) |
-| `hbasecop.restart.max-delay` | `5s` | backoff cap (jitter ±20%) |
-| `hbasecop.restart.max-fails` | `5` | consecutive failures → mark unhealthy |
-| `hbasecop.restart.probe-interval` | `30s` | restart probe cadence while unhealthy |
-| `hbasecop.restart.deadline` | `3s` | how long calls issued during a crash wait for the restart before failing by policy |
+| `hbasecop.heartbeat.period` | `500ms` | интервал heartbeat Go→Java |
+| `hbasecop.heartbeat.miss-threshold` | `3` | подряд пропущенных → SIGKILL + рестарт |
+| `hbasecop.restart.initial-delay` | `200ms` | backoff первого рестарта (удваивается на каждом сбое) |
+| `hbasecop.restart.max-delay` | `5s` | потолок backoff (jitter ±20%) |
+| `hbasecop.restart.max-fails` | `5` | сбоев подряд → пометить unhealthy |
+| `hbasecop.restart.probe-interval` | `30s` | частота probe рестарта в состоянии unhealthy |
+| `hbasecop.restart.deadline` | `3s` | сколько вызовы, отправленные во время краша, ждут рестарта, прежде чем упасть по политике |
 
-Crash detection and auto-restart run even when heartbeats are disabled.
+Детекция краша и авто-рестарт работают даже когда heartbeat'ы отключены.
 
-### Go process environment (set by the supervisor)
+### Окружение Go-процесса (выставляется supervisor'ом)
 
-`HBASECOP_SHMEM_IN_PATH`, `HBASECOP_SHMEM_OUT_PATH` (mmap ring files),
-`HBASECOP_RING_CAPACITY` (slots, default 16), `HBASECOP_RING_MAX_OBJECT_SIZE`
-(bytes/slot, default 1 MiB), `HBASECOP_HEARTBEAT_MS`. The Go SDK logs JSON
-via `slog` to stderr; the bridge forwards each line into the RegionServer log.
+`HBASECOP_SHMEM_IN_PATH`, `HBASECOP_SHMEM_OUT_PATH` (mmap-файлы ring),
+`HBASECOP_RING_CAPACITY` (слоты, по умолчанию 16), `HBASECOP_RING_MAX_OBJECT_SIZE`
+(байт/слот, по умолчанию 1 MiB), `HBASECOP_HEARTBEAT_MS`. Go SDK логирует JSON
+через `slog` в stderr; мост пробрасывает каждую строку в лог RegionServer.
 
 ## FAQ / troubleshooting
 
-**What happens when my Go observer crashes or hangs?**
-The supervisor detects exit immediately (and hang via missed heartbeats →
-SIGKILL), restarts with exponential backoff, and fails the in-flight hooks by
-policy: strict callers get an `IOException`; best-effort callers proceed. New
-calls during the restart window wait up to `hbasecop.restart.deadline`. After
-`max-fails` consecutive failed restarts the coprocessor is marked unhealthy
-and probed every `probe-interval`. The fault-injection matrix
-(`make test-fault`) asserts no data loss and no double-apply across kill -9 /
-hang / exit / OOM in both policies.
+**Что происходит, когда мой Go-observer падает или зависает?**
+Supervisor немедленно обнаруживает выход (а зависание — через пропущенные
+heartbeat'ы → SIGKILL), перезапускает с экспоненциальным backoff и заваливает
+in-flight хуки по политике: strict-вызывающие получают `IOException`;
+best-effort-вызывающие продолжают. Новые вызовы в окне рестарта ждут до
+`hbasecop.restart.deadline`. После `max-fails` неудачных рестартов подряд
+coprocessor помечается как unhealthy и пробится каждые `probe-interval`. Матрица
+fault-injection (`make test-fault`) проверяет отсутствие потери данных и
+двойного применения при kill -9 / зависании / выходе / OOM в обеих политиках.
 
-**A panic in my Go callback?**
-Recovered by the SDK and returned as a hook error (policy applies). It never
-kills the shared Go process.
+**Panic в моём Go-колбэке?**
+Перехватывается SDK и возвращается как ошибка хука (применяется политика). Он
+никогда не убивает общий Go-процесс.
 
-**`ELF SHA-256 mismatch` at startup?**
-The jar's embedded Go binary doesn't match its manifest digest — corrupted
-jar or a stale/mixed build. Rebuild with `hbasecop-build` (it writes the
-digest) and redeploy. This check is corruption/wrong-arch protection, not a
-signature scheme.
+**`ELF SHA-256 mismatch` при старте?**
+Встроенный в jar Go-бинарь не совпадает с дайджестом в манифесте: повреждённый
+jar или устаревшая/смешанная сборка. Пересоберите через `hbasecop-build` (он
+пишет дайджест) и переразверните. Эта проверка защищает от повреждения/неверной
+архитектуры, это не схема подписи.
 
 **`classpath resource not found: bin/linux-amd64/hbasecop-runtime`?**
-The coproc-jar has no embedded ELF — pack with `hbasecop-build` (or the
-example Maven setup), and build the ELF with `GOOS=linux GOARCH=amd64`.
+В coproc-jar нет встроенного ELF: упакуйте через `hbasecop-build` (или пример
+Maven-настройки) и соберите ELF с `GOOS=linux GOARCH=amd64`.
 
-**My Put fails with `RetriesExhaustedWithDetailsException`.**
-That's strict policy working: a pre-hook returned an error (see the
-RegionServer log for the Go-side reason). Validation failures are
-deterministic — the client retries won't change the outcome.
+**Мой Put падает с `RetriesExhaustedWithDetailsException`.**
+Это работает strict-политика: pre-хук вернул ошибку (причину со стороны Go см.
+в логе RegionServer). Сбои валидации детерминированы; ретраи клиента не изменят
+исход.
 
-**Which hooks can `Bypass` / substitute a result?**
-`HookResult{Bypass: true}` maps to `ObserverContext.bypass()` where HBase 2.5
-allows it (a WARN is logged where it doesn't). `PreAppend`/`PreIncrement`
-(and `*AfterRowLock`) substitute the client-visible `Result` from
-`HookResult.ResultCells` instead. `PreScannerOpen` emulates bypass by
-constraining the scan to an empty range. Batch hooks use
-`HookResult.BlockedIndices` to fail individual mutations.
+**Какие хуки могут делать `Bypass` / подменять результат?**
+`HookResult{Bypass: true}` отображается в `ObserverContext.bypass()` там, где
+HBase 2.5 это допускает (где нет — логируется WARN). `PreAppend`/`PreIncrement`
+(и `*AfterRowLock`) вместо этого подменяют видимый клиенту `Result` из
+`HookResult.ResultCells`. `PreScannerOpen` эмулирует bypass, ограничивая scan
+пустым диапазоном. Batch-хуки используют `HookResult.BlockedIndices`, чтобы
+завалить отдельные мутации.
 
-**Sensitive data in logs?**
-The framework never logs row keys or cell values at default level (SPEC §8),
-and forwards your observer's stdout/stderr into the RegionServer log at INFO
-— don't print payloads. See `examples/audit-observer` for the
-digest-instead-of-key pattern.
+**Чувствительные данные в логах?**
+Фреймворк никогда не логирует row key'и или значения ячеек на уровне по умолчанию
+(SPEC §8) и пробрасывает stdout/stderr вашего observer'а в лог RegionServer на
+уровне INFO; не печатайте payload'ы. См. `examples/audit-observer` для паттерна
+«дайджест вместо ключа».
 
-**How many Go processes per RegionServer?**
-One per coproc-jar (`SharedRuntime` refcounts it across all regions/tables
-using that jar on the RS). Multiple distinct jars each get their own process
-and ring pair.
+**Сколько Go-процессов на один RegionServer?**
+По одному на coproc-jar (`SharedRuntime` ведёт refcount по всем регионам/таблицам,
+использующим этот jar на RS). Каждый отдельный jar получает собственный процесс
+и пару ring'ов.
 
-## Repository layout
+## Структура репозитория
 
 ```
 pkg/hbasecop/        public Go SDK (the only public Go package)
@@ -254,7 +254,7 @@ test/integration/    dockerized HBase 2.5 + *IT tests
 docs/                architecture, benches, coverage matrix
 ```
 
-## Development
+## Разработка
 
 ```bash
 make help                # every target, annotated
@@ -265,10 +265,10 @@ make hbase-up            # dev cluster on localhost:16010
 make test-integration    # counter example end-to-end
 ```
 
-CI runs structure/license checks, Go (lint+race+coverage+fuzz), Java
-(spotless+tests+JaCoCo), the cross-language golden-corpus contract job, and
-— on main/nightly — the full integration matrix on HBase 2.5.0 and 2.5.11.
+CI прогоняет проверки структуры/лицензий, Go (lint+race+coverage+fuzz), Java
+(spotless+tests+JaCoCo), кросс-языковой contract-job на golden-corpus и
+(на main/nightly) полную матрицу интеграции на HBase 2.5.0 и 2.5.11.
 
-## License
+## Лицензия
 
-Apache 2.0. See [`LICENSE`](LICENSE).
+Apache 2.0. См. [`LICENSE`](LICENSE).

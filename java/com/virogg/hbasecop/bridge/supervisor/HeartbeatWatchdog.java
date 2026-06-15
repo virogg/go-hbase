@@ -9,7 +9,7 @@ import java.util.function.LongConsumer;
 import java.util.function.LongSupplier;
 
 /**
- * Heartbeat liveness detector. Owns no threads of its own — callers feed it heartbeats via {@link
+ * Heartbeat liveness detector. Owns no threads of its own - callers feed it heartbeats via {@link
  * #recordHeartbeat()} and periodically poll {@link #tick()}; when no heartbeat has been recorded
  * for at least {@code missThreshold × period} the watchdog fires the {@code onHung} callback
  * exactly once (until the next {@link #recordHeartbeat()} re-arms it).
@@ -18,7 +18,7 @@ import java.util.function.LongSupplier;
  * tests drive time deterministically and production wires {@code System::currentTimeMillis}.
  *
  * <p>{@link #recordHeartbeat()} and {@link #tick()} are safe to call concurrently from different
- * threads — typical use is a reader thread recording heartbeats and a scheduler ticking.
+ * threads - typical use is a reader thread recording heartbeats and a scheduler ticking.
  */
 public final class HeartbeatWatchdog {
 

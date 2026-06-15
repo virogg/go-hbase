@@ -19,7 +19,7 @@ import java.util.Optional;
  * payload-agnostic: framing and serialization are the caller's responsibility (see {@code
  * com.virogg.hbasecop.bridge.wire}).
  *
- * <p>Instances are not thread-safe — pair each Channel with a single owning thread.
+ * <p>Instances are not thread-safe - pair each Channel with a single owning thread.
  */
 public final class Channel implements AutoCloseable {
 

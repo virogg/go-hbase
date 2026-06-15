@@ -47,7 +47,7 @@ type UnimplementedRegionServerObserver struct{}
 
 var _ RegionServerObserver = UnimplementedRegionServerObserver{}
 
-// The methods below are intentionally undocumented one-liners — they all
+// The methods below are intentionally undocumented one-liners - they all
 // do the same thing (return the zero value, no error). The type
 // doc-comment above is the single source of truth for the contract.
 //revive:disable:exported

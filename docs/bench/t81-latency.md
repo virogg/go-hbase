@@ -1,17 +1,17 @@
-# T81 — Per-hook latency overhead vs a Java-only observer
+# T81: Latency overhead на один hook против Java-only observer
 
-**Verifies:** plan task T81 "latency overhead per hook (Java-only baseline vs
-through-shmem), p50/p95/p99 на prePut/postPut, batch 1/100/1000" and the
-SPEC §7.6 MVP target **<100µs p50 overhead on prePut**.
+**Проверяет:** задачу плана T81 "latency overhead per hook (Java-only baseline vs
+through-shmem), p50/p95/p99 на prePut/postPut, batch 1/100/1000" и
+цель MVP из SPEC §7.6 **<100µs p50 overhead на prePut**.
 
-The bench drives the production Java path end to end: the real
-`RegionObserverAdapter` (proto conversion included) → `Multiplexer` → wire
-encode → shmem ring → real spawned Go process running a **silent no-op
-observer** (`test/bench/noop-observer`) → response path back to the caller.
-The baseline leg makes the identical calls against a default-method no-op
-Java `RegionObserver`; overhead = p50(bridge) − p50(java-only).
+Bench гонит продакшн-путь Java от начала до конца: реальный
+`RegionObserverAdapter` (включая proto-конверсию) → `Multiplexer` → wire
+encode → shmem ring → реальный порождённый Go-процесс с **тихим no-op
+observer** (`test/bench/noop-observer`) → путь ответа обратно к вызывающему.
+Baseline-плечо делает идентичные вызовы против Java `RegionObserver` с
+no-op методами по умолчанию; overhead = p50(bridge) − p50(java-only).
 
-## How to reproduce
+## Как воспроизвести
 
 ```
 make bench-latency            # builds the no-op ELF, runs the gate
@@ -20,26 +20,28 @@ make bench-latency BENCH_P50_MAX_US=100
 mvn test -Dtest=LatencyBenchIT -Djacoco.skip=true -Dbench.ops=10000
 ```
 
-JaCoCo is skipped for the bench run — latency is measured uninstrumented.
+JaCoCo пропускается для прогона bench; latency измеряется без инструментации.
 
-## Methodology
+## Методология
 
-- **batch=1 (gated)**: continuous serial round trips, same methodology as
-  the T19 ping-pong baseline. This is the regime the SPEC target describes:
-  under load the rings stay warm.
-- **batch=100/1000**: bursts of N back-to-back calls separated by a 1ms idle
-  gap — how a client batch of N mutations reaches prePut on one handler
-  thread.
-- **sparse (reported, not gated)**: single calls each preceded by 1ms idle —
-  the cold-resume cost after the spin-wait reader threads have been
-  descheduled. Scheduler-dominated and noisy on WSL2/shared CI runners.
-- 10 000 timed ops per leg after a 2 000-op warmup; percentiles by
-  sort-and-index.
+- **batch=1 (gated)**: непрерывные последовательные round trip, та же
+  методология, что и у baseline ping-pong из T19. Это режим, описываемый
+  целью SPEC: под нагрузкой кольца остаются прогретыми.
+- **batch=100/1000**: всплески из N вызовов подряд, разделённые 1ms паузой
+  простоя, как клиентский batch из N мутаций достигает prePut на одной
+  handler-нити.
+- **sparse (отчёт, не gated)**: одиночные вызовы, каждому предшествует 1ms
+  простоя, стоимость холодного возобновления после того, как spin-wait
+  reader-нити были вытеснены планировщиком. Доминируется планировщиком и
+  шумна на WSL2/общих CI-раннерах.
+- 10 000 хронометрируемых операций на плечо после прогрева в 2 000 операций;
+  перцентили через сортировку и индексирование.
 
-## Result (2026-06-10)
 
-Hardware: AMD Ryzen 7 5800H, WSL2, Linux x86-64. Production-default ring
-config (capacity 16, maxObjectSize 1MiB, heartbeats on).
+## Результат (2026-06-10)
+
+Железо: AMD Ryzen 7 5800H, WSL2, Linux x86-64. Продакшн-конфигурация колец
+по умолчанию (capacity 16, maxObjectSize 1MiB, heartbeats включены).
 
 | Leg                      | p50    | p95    | p99    |
 |--------------------------|-------:|-------:|-------:|
@@ -48,36 +50,36 @@ config (capacity 16, maxObjectSize 1MiB, heartbeats on).
 | prePut bridge, batch=100 | ~64µs  | ~150µs | ~280µs |
 | prePut bridge, batch=1000| ~62µs  | ~200µs | ~400µs |
 | postPut bridge, batch=1  | ~75µs  | ~190µs | ~300µs |
-| sparse (not gated)       | ~90–135µs | ~250µs | ~390µs |
+| sparse (not gated)       | ~90-135µs | ~250µs | ~390µs |
 
-**Gate: prePut p50 overhead = 72–78µs across three runs — PASS (<100µs).**
+**Gate: prePut p50 overhead = 72-78µs за три прогона: PASS (<100µs).**
 
-## The iteration that got it under the target
+## Итерация, которая загнала результат под цель
 
-The first harness run measured 128–135µs p50 — over target. Two fixes:
+Первый прогон harness намерил p50 в 128-135µs, выше цели. Два исправления:
 
-1. **Measure uninstrumented.** The JaCoCo agent (on by default under
-   `mvn test`) instruments the bridge hot path; skipping it saved ~7µs.
-2. **Spin-before-park in `MuxHookDispatcher`** (production change). The
-   calling thread used to park immediately in `CompletableFuture.get()`,
-   paying two context switches per hook — more than the remaining wait,
-   since the whole round trip completes in ~100µs. The dispatcher now
-   spin-polls the future for up to 150µs (`Thread.onSpinWait`) before
-   falling back to the blocking wait. Steady-state p50 dropped 128µs → ~75µs
-   (batch=1000: 95µs → ~62µs). Slow or failing hooks fall through to the
-   blocking path after at most the spin budget, so timeout semantics are
-   unchanged; the cost is ≤150µs of busy CPU on an RPC handler thread for
-   hooks that are already in flight.
+1. **Измерять без инструментации.** Агент JaCoCo (включён по умолчанию под
+   `mvn test`) инструментирует горячий путь bridge; его отключение сэкономило ~7µs.
+2. **Spin-before-park в `MuxHookDispatcher`** (продакшн-изменение). Вызывающая
+   нить раньше сразу парковалась (park) в `CompletableFuture.get()`,
+   платя по два context switch на hook, что больше остаточного ожидания,
+   поскольку весь round trip завершается за ~100µs. Теперь dispatcher
+   spin-поллит future до 150µs (`Thread.onSpinWait`), прежде чем откатиться
+   к блокирующему ожиданию. Установившийся p50 упал 128µs → ~75µs
+   (batch=1000: 95µs → ~62µs). Медленные или падающие hook проваливаются
+   на блокирующий путь не позже исчерпания spin-бюджета, поэтому семантика
+   timeout не меняется; цена — ≤150µs занятого CPU на RPC handler-нити для
+   hook, которые уже в полёте.
 
-## Caveats
+## Оговорки
 
-- The remaining ~60µs floor is split across proto build/parse, two ring
-  hops, and the Go-side reader→handler→writer goroutine handoffs; the T62
-  report's analysis of the single-writer/single-reader shims applies.
-- The sparse leg shows that a workload idling >1ms between hooks pays
-  roughly double the p50 — that's OS scheduling of the spin-wait readers,
-  not protocol cost, and it straddles the 100µs line on WSL2. On bare-metal
-  Linux expect the gap to shrink.
-- WSL2 numbers vary ±10% run to run; shared CI runners more. The CI gate
-  uses the absolute SPEC target; a CI miss warrants a local re-run before
-  action.
+- Остаточный пол ~60µs распределён между сборкой/парсингом proto, двумя
+  ring-хопами и Go-side передачами reader→handler→writer между горутинами;
+  здесь применим анализ single-writer/single-reader shim из отчёта T62.
+- Плечо sparse показывает, что нагрузка, простаивающая >1ms между hook,
+  платит примерно двойной p50; это OS-планирование spin-wait reader, а не
+  стоимость протокола, и оно балансирует на грани 100µs на WSL2. На
+  bare-metal Linux ожидайте, что разрыв сократится.
+- Числа на WSL2 варьируются на ±10% от прогона к прогону; на общих
+  CI-раннерах больше. CI-gate использует абсолютную цель SPEC; промах на CI
+  оправдывает локальный повторный прогон перед действиями.

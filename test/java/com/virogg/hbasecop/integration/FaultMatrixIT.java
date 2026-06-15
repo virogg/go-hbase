@@ -39,24 +39,24 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 /**
- * T36 fault-injection matrix: drives every combination of per-hook policy ({@code strict |
- * best-effort}) × fault mode ({@code kill-9 | hang | exit-1 | protocol-error | oom}) through a live
- * HBase 2.5 cluster (the T26 docker-compose target) wired to the {@code fault-observer} coproc-jar
- * (T36 foundation). For each case the test asserts:
+ * T36 fault-injection matrix: per-hook policy ({@code strict | best-effort}) crossed with fault
+ * mode ({@code kill-9 | hang | exit-1 | protocol-error | oom}) against a live HBase 2.5 cluster
+ * (T26 docker-compose target) wired to the {@code fault-observer} coproc-jar (T36 foundation). Per
+ * case asserts:
  *
  * <ul>
- *   <li>(a) semantic correctness — {@code strict} → client sees {@link IOException}; {@code
- *       best-effort} → {@code Put} completes normally;
- *   <li>(b) no data loss / no double-apply — post-state scan row count matches policy expectation
- *       (0 for strict, 1 for best-effort);
- *   <li>(c) supervisor recovery — a follow-up {@code Put} after the configured restart deadline
- *       completes in finite time with the same per-policy outcome (no hang).
+ *   <li>(a) semantic correctness: {@code strict} makes the client see {@link IOException}; {@code
+ *       best-effort} lets the {@code Put} complete normally;
+ *   <li>(b) no data loss / no double-apply: post-state scan row count matches the policy (0 for
+ *       strict, 1 for best-effort);
+ *   <li>(c) supervisor recovery: a follow-up {@code Put} after the restart deadline completes in
+ *       finite time with the same per-policy outcome (no hang).
  * </ul>
  *
- * <p>Like {@code PrePutCounterIT}, this class is <em>not</em> part of {@code mvn test} — its {@code
- * *IT} suffix keeps Surefire's default include patterns from picking it up — and is invoked
- * explicitly by {@code make test-fault}, which manages the cluster lifecycle and stages {@code
- * test/integration/coproc-jars/fault-observer.jar} into the bind-mount the container reads from.
+ * <p>Like {@code PrePutCounterIT}, not part of {@code mvn test} (the {@code *IT} suffix keeps
+ * Surefire's default includes from picking it up). Runs via {@code make test-fault}, which manages
+ * the cluster lifecycle and stages {@code test/integration/coproc-jars/fault-observer.jar} into the
+ * bind-mount the container reads from.
  */
 final class FaultMatrixIT {
 
@@ -76,7 +76,7 @@ final class FaultMatrixIT {
 
   private static final List<Outcome> RESULTS = new CopyOnWriteArrayList<>();
 
-  /** Cartesian product (policy × mode) — exactly 10 cases (2 × 5), satisfies T36's {@code ≥10}. */
+  /** Cartesian product (policy x mode): 10 cases (2 x 5); satisfies T36's {@code >=10}. */
   static Stream<Arguments> matrix() {
     List<String> policies = List.of("strict", "best-effort");
     List<String> modes = List.of("kill-9", "hang", "exit-1", "protocol-error", "oom");
@@ -116,7 +116,7 @@ final class FaultMatrixIT {
       try {
         outcome.firstPut = runOnePut(conn, tn, "row-1");
 
-        // Give the supervisor time to detect death + finish a restart cycle for crash modes.
+        // Let the supervisor detect death and finish a restart cycle for crash modes.
         Thread.sleep(RESTART_DEADLINE.plus(RECOVERY_SLACK).toMillis());
 
         outcome.secondPut = runOnePut(conn, tn, "row-2");
@@ -155,7 +155,7 @@ final class FaultMatrixIT {
 
   private static String renderPut(PutOutcome p) {
     if (p == null) {
-      return "—";
+      return "-";
     }
     return p.threw ? "IOException" : "ok";
   }
@@ -246,8 +246,8 @@ final class FaultMatrixIT {
     TableDescriptorBuilder b =
         TableDescriptorBuilder.newBuilder(tn)
             .setColumnFamily(ColumnFamilyDescriptorBuilder.of(CF))
-            // Per-table policy + fault-mode keys; the bridge / fault-observer read them from
-            // env.getConfiguration() at coprocessor start.
+            // Per-table policy and fault-mode keys; the bridge / fault-observer read them
+            // from env.getConfiguration() at coprocessor start.
             .setValue("hbasecop.policy.prePut", policy)
             .setValue("hbasecop.fault.mode", mode);
     b.setCoprocessor(

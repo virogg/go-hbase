@@ -34,7 +34,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
  * surface.
  *
  * <p>HBase 2.5's BulkLoadObserver hooks take no payload arguments beyond the observer context, so
- * the per-hook proto request carries only HookContext — the bulk-load target table/region is pulled
+ * the per-hook proto request carries only HookContext - the bulk-load target table/region is pulled
  * from {@code env.getRegionInfo()} and travels in HookContext.
  */
 public final class BulkLoadObserverAdapter implements BulkLoadObserver {
@@ -132,7 +132,7 @@ public final class BulkLoadObserverAdapter implements BulkLoadObserver {
     if (pol.policy() == Policy.STRICT) {
       throw cause == null ? new IOException(detail) : new IOException(detail, cause);
     }
-    LOG.log(Level.WARNING, "{0} — best-effort, treated as no-op", detail);
+    LOG.log(Level.WARNING, "{0} - best-effort, treated as no-op", detail);
     return null;
   }
 

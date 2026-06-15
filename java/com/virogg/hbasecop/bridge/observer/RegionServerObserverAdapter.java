@@ -32,14 +32,14 @@ import org.apache.hadoop.hbase.coprocessor.RegionServerObserver;
 
 /**
  * T52 RegionServerObserver bridge. Routes every RegionServerObserver hook the SDK exposes (T52 Wave
- * A — 9 server-scoped hooks: stop, WAL-writer roll, replication, compaction-queue clearing and
+ * A - 9 server-scoped hooks: stop, WAL-writer roll, replication, compaction-queue clearing and
  * procedure execution) through the shared {@link HookDispatcher} mux. Mirrors {@link
  * MasterObserverAdapter}'s policy / dispatch / bypass plumbing exactly: the same {@link
  * PolicyConfig} resolves per-hook strict-vs-best-effort behaviour by method name (e.g. {@code
  * hbasecop.policy.preStopRegionServer}), so failure semantics stay symmetric across the region,
  * master and region-server surfaces.
  *
- * <p>RegionServerObserver hooks carry no table/region context — the affected RegionServer is
+ * <p>RegionServerObserver hooks carry no table/region context - the affected RegionServer is
  * identified by the {@code server} field, taken from {@code env.getServerName()}.
  */
 public final class RegionServerObserverAdapter implements RegionServerObserver {
@@ -228,7 +228,7 @@ public final class RegionServerObserverAdapter implements RegionServerObserver {
     if (pol.policy() == Policy.STRICT) {
       throw cause == null ? new IOException(detail) : new IOException(detail, cause);
     }
-    LOG.log(Level.WARNING, "{0} — best-effort, treated as no-op", detail);
+    LOG.log(Level.WARNING, "{0} - best-effort, treated as no-op", detail);
     return null;
   }
 

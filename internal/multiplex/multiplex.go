@@ -90,7 +90,7 @@ func (m *Multiplexer) Call(ctx context.Context, msg *wire.Message) (*wire.Messag
 
 // Deliver hands resp to the goroutine that issued the matching Call.
 // Returns true when a waiter was found and notified, false when no
-// pending entry exists for resp.ReqID — the caller can log the
+// pending entry exists for resp.ReqID - the caller can log the
 // orphan or treat it as a benign late arrival.
 func (m *Multiplexer) Deliver(resp *wire.Message) bool {
 	m.mu.Lock()

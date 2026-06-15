@@ -7,8 +7,8 @@ package com.virogg.hbasecop.bridge.supervisor;
  * Tunables for {@link RestartController}: exponential-backoff parameters, consecutive-failure
  * threshold before the runtime is declared unhealthy, and the probe interval used once unhealthy.
  *
- * <p>Defaults follow {@code plan.md} T34: {@code 200ms → 400 → 800 → … → 5s} doubling, jitter ±20%,
- * 5 consecutive failures before {@code UNHEALTHY}, probe every 30s thereafter.
+ * <p>Defaults follow {@code plan.md} T34: {@code 200ms → 400 → 800 → ... → 5s} doubling, jitter
+ * ±20%, 5 consecutive failures before {@code UNHEALTHY}, probe every 30s thereafter.
  */
 public final class RestartConfig {
 

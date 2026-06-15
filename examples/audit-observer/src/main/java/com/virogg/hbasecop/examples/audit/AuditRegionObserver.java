@@ -24,7 +24,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionObserver;
  * one RegionServer share one Go process / one shmem pair (T63).
  *
  * <p>Post-hooks run under the best-effort policy by default: an audit failure (Go crash, timeout)
- * logs a WARN and the client's operation proceeds — auditing never blocks writes.
+ * logs a WARN and the client's operation proceeds - auditing never blocks writes.
  */
 public final class AuditRegionObserver implements RegionCoprocessor {
 

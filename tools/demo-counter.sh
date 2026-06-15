@@ -2,7 +2,7 @@
 # Copyright 2026 The go-hbase Authors
 # SPDX-License-Identifier: Apache-2.0
 #
-# CP-γ: public demo — drive N Puts through a live HBase coprocessor and
+# CP-γ: public demo - drive N Puts through a live HBase coprocessor and
 # show the Go observer's log counter ticking up on each one. Invoked by
 # `make demo-counter`. Leaves the cluster running so reviewers can poke
 # around with `docker exec go-hbase-dev hbase shell` themselves.

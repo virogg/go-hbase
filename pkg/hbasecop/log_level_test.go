@@ -51,7 +51,7 @@ func TestNewLoggerHonorsLevel(t *testing.T) {
 
 	t.Setenv("HBASECOP_LOG_LEVEL", "")
 	if newLogger().Handler().Enabled(ctx, slog.LevelDebug) {
-		t.Fatal("debug enabled at default level — HBASECOP_LOG_LEVEL not applied")
+		t.Fatal("debug enabled at default level - HBASECOP_LOG_LEVEL not applied")
 	}
 	if !newLogger().Handler().Enabled(ctx, slog.LevelInfo) {
 		t.Fatal("info not enabled at default level")

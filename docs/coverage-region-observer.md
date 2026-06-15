@@ -3,38 +3,38 @@ Copyright 2026 The go-hbase Authors
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# RegionObserver coverage matrix (T46)
+# Матрица покрытия RegionObserver (T46)
 
-Single source of truth for "which HBase 2.5 `RegionObserver` method is
-wired to which hook id, which test exercises it, and what its coverage
-status is." This document is parsed by
+Единый источник истины по вопросу «какой метод HBase 2.5 `RegionObserver`
+привязан к какому hook id, какой тест его прогоняет и каков его статус
+покрытия». Этот документ разбирается
 `pkg/hbasecop/coverage_test.go::TestCoverageMatrixDocCoversAllHooks`,
-which fails the build if any hook from the canonical dispatch table is
-missing a row, missing `covered_by`, or marked anything other than
-`covered`.
+который роняет сборку, если для какого-либо hook из канонической dispatch-таблицы
+отсутствует строка, отсутствует `covered_by` или он помечен чем-либо иным,
+кроме `covered`.
 
-Adding a new hook to `pkg/hbasecop/hooktable.go` therefore requires
-appending a row to the table below — the CI gate will catch the
-omission.
+Поэтому добавление нового hook в `pkg/hbasecop/hooktable.go` требует
+дописать строку в таблицу ниже; CI-gate поймает
+пропуск.
 
-## Test anchors
+## Якоря тестов
 
-Short names referenced in the `covered_by` column.
+Короткие имена, на которые ссылается колонка `covered_by`.
 
 | anchor | scope | location |
 |---|---|---|
-| **dispatch** | T41 reflection parity (every hook in `hookTable` ↔ `RegionObserver` method ↔ `HookId` enum) | `pkg/hbasecop/hooktable_test.go::TestHookTableIsCanonical`, `TestRegionObserverInterfaceCoversAllHooks` |
-| **roundtrip** | T42 wire round-trip — each `proto.Request` encodes / decodes losslessly | `internal/wire/hookpb/*` (corpus-driven) and Java `wire.pb.*RoundTripTest` |
-| **prePutIT** | T27 live IT (Put → Go observer counter) | `test/java/.../PrePutCounterIT.java`, `examples/counter-observer/` |
-| **readIT** | T43 live IT (Get / Scan bypass) | `test/java/.../ReadPathFilterIT.java`, `examples/filter-observer/` |
-| **batchIT** | T44 live IT (`Table.batch` partial block) | `test/java/.../BatchPartialBlockIT.java` |
-| **storageIT** | T45 live IT (`admin.flush` + `admin.majorCompact`) | `test/java/.../StorageHooksIT.java` |
-| **faultIT** | T36 fault-injection matrix | `test/java/.../FaultMatrixIT.java` |
-| **adapter** | Java unit test on `RegionObserverAdapter` | `test/java/.../RegionObserverAdapter*Test.java` |
+| **dispatch** | T41 паритет через рефлексию (каждый hook в `hookTable` ↔ метод `RegionObserver` ↔ enum `HookId`) | `pkg/hbasecop/hooktable_test.go::TestHookTableIsCanonical`, `TestRegionObserverInterfaceCoversAllHooks` |
+| **roundtrip** | T42 wire round-trip: каждый `proto.Request` кодируется / декодируется без потерь | `internal/wire/hookpb/*` (на основе corpus) и Java `wire.pb.*RoundTripTest` |
+| **prePutIT** | T27 живой IT (Put → счётчик Go observer) | `test/java/.../PrePutCounterIT.java`, `examples/counter-observer/` |
+| **readIT** | T43 живой IT (Get / Scan bypass) | `test/java/.../ReadPathFilterIT.java`, `examples/filter-observer/` |
+| **batchIT** | T44 живой IT (частичный блок `Table.batch`) | `test/java/.../BatchPartialBlockIT.java` |
+| **storageIT** | T45 живой IT (`admin.flush` + `admin.majorCompact`) | `test/java/.../StorageHooksIT.java` |
+| **faultIT** | T36 матрица fault-injection | `test/java/.../FaultMatrixIT.java` |
+| **adapter** | Java unit-тест на `RegionObserverAdapter` | `test/java/.../RegionObserverAdapter*Test.java` |
 
-## Coverage matrix
+## Матрица покрытия
 
-68 hooks (frozen against `proto/hooks.proto` HookId enum).
+68 hooks (заморожены относительно enum HookId в `proto/hooks.proto`).
 
 | hook_id | name | proto Request | covered_by | status |
 |---|---|---|---|---|
@@ -107,25 +107,26 @@ Short names referenced in the `covered_by` column.
 | 67 | PostInstantiateDeleteTracker | PostInstantiateDeleteTrackerRequest | dispatch + roundtrip | covered |
 | 68 | PreWALAppend | PreWALAppendRequest | dispatch + roundtrip | covered |
 
-## Coverage tiers
+## Уровни покрытия
 
-The `covered_by` column lists the strongest anchor first.
+Колонка `covered_by` перечисляет самый сильный якорь первым.
 
-- **Live IT** (`*IT`): the hook runs inside a real HBase RegionServer
-  against the bridge — proves the wire path, the Java adapter override
-  and the Go SDK callback all work end-to-end. The strongest tier.
-- **adapter**: Java unit test runs the bridge's `RegionObserverAdapter`
-  hook with a stub `ObserverContext`, exercising the per-hook payload
-  mapper.
-- **roundtrip**: proto Request serialises identically on both sides
-  against the committed golden corpus, so cross-language wire
-  agreement is pinned even when no live IT exists yet.
-- **dispatch**: T41 reflection asserts the hook's row in `hookTable`
-  has the right id, name, decoder and invoke closure, and that the
-  matching `RegionObserver` interface method exists. Every hook is
-  covered by `dispatch` at minimum.
+- **Live IT** (`*IT`): hook выполняется внутри настоящего HBase RegionServer
+  поверх bridge; доказывает, что wire-путь, override Java-адаптера
+  и callback Go SDK работают end-to-end. Самый сильный уровень.
+- **adapter**: Java unit-тест прогоняет hook `RegionObserverAdapter` из bridge
+  со stub `ObserverContext`, прогоняя per-hook
+  payload-маппер.
+- **roundtrip**: proto Request сериализуется идентично с обеих сторон
+  относительно закоммиченного golden corpus, так что межъязыковое
+  wire-согласие зафиксировано даже там, где живого IT
+  ещё нет.
+- **dispatch**: T41 через рефлексию утверждает, что строка hook в `hookTable`
+  имеет правильные id, name, decoder и invoke-замыкание, и что
+  соответствующий метод интерфейса `RegionObserver` существует. Каждый hook
+  покрыт как минимум `dispatch`.
 
-Hooks that depend on rarely-triggered server paths (BulkLoad,
-WALRestore, MemStoreCompaction internals) are deliberately not yet
-covered by a live IT — Phase 5 will add the dedicated observer-type
-adapters that exercise those code paths.
+Hooks, которые зависят от редко срабатывающих серверных путей (BulkLoad,
+WALRestore, внутренности MemStoreCompaction), намеренно пока не
+покрыты живым IT; Phase 5 добавит выделенные адаптеры observer-типов,
+которые прогоняют эти участки кода.

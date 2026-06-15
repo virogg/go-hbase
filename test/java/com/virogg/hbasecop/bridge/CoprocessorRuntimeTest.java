@@ -42,8 +42,8 @@ import org.junit.jupiter.api.io.TempDir;
  * stand up a Multiplexer-backed {@link com.virogg.hbasecop.bridge.observer.HookDispatcher}, and
  * expose a {@link RegionObserver} that the host coproc can delegate to.
  *
- * <p>This test verifies the wiring end-to-end using the default {@code hbasecop-runtime} ELF (built
- * by {@code make go-build-runtime}). It does <em>not</em> drive hooks — that's covered by {@code
+ * <p>Verifies wiring end-to-end using the default {@code hbasecop-runtime} ELF (built by {@code
+ * make go-build-runtime}). Does not drive hooks; that's covered by {@code
  * RegionObserverAdapterTest} with a mocked dispatcher and by the {@code PrePutCounterIT}
  * integration test against live HBase.
  */
@@ -125,7 +125,7 @@ final class CoprocessorRuntimeTest {
             .goToJavaFile(outFile)
             .ringCapacity(8)
             .ringMaxObjectSize(64 * 1024)
-            // Heartbeat every 100ms — well below the 3-miss=300ms threshold over a 600ms window.
+            // Heartbeat every 100ms, well below the 3-miss=300ms threshold over a 600ms window.
             .heartbeatPeriodMs(100)
             .hookTimeout(Duration.ofSeconds(2))
             .gracefulShutdownTimeout(Duration.ofSeconds(2))
@@ -133,8 +133,8 @@ final class CoprocessorRuntimeTest {
 
     try (CoprocessorRuntime rt = new CoprocessorRuntime(cfg)) {
       rt.start();
-      // Give the Go side enough wall time to ship ≥ 4 heartbeats — the watchdog must observe them
-      // via the reader and stay quiet.
+      // Allow the Go side to ship >= 4 heartbeats; watchdog must observe them via the reader and
+      // stay quiet.
       Thread.sleep(600);
       assertFalse(rt.isUnhealthy(), "watchdog must not fire while heartbeats flow");
       assertTrue(rt.isAlive(), "Go process must still be alive");
@@ -175,16 +175,13 @@ final class CoprocessorRuntimeTest {
       long origPid = rt.goProcessPidForTesting();
       assertNotEquals(-1L, origPid);
 
-      // Crash the Go process. The watchdog scheduler will detect the dead
-      // process (via the next liveness check), notify the controller, and the
-      // controller will fire a restart attempt after the configured initial
-      // backoff.
+      // Watchdog scheduler detects the dead process on the next liveness check, notifies the
+      // controller, which fires a restart attempt after the configured initial backoff.
       rt.crashGoProcessForTesting();
 
-      // Await the TERMINAL restart state, not the intermediate observable:
-      // attemptRestart() swaps in the fresh GoProcess (pid changes, isAlive
-      // flips true) before tick() stores state=HEALTHY, so polling on the pid
-      // alone races the final state transition on slow runners.
+      // Await the TERMINAL restart state, not the intermediate observable: attemptRestart() swaps
+      // in the fresh GoProcess (pid changes, isAlive flips true) before tick() stores
+      // state=HEALTHY, so polling on the pid alone races the final transition on slow runners.
       long deadline = System.currentTimeMillis() + 5_000L;
       while (System.currentTimeMillis() < deadline) {
         long pid = rt.goProcessPidForTesting();
@@ -209,12 +206,11 @@ final class CoprocessorRuntimeTest {
     }
   }
 
-  // Regression for C2: disabling heartbeats must NOT disable crash detection or
-  // auto-restart. The supervisor scheduler is created unconditionally and, with
-  // heartbeats off, ticks at the crash-probe cadence (DEFAULT_CRASH_PROBE_MS).
-  // The pre-fix bug only started the scheduler when a watchdog existed, so a
-  // crash with heartbeats off was never noticed and the runtime hung forever.
-  // This mirrors restartsGoProcessAfterCrash but with heartbeatPeriodMs(-1).
+  // Regression for C2: disabling heartbeats must NOT disable crash detection or auto-restart. The
+  // supervisor scheduler is created unconditionally and, with heartbeats off, ticks at the
+  // crash-probe cadence (DEFAULT_CRASH_PROBE_MS). Pre-fix, the scheduler only started when a
+  // watchdog existed, so a crash with heartbeats off went unnoticed and the runtime hung forever.
+  // Mirrors restartsGoProcessAfterCrash but with heartbeatPeriodMs(-1).
   @Test
   void restartsGoProcessAfterCrashWithHeartbeatsDisabled(@TempDir Path tmp) throws Exception {
     Path inFile = tmp.resolve("in.mmap");
@@ -236,7 +232,7 @@ final class CoprocessorRuntimeTest {
             .goToJavaFile(outFile)
             .ringCapacity(8)
             .ringMaxObjectSize(64 * 1024)
-            .heartbeatPeriodMs(-1) // heartbeats DISABLED — the C2 scenario
+            .heartbeatPeriodMs(-1) // heartbeats DISABLED: the C2 scenario
             .hookTimeout(Duration.ofSeconds(2))
             .gracefulShutdownTimeout(Duration.ofSeconds(2))
             .restartConfig(restart)
@@ -250,8 +246,8 @@ final class CoprocessorRuntimeTest {
 
       rt.crashGoProcessForTesting();
 
-      // Detection now rides the crash-probe cadence (~500ms) rather than the
-      // 50ms heartbeat, so allow a wider deadline than the heartbeats-on test.
+      // Detection rides the crash-probe cadence (~500ms) not the 50ms heartbeat, so allow a wider
+      // deadline than the heartbeats-on test.
       long deadline = System.currentTimeMillis() + 8_000L;
       while (System.currentTimeMillis() < deadline) {
         long pid = rt.goProcessPidForTesting();
@@ -311,16 +307,16 @@ final class CoprocessorRuntimeTest {
       Multiplexer mux = rt.multiplexerForTesting();
       assertNotNull(mux);
 
-      // Issue 100 prePut-shaped calls into the mux. The Go runtime side won't respond
-      // (HOOK_PRE_PUT isn't registered on the bare hbasecop-runtime), so they sit pending.
+      // Issue 100 prePut-shaped calls into the mux. The Go side won't respond (HOOK_PRE_PUT isn't
+      // registered on the bare hbasecop-runtime), so they sit pending.
       final int n = 100;
       List<CompletableFuture<Message>> futures = new ArrayList<>(n);
       for (int i = 0; i < n; i++) {
         futures.add(mux.call(new Message(FrameType.REQUEST, 0, 0, (byte) 1, new byte[] {})));
       }
 
-      // Crash the Go process. The watchdog scheduler must observe the dead process and pause the
-      // mux, failing every pending future with GoSideCrashedException.
+      // Watchdog scheduler must observe the dead process and pause the mux, failing every pending
+      // future with GoSideCrashedException.
       rt.crashGoProcessForTesting();
 
       long deadline = System.currentTimeMillis() + 1_000L;
@@ -336,7 +332,7 @@ final class CoprocessorRuntimeTest {
       }
 
       // A new call during the paused window must wait up to restart-deadline and then fail
-      // with GoSideCrashedException — restart was configured with a 10s initial delay so the
+      // with GoSideCrashedException; restart was configured with a 10s initial delay so the
       // process won't have come back yet.
       long t0 = System.currentTimeMillis();
       CompletableFuture<Message> deferred =
@@ -394,15 +390,15 @@ final class CoprocessorRuntimeTest {
   }
 
   /**
-   * Regression test for an HBase live-cluster bug found during T36 IT run: HBase wraps the
-   * region-coproc env in a {@code CompoundConfiguration} that merges {@code
-   * TableDescriptor.setValue} keys dynamically inside {@code get()} but does <em>not</em> copy them
-   * into the base properties map. The previous {@code new Configuration(src)} clone in {@code
-   * buildPolicyConfig} dropped those merged values silently — per-table {@code
-   * hbasecop.policy.prePut} overrides were lost and policy always defaulted to STRICT for prePut.
+   * Regression for an HBase live-cluster bug found during T36 IT run: HBase wraps the region-coproc
+   * env in a {@code CompoundConfiguration} that merges {@code TableDescriptor.setValue} keys
+   * dynamically inside {@code get()} but does <em>not</em> copy them into the base properties map.
+   * The previous {@code new Configuration(src)} clone in {@code buildPolicyConfig} dropped those
+   * merged values silently: per-table {@code hbasecop.policy.prePut} overrides were lost and policy
+   * always defaulted to STRICT for prePut.
    *
-   * <p>The fake here simulates exactly that behaviour: an inner map only the overridden iterator
-   * and get() consult; the standard {@code Properties}-based clone path would miss it.
+   * <p>The fake simulates exactly that: an inner map only the overridden iterator and get()
+   * consult; the standard {@code Properties}-based clone path would miss it.
    */
   @Test
   void policyResolvesAcrossCompoundConfigurationLikeWrapper(@TempDir Path tmp) throws Exception {
@@ -429,8 +425,8 @@ final class CoprocessorRuntimeTest {
             .configuration(compoundLike)
             .build();
 
-    // The runtime never actually starts in this test — we only need to exercise the policy
-    // resolution path that {@link CoprocessorRuntime#buildPolicyConfig(Config)} drives.
+    // Runtime never starts here; only exercises the policy-resolution path that
+    // {@link CoprocessorRuntime#buildPolicyConfig(Config)} drives.
     PolicyConfig pc = invokeBuildPolicyConfig(cfg); // reflection wrapper below
     HookPolicy resolved = pc.forHook(RegionObserverAdapter.HOOK_PRE_PUT);
     assertEquals(

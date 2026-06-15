@@ -2,21 +2,21 @@
 # Copyright 2026 The go-hbase Authors
 # SPDX-License-Identifier: Apache-2.0
 #
-# T84: soak orchestrator — runs SoakIT (the paced load driver with the
+# T84: soak orchestrator - runs SoakIT (the paced load driver with the
 # data-loss ledger) while injecting kill-9 chaos into the Go runtime and
 # sampling RSS / process state inside the container, then evaluates the
 # release gates:
 #
-#   1. dataloss   — SoakIT exit code (every client-acked Put present in scan)
-#   2. rss-flat   — median Go RSS of the last 20% of samples ≤ 1.15× first 20%
-#   3. zombies    — never more than one runtime proc in any sample, zero
+#   1. dataloss   - SoakIT exit code (every client-acked Put present in scan)
+#   2. rss-flat   - median Go RSS of the last 20% of samples ≤ 1.15× first 20%
+#   3. zombies    - never more than one runtime proc in any sample, zero
 #                   runtime procs after SoakIT drops the table (the release
 #                   path stops the Go process; any survivor is leaked), and
 #                   zero Z-state procs at the end
-#   4. restarts   — 'GoProcess started:' count == 1 + kills, no 'UNHEALTHY'
+#   4. restarts   - 'GoProcess started:' count == 1 + kills, no 'UNHEALTHY'
 #
 # Assumes the cluster is ALREADY UP (wait-master-status.sh has passed) and
-# counter-observer.jar is staged in test/integration/coproc-jars/ — the
+# counter-observer.jar is staged in test/integration/coproc-jars/ - the
 # `make soak` target does compose up/down and jar staging around this script.
 #
 # Env knobs:
@@ -83,12 +83,12 @@ printf 'soak: starting SoakIT (duration=%ss rate=%s ops/s), log: %s\n' \
 MVN_PID=$!
 
 # ---------------------------------------------------------------------------
-# b. Chaos loop — kill -9 the Go runtime at uniform-random intervals
+# b. Chaos loop - kill -9 the Go runtime at uniform-random intervals
 # ---------------------------------------------------------------------------
 
 # The pgrep/pkill pattern uses the [h] bracket trick: probes run through
 # `docker exec sh -c '...'`, and a plain pattern would match the probing
-# shell's own argv — inflating process counts and corrupting pid samples.
+# shell's own argv - inflating process counts and corrupting pid samples.
 RUNTIME_PATTERN='[h]basecop-runtime'
 
 runtime_pid() {
@@ -131,7 +131,7 @@ chaos_loop() {
 }
 
 # ---------------------------------------------------------------------------
-# c. Sampler loop — RSS + process-state CSV every SOAK_SAMPLE_S
+# c. Sampler loop - RSS + process-state CSV every SOAK_SAMPLE_S
 # ---------------------------------------------------------------------------
 
 sampler_loop() {
@@ -197,7 +197,7 @@ note "kills=$kill_count"
 soak_result="$(grep 'SOAK_RESULT' "$MVN_LOG" | tail -1 || true)"
 note "${soak_result:-SOAK_RESULT <missing from $MVN_LOG>}"
 
-# Gate 1: data loss — SoakIT asserts every acked rowkey survives.
+# Gate 1: data loss - SoakIT asserts every acked rowkey survives.
 if [[ "$mvn_status" -eq 0 ]]; then
   note "GATE dataloss: PASS (mvn exit 0)"
 else
@@ -206,15 +206,15 @@ else
 fi
 
 # Gate 2: flat RSS, comparing two median windows per process.
-#   go_rss  first 20% vs last 20%, ±15%: catches fast Go-side leaks — note
+#   go_rss  first 20% vs last 20%, ±15%: catches fast Go-side leaks - note
 #           each kill resets the process, so leaks slower than the kill
 #           cadence are invisible here by construction.
-#   rs_rss  60–80% vs last 20%, ±10%: the RegionServer JVM is never
+#   rs_rss  60-80% vs last 20%, ±10%: the RegionServer JVM is never
 #           restarted, so this is the axis that catches Java-bridge leaks
 #           (mux pending map, decoder reassemblies) over the full hour.
 #           First-window comparison is wrong for a JVM: RSS legitimately
 #           ramps for the first ~25 min (heap expansion, block cache,
-#           memstore fill) then plateaus — measured 714→871 MB ramp then
+#           memstore fill) then plateaus - measured 714→871 MB ramp then
 #           6.5% post-ramp drift on the reference run. A real leak under
 #           constant load keeps its slope and fails the post-ramp window.
 rss_gate() {
@@ -223,7 +223,7 @@ rss_gate() {
   mapfile -t samples < <(awk -F, -v c="$col" 'NR > 1 && $c != "" { print $c }' "$RSS_CSV")
   local n="${#samples[@]}"
   if (( n < 20 )); then
-    note "GATE rss-flat[$label]: SKIPPED (only $n samples, need >=20) — WARNING"
+    note "GATE rss-flat[$label]: SKIPPED (only $n samples, need >=20) - WARNING"
     return 0
   fi
   local k=$(( n / 5 ))
@@ -280,7 +280,7 @@ else
   overall=1
 fi
 
-# Gate 4: restart accounting — each kill triggers exactly one supervisor
+# Gate 4: restart accounting - each kill triggers exactly one supervisor
 # respawn ('GoProcess started:' once at table open + once per kill) and the
 # RestartController never exhausts its budget ('UNHEALTHY').
 restart_count="$(docker logs "$CONTAINER" 2>&1 | grep -c 'GoProcess started:' || true)"

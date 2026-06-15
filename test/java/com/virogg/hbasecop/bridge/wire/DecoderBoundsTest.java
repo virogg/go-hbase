@@ -66,7 +66,7 @@ class DecoderBoundsTest {
   void capsPendingBytesBeforeEntryCap() throws WireException {
     // Each frame opens a distinct 2-chunk reassembly holding one max-size
     // chunk that never completes. The retained-bytes cap must fire long
-    // before MAX_PENDING_REASSEMBLIES entries exist — the entry cap alone
+    // before MAX_PENDING_REASSEMBLIES entries exist - the entry cap alone
     // would permit ~256 GiB of near-complete reassemblies.
     int framesToCap = WireFormat.MAX_PENDING_BYTES / WireFormat.MAX_PAYLOAD_BYTES + 2;
     assertTrue(

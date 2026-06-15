@@ -20,7 +20,7 @@ GO_BUILD_FLAGS := -trimpath
 # Linux x86-64 is the only target per SPEC.md.
 GO_RUNTIME_OUT := src/main/resources/bin/linux-amd64/hbasecop-runtime
 
-# T25: per-example coproc-jar staging — each example ships its own Go ELF
+# T25: per-example coproc-jar staging - each example ships its own Go ELF
 # at the same classpath path the bridge supervisor extracts from
 # (bin/linux-amd64/hbasecop-runtime).
 COUNTER_OBSERVER_DIR := examples/counter-observer
@@ -77,7 +77,7 @@ SHMEM_POM       := $(SHMEM_SUBMODULE)/java/pom.xml
 # most load-bearing dependency (the Java<->Go shared-memory IPC) yet it sits
 # OUTSIDE the usual integrity nets: the Go side consumes it via a `replace`
 # directive (so go.sum carries no checksum for it) and the Java side is a local
-# SNAPSHOT (mutable). `verify-deps` is the in-repo backstop — it asserts the
+# SNAPSHOT (mutable). `verify-deps` is the in-repo backstop - it asserts the
 # checked-out submodule is exactly this commit with no tracked-source drift, so
 # a bump or tampering can't slip through unreviewed. Bumping the dependency means
 # updating this SHA and docs/dep-shmem.md in the same change.
@@ -101,7 +101,7 @@ verify-deps: $(SHMEM_POM) ## Supply-chain guard: java-go-shmem submodule matches
 	@echo "verify-deps: java-go-shmem pinned at $(SHMEM_EXPECTED_SHA), tracked sources clean."
 
 $(SHMEM_POM):
-	@echo "$(SHMEM_SUBMODULE) is empty — run: git submodule update --init --recursive" >&2
+	@echo "$(SHMEM_SUBMODULE) is empty - run: git submodule update --init --recursive" >&2
 	@exit 1
 
 .PHONY: proto
@@ -166,7 +166,7 @@ java-fuzz: ## T83: run the Java wire-decoder fuzzer (jazzer, 10m per run).
 	  JAZZER_FUZZ=1 $(MVN) $(MVN_FLAGS) test -Dtest=DecoderFuzzTest -DfailIfNoTests=false || exit $$?; \
 	done
 
-# Coverage gate set excludes generated protobuf, thin mains, and examples —
+# Coverage gate set excludes generated protobuf, thin mains, and examples -
 # the gate measures hand-written, testable code.
 GO_COVER_PKGS := $(shell $(GO) list ./... | grep -vE '/(examples|internal/wire/hbasepb|internal/wire/hookpb|internal/wire/wirepb|internal/wiregolden|cmd/wire-golden|cmd/hbasecop-runtime|test/bench/noop-observer)$$')
 # SPEC §7 gate: Go hand-written line coverage ≥80% (generated protobuf, thin
@@ -491,11 +491,11 @@ FAULT_COPROC_JAR_STAGED := test/integration/coproc-jars/fault-observer.jar
 FILTER_COPROC_JAR_STAGED := test/integration/coproc-jars/filter-observer.jar
 
 .PHONY: demo-counter
-demo-counter: ## CP-γ: public demo — Put on HBase triggers Go observer counter; leaves cluster up.
+demo-counter: ## CP-γ: public demo - Put on HBase triggers Go observer counter; leaves cluster up.
 	./tools/demo-counter.sh
 
 .PHONY: test-integration
-test-integration: counter-observer-jar ## T27: full IT — bring up HBase, run PrePutCounterIT, tear down.
+test-integration: counter-observer-jar ## T27: full IT - bring up HBase, run PrePutCounterIT, tear down.
 	@mkdir -p test/integration/coproc-jars
 	cp $(COUNTER_OBSERVER_DIR)/target/counter-observer.jar $(COPROC_JAR_STAGED)
 	$(HBASE_COMPOSE_CMD) up -d --build
@@ -508,11 +508,11 @@ test-integration: counter-observer-jar ## T27: full IT — bring up HBase, run P
 	  exit $$status
 
 # ---------------------------------------------------------------------------
-# Integration (T63): refcounted SharedRuntime — N regions share one Go process.
+# Integration (T63): refcounted SharedRuntime - N regions share one Go process.
 # ---------------------------------------------------------------------------
 
 .PHONY: test-integration-shared
-test-integration-shared: counter-observer-jar ## T63: full IT — bring up HBase, run SharedRegionProcessIT (4-way pre-split, expect one Go pid), tear down.
+test-integration-shared: counter-observer-jar ## T63: full IT - bring up HBase, run SharedRegionProcessIT (4-way pre-split, expect one Go pid), tear down.
 	@mkdir -p test/integration/coproc-jars
 	cp $(COUNTER_OBSERVER_DIR)/target/counter-observer.jar $(COPROC_JAR_STAGED)
 	$(HBASE_COMPOSE_CMD) up -d --build
@@ -529,7 +529,7 @@ test-integration-shared: counter-observer-jar ## T63: full IT — bring up HBase
 # ---------------------------------------------------------------------------
 
 .PHONY: test-fault
-test-fault: fault-observer-jar ## T36: full IT — bring up HBase, run FaultMatrixIT (10 cases), tear down.
+test-fault: fault-observer-jar ## T36: full IT - bring up HBase, run FaultMatrixIT (10 cases), tear down.
 	@mkdir -p test/integration/coproc-jars
 	cp $(FAULT_OBSERVER_DIR)/target/fault-observer.jar $(FAULT_COPROC_JAR_STAGED)
 	$(HBASE_COMPOSE_CMD) up -d --build
@@ -547,7 +547,7 @@ test-fault: fault-observer-jar ## T36: full IT — bring up HBase, run FaultMatr
 # ---------------------------------------------------------------------------
 
 .PHONY: test-integration-read
-test-integration-read: filter-observer-jar ## T43: full IT — bring up HBase, run ReadPathFilterIT, tear down.
+test-integration-read: filter-observer-jar ## T43: full IT - bring up HBase, run ReadPathFilterIT, tear down.
 	@mkdir -p test/integration/coproc-jars
 	cp $(FILTER_OBSERVER_DIR)/target/filter-observer.jar $(FILTER_COPROC_JAR_STAGED)
 	$(HBASE_COMPOSE_CMD) up -d --build
@@ -565,7 +565,7 @@ test-integration-read: filter-observer-jar ## T43: full IT — bring up HBase, r
 # ---------------------------------------------------------------------------
 
 .PHONY: test-integration-batch
-test-integration-batch: filter-observer-jar ## T44: full IT — bring up HBase, run BatchPartialBlockIT, tear down.
+test-integration-batch: filter-observer-jar ## T44: full IT - bring up HBase, run BatchPartialBlockIT, tear down.
 	@mkdir -p test/integration/coproc-jars
 	cp $(FILTER_OBSERVER_DIR)/target/filter-observer.jar $(FILTER_COPROC_JAR_STAGED)
 	$(HBASE_COMPOSE_CMD) up -d --build
@@ -583,7 +583,7 @@ test-integration-batch: filter-observer-jar ## T44: full IT — bring up HBase, 
 # ---------------------------------------------------------------------------
 
 .PHONY: test-integration-storage
-test-integration-storage: filter-observer-jar ## T45: full IT — bring up HBase, run StorageHooksIT, tear down.
+test-integration-storage: filter-observer-jar ## T45: full IT - bring up HBase, run StorageHooksIT, tear down.
 	@mkdir -p test/integration/coproc-jars
 	cp $(FILTER_OBSERVER_DIR)/target/filter-observer.jar $(FILTER_COPROC_JAR_STAGED)
 	$(HBASE_COMPOSE_CMD) up -d --build
@@ -596,7 +596,7 @@ test-integration-storage: filter-observer-jar ## T45: full IT — bring up HBase
 	  exit $$status
 
 # ---------------------------------------------------------------------------
-# Integration (T51): MasterObserver — preCreateTable policy rejection.
+# Integration (T51): MasterObserver - preCreateTable policy rejection.
 # The master coprocessor is registered cluster-wide (the entrypoint patches
 # hbase-site.xml when HBASECOP_MASTER_COPROC_CLASS is exported), so the jar
 # is staged before `up` and the env vars drive the injection.
@@ -605,7 +605,7 @@ test-integration-storage: filter-observer-jar ## T45: full IT — bring up HBase
 MASTER_COPROC_JAR_STAGED := test/integration/coproc-jars/master-policy-observer.jar
 
 .PHONY: test-integration-master
-test-integration-master: master-policy-observer-jar ## T51: full IT — bring up HBase with master coproc, run MasterPolicyIT, tear down.
+test-integration-master: master-policy-observer-jar ## T51: full IT - bring up HBase with master coproc, run MasterPolicyIT, tear down.
 	@mkdir -p test/integration/coproc-jars
 	cp $(MASTER_POLICY_DIR)/target/master-policy-observer.jar $(MASTER_COPROC_JAR_STAGED)
 	@set +e; \
@@ -621,7 +621,7 @@ test-integration-master: master-policy-observer-jar ## T51: full IT — bring up
 	  exit $$status
 
 # ---------------------------------------------------------------------------
-# Integration (T52): RegionServerObserver — preRollWALWriterRequest policy
+# Integration (T52): RegionServerObserver - preRollWALWriterRequest policy
 # rejection. The region-server coprocessor is registered cluster-wide (the
 # entrypoint patches hbase-site.xml when HBASECOP_RS_COPROC_CLASS is exported),
 # so the jar is staged before `up` and the env vars drive the injection.
@@ -630,7 +630,7 @@ test-integration-master: master-policy-observer-jar ## T51: full IT — bring up
 RS_COPROC_JAR_STAGED := test/integration/coproc-jars/rs-policy-observer.jar
 
 .PHONY: test-integration-rs
-test-integration-rs: rs-policy-observer-jar ## T52: full IT — bring up HBase with region-server coproc, run RegionServerPolicyIT, tear down.
+test-integration-rs: rs-policy-observer-jar ## T52: full IT - bring up HBase with region-server coproc, run RegionServerPolicyIT, tear down.
 	@mkdir -p test/integration/coproc-jars
 	cp $(RS_POLICY_DIR)/target/rs-policy-observer.jar $(RS_COPROC_JAR_STAGED)
 	@set +e; \
@@ -650,7 +650,7 @@ test-integration-rs: rs-policy-observer-jar ## T52: full IT — bring up HBase w
 # ---------------------------------------------------------------------------
 
 .PHONY: test-integration-audit
-test-integration-audit: audit-observer-jar ## T72: full IT — bring up HBase, run AuditObserverIT (50 ops → 50 audit records), tear down.
+test-integration-audit: audit-observer-jar ## T72: full IT - bring up HBase, run AuditObserverIT (50 ops → 50 audit records), tear down.
 	@mkdir -p test/integration/coproc-jars
 	cp $(AUDIT_OBSERVER_DIR)/target/audit-observer.jar test/integration/coproc-jars/audit-observer.jar
 	$(HBASE_COMPOSE_CMD) up -d --build
@@ -667,7 +667,7 @@ test-integration-audit: audit-observer-jar ## T72: full IT — bring up HBase, r
 # ---------------------------------------------------------------------------
 
 .PHONY: test-integration-ttl
-test-integration-ttl: ttl-validator-jar ## T73: full IT — bring up HBase, run TtlValidatorIT (valid → success, invalid → IOException), tear down.
+test-integration-ttl: ttl-validator-jar ## T73: full IT - bring up HBase, run TtlValidatorIT (valid → success, invalid → IOException), tear down.
 	@mkdir -p test/integration/coproc-jars
 	cp $(TTL_VALIDATOR_DIR)/target/ttl-validator.jar test/integration/coproc-jars/ttl-validator.jar
 	$(HBASE_COMPOSE_CMD) up -d --build
@@ -739,7 +739,7 @@ SOAK_KILL_MIN_S ?= 120
 SOAK_KILL_MAX_S ?= 300
 
 .PHONY: soak
-soak: counter-observer-jar ## T84: soak/chaos run — load + kill -9 + RSS/zombie gates.
+soak: counter-observer-jar ## T84: soak/chaos run - load + kill -9 + RSS/zombie gates.
 	@mkdir -p test/integration/coproc-jars
 	cp $(COUNTER_OBSERVER_DIR)/target/counter-observer.jar test/integration/coproc-jars/counter-observer.jar
 	$(HBASE_COMPOSE_CMD) up -d --build
@@ -757,7 +757,7 @@ soak: counter-observer-jar ## T84: soak/chaos run — load + kill -9 + RSS/zombi
 # Release (T85): assemble distributable artifacts into target/release/.
 # ---------------------------------------------------------------------------
 
-# Stamps the Maven build with VERSION (the repo pom stays SNAPSHOT — the
+# Stamps the Maven build with VERSION (the repo pom stays SNAPSHOT - the
 # stamp lives only in the produced artifact) and builds the release-mode
 # hbasecop-build CLI for the supported platform. Tagging and publishing are
 # the release workflow's job (.github/workflows/release.yml).

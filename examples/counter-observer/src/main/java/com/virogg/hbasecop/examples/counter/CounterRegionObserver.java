@@ -20,7 +20,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 /**
  * RegionServer-side coprocessor: delegates {@code prePut}/{@code postPut} to the {@link
  * RegionObserver} exposed by a {@link CoprocessorRuntime}. The runtime is acquired via {@link
- * SharedRuntime} keyed on this class — so all regions on a single RegionServer share one Go
+ * SharedRuntime} keyed on this class - so all regions on a single RegionServer share one Go
  * process / one shmem pair (T63).
  */
 public final class CounterRegionObserver implements RegionCoprocessor {
@@ -45,7 +45,7 @@ public final class CounterRegionObserver implements RegionCoprocessor {
                       .javaToGoFile(tmpDir.resolve("in.mmap"))
                       .goToJavaFile(tmpDir.resolve("out.mmap"))
                       .ringCapacity(16)
-                      .ringMaxObjectSize(1 << 20) // 1 MiB — covers max Mutation size in tests
+                      .ringMaxObjectSize(1 << 20) // 1 MiB - covers max Mutation size in tests
                       .hookTimeout(Duration.ofSeconds(5))
                       .gracefulShutdownTimeout(Duration.ofSeconds(2))
                       .configuration(env.getConfiguration())

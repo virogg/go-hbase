@@ -1,38 +1,40 @@
-# Concurrency model: reader → router → per-region actor
+# Модель конкурентности: reader, router, per-region actor
 
-> ⚠️ **FUTURE DESIGN — NOT IMPLEMENTED.** The router / per-region actor /
-> lifecycle-barrier model below was planned for T41 but **was not built**.
-> The shipped runtime is a flat reader + writer + heartbeat with one
-> goroutine per request and **no per-region ordering or lifecycle barrier**
-> — observer state must be safe for fully concurrent invocation. For the
-> as-built model see [`docs/architecture.md`](../architecture.md)
-> §"Concurrency model (as built)". Keep this document only as a design
-> sketch for a possible post-v0.1.0 ordering layer.
+> ⚠️ **БУДУЩИЙ ДИЗАЙН, НЕ РЕАЛИЗОВАНО.** Модель с router, per-region actor и
+> барьером жизненного цикла, описанная ниже, планировалась для T41, но **не была
+> построена**. Поставляемый runtime — это плоская связка reader + writer +
+> heartbeat с одной горутиной на запрос и **без per-region упорядочивания и
+> барьера жизненного цикла**; состояние observer должно быть безопасно для
+> полностью конкурентного вызова. Модель «как построено» описана в
+> [`docs/architecture.md`](../architecture.md)
+> §"Concurrency model (as built)". Сохраняем этот документ только как набросок
+> дизайна для возможного слоя упорядочивания после v0.1.0.
 
-> **Status.** Foundation in place via T17 (`internal/cpruntime.Loop`).
-> Full enforcement — including the lifecycle barrier — lands in T41 when
-> the RegionObserver hook surface fills in.
-> **Scope.** This document covers the Go-side runtime
-> (`internal/cpruntime`). Java-side mux (T24) mirrors the same shape on
-> the producer half but has a simpler intra-region story because each
-> HBase handler thread is naturally one-call-at-a-time.
+> **Статус.** Фундамент заложен в T17 (`internal/cpruntime.Loop`).
+> Полное обеспечение, включая барьер жизненного цикла, появляется в T41, когда
+> заполнится поверхность хуков RegionObserver.
+> **Область.** Этот документ покрывает Go-side runtime
+> (`internal/cpruntime`). Java-side mux (T24) зеркалит ту же форму на
+> producer-половине, но имеет более простую внутрирегионную историю, потому что
+> каждый HBase handler thread по своей природе обрабатывает один вызов за раз.
 
-## Goals
+## Цели
 
-1. **Concurrency across regions.** N regions on one RegionServer must
-   process hooks in parallel; one slow region must not stall others.
-2. **Concurrency within a region.** Multiple data hooks for the same
-   region (e.g. `prePut` rows A/B from a `preBatchMutate`) run on
-   independent goroutines so handlers can do real work.
-3. **Lifecycle ordering within a region.** When HBase emits
+1. **Конкурентность между регионами.** N регионов на одном RegionServer должны
+   обрабатывать хуки параллельно; один медленный регион не должен тормозить
+   остальные.
+2. **Конкурентность внутри региона.** Несколько data-хуков для одного и того же
+   региона (например, `prePut` для строк A/B из `preBatchMutate`) выполняются на
+   независимых горутинах, чтобы handler'ы могли делать реальную работу.
+3. **Упорядочивание жизненного цикла внутри региона.** Когда HBase эмитит
    `preClose` / `postClose` / `preSplit` / `postSplit` / `preOpen` /
-   `postOpen` for a region, the handler runs **after** all earlier
-   in-flight data-hook handlers for that region have returned, and
-   **before** any subsequent data hook for that region starts.
-4. **Bounded resource use.** No unbounded backlog; backpressure must
-   propagate without livelock.
+   `postOpen` для региона, handler выполняется **после** того, как все более
+   ранние in-flight handler'ы data-хуков для этого региона вернулись, и
+   **до** того, как стартует любой более поздний data-хук для этого региона.
+4. **Ограниченное использование ресурсов.** Никакого неограниченного backlog;
+   backpressure должен распространяться без livelock.
 
-## Topology
+## Топология
 
 ```
             ┌───────────────────────────────────────────────────────┐
@@ -59,169 +61,164 @@ shmem in ──►│  reader gr ──► routing chan(buf=1024) ──► rout
             └───────────────────────────────────────────────────────┘
 ```
 
-Three goroutines own I/O:
+Тремя горутинами владеет I/O:
 
-| Goroutine     | Responsibility                                       | Why dedicated                                                      |
+| Goroutine     | Ответственность                                       | Почему выделенная                                                  |
 |---------------|------------------------------------------------------|--------------------------------------------------------------------|
-| `reader`      | drain shmem inbound → push to routing chan           | Must never block in user code; pure I/O loop.                      |
-| `router`      | dequeue routing chan → push to actor's inbox         | Decouples shmem reads from any per-region backpressure.            |
-| `writer`      | dequeue outbound chan → encode → shmem outbound      | shmem ring is SPSC; single writer enforces that.                   |
+| `reader`      | дренирует shmem inbound → пушит в routing chan        | Никогда не блокируется в пользовательском коде; чистый I/O-цикл.   |
+| `router`      | снимает из routing chan → пушит в inbox актора        | Развязывает чтения из shmem от per-region backpressure.            |
+| `writer`      | снимает из outbound chan → кодирует → shmem outbound   | shmem ring — это SPSC; единственный writer это гарантирует.        |
 
-`N` ephemeral goroutines own per-region work:
+`N` эфемерных горутин владеют per-region работой:
 
-| Goroutine          | Responsibility                                              |
+| Goroutine          | Ответственность                                              |
 |--------------------|-------------------------------------------------------------|
-| `actor[regionID]`  | Serializes lifecycle vs. data for one region; spawns handler goroutines. |
-| `handler` (data)   | Runs one user-code hook invocation; lives until response is queued. |
-| `handler` (lifecycle) | Same, but runs synchronously on the actor goroutine so the barrier holds. |
+| `actor[regionID]`  | Сериализует lifecycle против data для одного региона; спавнит handler-горутины. |
+| `handler` (data)   | Выполняет один вызов пользовательского хука; живёт до постановки ответа в очередь. |
+| `handler` (lifecycle) | То же, но выполняется синхронно на горутине актора, чтобы барьер держался. |
 
-Actors are **lazy-allocated** on the first frame with a new `region_id`.
-`region_id` is **monotonic** (T61 — never recycled). When the actor's
-`postClose` handler completes and the matching `unregisterRegion` Java
-event ships through, the actor's inbox is closed and the goroutine
-returns. State that referred to the region is collectable.
+Акторы **lazy-allocated** на первом фрейме с новым `region_id`.
+`region_id` **монотонен** (T61, никогда не переиспользуется). Когда handler
+`postClose` актора завершается и соответствующее Java-событие `unregisterRegion`
+проходит через канал, inbox актора закрывается и горутина возвращается.
+Состояние, ссылавшееся на регион, становится сборщиком мусора (collectable).
 
-## Why this shape
+## Почему именно такая форма
 
-### Why a separate `router` goroutine
+### Почему отдельная горутина `router`
 
-If the reader pushed directly into `actor.inbox`, a full actor inbox
-would block the reader and stop draining shmem — head-of-line block
-across **all** regions, caused by one slow region. The router is the
-indirection that lets the reader stay live: it pulls from a large
-shared buffer (routing chan), absorbs spikes, and only blocks on the
-*slow region's* inbox when pushing there.
+Если бы reader пушил напрямую в `actor.inbox`, заполненный inbox актора
+заблокировал бы reader и остановил дренирование shmem: head-of-line blocking
+по **всем** регионам, вызванный одним медленным регионом. Router держит reader
+живым: он тянет из большого общего буфера (routing chan), поглощает всплески и
+блокируется только на inbox'е *медленного региона* при пуше туда.
 
-### Why a `regionBarrier` cannot sit on the reader path
+### Почему `regionBarrier` не может лежать на пути reader'а
 
-Equivalent design: hold a `sync.RWMutex` per region — `RLock` for data,
-`Lock` for lifecycle — and acquire it on the reader goroutine. **Wrong**:
-acquiring `Lock` waits for all current `RLock` holders to release.
-While waiting, the reader is parked, which means no other region's
-frames are being drained either. One slow `prePut` handler delays
-`preClose` for region A *and* every hook for regions B…Z. The actor
-model confines that wait to one goroutine that nobody else depends on.
+Эквивалентный дизайн: держать `sync.RWMutex` на регион (`RLock` для data,
+`Lock` для lifecycle) и захватывать его на горутине reader'а. **Неправильно**:
+захват `Lock` ждёт, пока все текущие держатели `RLock` отпустят. Пока он ждёт,
+reader припаркован, так что фреймы других регионов тоже не дренируются.
+Один медленный handler `prePut` задерживает `preClose` для региона A *и* каждый
+хук для регионов B...Z. Модель актора ограничивает это ожидание одной горутиной,
+от которой никто другой не зависит.
 
-### Why concurrency *inside* a region is allowed
+### Почему конкурентность *внутри* региона разрешена
 
-`preBatchMutate` ships up to `hbase.client.write.buffer` worth of
-mutations in one RPC. Serializing those across the actor would make
-per-region throughput a single-handler cliff. HBase itself doesn't
-guarantee cross-row ordering inside a batch, so handlers can run in
-parallel without changing observed semantics — provided lifecycle still
-joins.
+`preBatchMutate` отправляет до `hbase.client.write.buffer` мутаций в одном RPC.
+Сериализация их через актора превратила бы per-region throughput в обрыв
+(cliff) одного handler'а. HBase не гарантирует cross-row упорядочивание внутри
+батча, так что handler'ы могут выполняться параллельно без изменения наблюдаемой
+семантики, при условии, что lifecycle всё ещё джойнится.
 
-### Why `region_id` is monotonic
+### Почему `region_id` монотонен
 
-A recycled id reuses an actor that may still be cleaning up. Monotonic
-ids — `AtomicInt64` on the Java mux — guarantee a fresh actor for every
-`preOpen`, and let stale responses arriving after a cancel be dropped
-in O(1) (`live` set lookup).
+Переиспользованный id заново задействует актора, который может всё ещё
+прибираться. Монотонные id (`AtomicInt64` на Java mux) гарантируют свежего актора
+для каждого `preOpen` и позволяют отбрасывать устаревшие ответы, приходящие после
+отмены, за O(1) (поиск в `live`-множестве).
 
-## Buffer sizing — chosen for T41
+## Размеры буферов (выбраны для T41)
 
-- **routing chan:** 1024 frames. Absorbs ~50ms of 20k-msg/s sustained
-  inbound throughput across all regions on a moderate RS.
-- **actor.inbox:** 64 frames. Enough to ride out an 8-cell
-  `preBatchMutate` plus the lifecycle hooks that delimit it without
-  the router ever waiting.
-- **outbound chan:** 256 frames (already in T17). Drains as fast as
-  the single writer-thread can push to shmem (~µs/frame).
+- **routing chan:** 1024 фрейма. Поглощает ~50ms устойчивого inbound throughput
+  20k-msg/s по всем регионам на умеренном RS.
+- **actor.inbox:** 64 фрейма. Достаточно, чтобы пережить 8-cell `preBatchMutate`
+  плюс ограничивающие его lifecycle-хуки без того, чтобы router когда-либо ждал.
+- **outbound chan:** 256 фреймов (уже в T17). Дренируется так быстро, как
+  единственный writer-thread может пушить в shmem (~µs/frame).
 
-These are starting points; T62 (multi-region stress) is the gate that
-either confirms them or forces a re-tune.
+Отправные точки; T62 (multi-region stress) — это gate, который либо подтверждает
+их, либо вынуждает re-tune.
 
-## Head-of-line trade-off (open)
+## Компромисс head-of-line (открыт)
 
-The router will block on `actor.inbox <- msg` if the target region's
-inbox is full. **This is intentional** — the alternative is to drop or
-error-spike under load, which we want under explicit policy, not as a
-silent regression.
+Router будет блокироваться на `actor.inbox <- msg`, если inbox целевого региона
+заполнен. **Это намеренно**: альтернатива — дропать или error-spike под
+нагрузкой, чего мы хотим по явной политике, а не как тихую регрессию.
 
-For T41 the chosen mitigation is **mitigation (1): generous buffers**.
-At the buffer sizes above, "actor inbox full" requires a user handler
-that genuinely cannot keep up — i.e. a real backpressure event the
-operator must see, not a startup transient.
+Для T41 выбранная мера смягчения — **(1): щедрые буферы**. При размерах выше
+«actor inbox full» требует пользовательского handler'а, который реально не
+успевает, т.е. реальное событие backpressure, которое оператор должен увидеть, а
+не стартовый transient.
 
-### Two further mitigations exist; one is structural, one is not
+### Существуют ещё две меры смягчения; одна структурна, другая нет
 
-**(2) Multi-router fan-out** — replace the single router goroutine with
-a pool of M routers concurrently draining the routing chan. Reduces the
-probability that one full inbox stalls the whole router stage when other
-inboxes have room.
+**(2) Multi-router fan-out**: заменить единственную горутину router'а пулом из M
+router'ов, конкурентно дренирующих routing chan. Снижает шанс, что один
+заполненный inbox застопорит всю стадию router'а, когда у других inbox'ов есть
+место.
 
-> Multi-router does **not** structurally close the HoL window. If every
-> actor's inbox is full simultaneously (genuine system-wide overload),
-> all M routers block. This mitigation only shifts the threshold; under
-> sustained overload the symptom returns. Adopt only as a tuning knob
-> after T62 measurements, never as the load-shedding mechanism.
+> Multi-router **не** закрывает HoL-окно структурно. Если inbox каждого актора
+> заполнен одновременно (настоящая системная перегрузка), все M router'ов
+> блокируются. Эта мера лишь сдвигает порог; при устойчивой перегрузке симптом
+> возвращается. Применять только как ручку тюнинга после замеров T62, никогда как
+> механизм сброса нагрузки (load-shedding).
 
-**(3) Non-blocking offer + overflow policy** — router uses
+**(3) Неблокирующий offer + политика overflow**: router использует
 `select { case a.inbox <- msg: default: overflowPolicy(msg) }`.
-Overflow paths: respond with `Error{code=Overloaded}` (strict-mode →
-IOException to client), or drop+WARN (best-effort).
+Пути overflow: ответить `Error{code=Overloaded}` (strict-mode →
+IOException клиенту) или drop+WARN (best-effort).
 
-> This is the only **structural** closure of router-level HoL: the
-> router never waits, ever. If the runtime is ever required to bound
-> tail latency under overload (P8 SLOs), this is the lever; (2) cannot
-> substitute. Adoption is gated on agreeing on a default policy and
-> wiring it through `hbasecop.policy` config (T31).
+> Это единственное **структурное** закрытие HoL на уровне router'а: router
+> никогда не ждёт, вообще. Если runtime когда-либо потребуется ограничивать
+> tail latency под перегрузкой (P8 SLO), это и есть рычаг; (2) его заменить не
+> может. Применение завязано на согласовании политики по умолчанию и
+> прокидывании её через конфиг `hbasecop.policy` (T31).
 
-## Lifecycle barrier semantics
+## Семантика барьера жизненного цикла
 
-| Hook class | Examples                                | Dispatch                                                       |
+| Класс хука | Примеры                                 | Диспетчеризация                                               |
 |------------|------------------------------------------|----------------------------------------------------------------|
-| data       | `prePut`, `postPut`, `preGet`, `postScannerNext`, `preBatchMutate`, … | `inflight.Add(1)`; runs in fresh `go` routine; `Done()` after response queued. |
-| lifecycle  | `preOpen`, `postOpen`, `preClose`, `postClose`, `preSplit`, `postSplit`, `preMerge`, `postMerge`, `preFlush`, `postFlush`, `preCompact`, `postCompact` | Actor goroutine first `inflight.Wait()`, then runs handler synchronously. New data hooks for the region wait behind it. |
+| data       | `prePut`, `postPut`, `preGet`, `postScannerNext`, `preBatchMutate`, ... | `inflight.Add(1)`; выполняется в свежей `go`-рутине; `Done()` после постановки ответа в очередь. |
+| lifecycle  | `preOpen`, `postOpen`, `preClose`, `postClose`, `preSplit`, `postSplit`, `preMerge`, `postMerge`, `preFlush`, `postFlush`, `preCompact`, `postCompact` | Горутина актора сначала делает `inflight.Wait()`, затем выполняет handler синхронно. Новые data-хуки для региона ждут за ним. |
 
-Decision rules:
+Правила решения:
 
-1. The barrier guarantees: when a lifecycle handler runs, no data
-   handler for **the same region** is concurrently running.
-2. The barrier does **not** order hooks across regions. Region A's
-   `postOpen` may run while Region B's `preClose` is running.
-3. The barrier does not unwind on lifecycle handler failure — error is
-   reported, actor continues, next hook resumes normally.
-4. A data handler that ignores `ctx.Done()` can indefinitely delay a
-   lifecycle hook for its region. The SDK contract (T22) requires
-   handlers to honour `ctx`; T35 enforces a hard deadline by forcing
-   an `Error` response when the deadline passes.
+1. Барьер гарантирует: когда выполняется lifecycle-handler, ни один data-handler
+   для **того же региона** не выполняется конкурентно.
+2. Барьер **не** упорядочивает хуки между регионами. `postOpen` региона A может
+   выполняться, пока выполняется `preClose` региона B.
+3. Барьер не откатывается при сбое lifecycle-handler'а: ошибка
+   репортится, актор продолжает, следующий хук возобновляется нормально.
+4. Data-handler, который игнорирует `ctx.Done()`, может неограниченно задерживать
+   lifecycle-хук для своего региона. Контракт SDK (T22) требует, чтобы
+   handler'ы соблюдали `ctx`; T35 обеспечивает жёсткий дедлайн, форсируя
+   ответ `Error`, как только дедлайн прошёл.
 
-## What this implies for the Java side (T24, T61)
+## Что это влечёт для Java-стороны (T24, T61)
 
-- One **MPSC writer-thread** per shmem direction; handler-threads
-  `enqueue + future.get` only. No `synchronized` per send.
-- `Map<RegionInfo, RegionID>` allocates monotonic ids; never recycles.
-- `unregisterRegion` is bookkeeping-only; runs **after** the `postClose`
-  future resolves. There is no separate "drain region" call — the
-  HBase RPC contract guarantees in-flight RPCs are drained before
-  `preClose` reaches the adapter (see `HRegion.doClose`).
-- Cancellation of a future on RPC timeout immediately removes it from
-  the inflight map. Late Go responses are dropped in O(1).
+- Один **MPSC writer-thread** на каждое направление shmem; handler-threads
+  только `enqueue + future.get`. Никакого `synchronized` на отправку.
+- `Map<RegionInfo, RegionID>` выделяет монотонные id; никогда не переиспользует.
+- `unregisterRegion` — только bookkeeping; выполняется **после** того, как
+  future `postClose` разрешился. Нет отдельного вызова «drain region»:
+  контракт HBase RPC гарантирует, что in-flight RPC дренированы до того, как
+  `preClose` достигнет адаптера (см. `HRegion.doClose`).
+- Отмена future по таймауту RPC немедленно удаляет его из inflight-map.
+  Запоздавшие Go-ответы дропаются за O(1).
 
-## What this implies for the SDK contract (T22, T41)
+## Что это влечёт для контракта SDK (T22, T41)
 
-- `RegionObserver` handler signatures take `context.Context` first.
-  Long-running handlers must respect `ctx.Done()`.
-- Lifecycle hooks (`PreOpen` … `PostMerge`) execute serially within a
-  region; per-region state mutation inside a lifecycle handler is
-  race-free without user-level locks.
-- Data hooks within the same region run concurrently. User-level state
-  shared across data hooks requires the usual `sync` primitives.
-- Per-region state lives in user code, indexed by `env.RegionID`.
-  Bridge does not migrate state across regions on split/merge — the
-  observer's `PostSplit`/`PostMerge` handlers do that.
+- Сигнатуры handler'ов `RegionObserver` принимают `context.Context` первым.
+  Долго работающие handler'ы должны уважать `ctx.Done()`.
+- Lifecycle-хуки (`PreOpen` через `PostMerge`) выполняются последовательно внутри
+  региона; мутация per-region состояния внутри lifecycle-handler'а свободна от
+  гонок без пользовательских блокировок.
+- Data-хуки внутри одного региона выполняются конкурентно. Пользовательское
+  состояние, разделяемое между data-хуками, требует обычных примитивов `sync`.
+- Per-region состояние живёт в пользовательском коде, индексируется по
+  `env.RegionID`. Bridge не мигрирует состояние между регионами при split/merge;
+  это делают handler'ы observer'а `PostSplit`/`PostMerge`.
 
-## What this leaves open
+## Что это оставляет открытым
 
-- T62 (multi-region stress) will publish concrete latency numbers under
-  `docs/bench/` and either ratify the buffers above or trigger the
-  multi-router tuning.
-- The non-blocking-offer policy (mitigation 3) is unimplemented and
-  unconfigured. It is the structural closure of router-level HoL and
-  the only viable lever for hard tail-latency SLOs in P8.
-- Heartbeats currently flow through the same outbound chan as
-  responses (T17). Under sustained outbound saturation a heartbeat can
-  be dropped — already logged, but T33 (watchdog) is the consumer of
-  that signal and must tolerate sporadic misses without false-killing
-  a healthy process.
+- T62 (multi-region stress) опубликует конкретные цифры latency под
+  `docs/bench/` и либо ратифицирует буферы выше, либо запустит
+  multi-router тюнинг.
+- Политика неблокирующего offer (мера смягчения 3) не реализована и не
+  сконфигурирована. Это структурное закрытие HoL на уровне router'а и
+  единственный жизнеспособный рычаг для жёстких tail-latency SLO в P8.
+- Heartbeat'ы сейчас текут через тот же outbound chan, что и ответы (T17). При
+  устойчивом насыщении outbound heartbeat может быть дропнут (уже логируется), но
+  T33 (watchdog) — это потребитель этого сигнала, и он должен терпеть спорадические
+  пропуски без ложного убийства здорового процесса.

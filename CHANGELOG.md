@@ -1,60 +1,66 @@
 # Changelog
 
-All notable changes to go-hbase are documented here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
-[SemVer](https://semver.org/) with the wire protocol versioned independently
+Все значимые изменения go-hbase задокументированы здесь. Формат следует
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/); версии следуют
+[SemVer](https://semver.org/), причём wire-протокол версионируется независимо
 (`virogg.hbasecop.v1`).
 
-## [0.1.0] — unreleased
+## [0.1.0] - unreleased
 
-First release. HBase Observer coprocessors written in Go, executing in a
-long-lived Go process per RegionServer, bridged over a shared-memory ring
-buffer — no fork-per-call, no RPC hop.
+Первый релиз. HBase Observer-копроцессоры, написанные на Go, исполняемые в
+долгоживущем Go-процессе на каждый RegionServer, связанные через
+shared-memory ring buffer: без fork-per-call, без RPC-хопа.
 
-### Highlights
+### Ключевое
 
-- **All five Observer surfaces**: Region, RegionServer, Master, WAL and
-  BulkLoad observers — 103 Observer hooks (143 request/response wire
-  messages) dispatched over a protobuf wire protocol
-  (`virogg.hbasecop.v1`). The Master surface ships a curated subset (20 of
-  HBase 2.5's master hooks); the other four surfaces are complete. Wire
-  framing has a cross-language golden corpus and a Go↔proto hook-id parity
-  guard; hook payload messages are round-tripped per language (full
-  cross-language byte-parity for payloads is tracked as follow-up).
-- **Go SDK** (`pkg/hbasecop`): implement `RegionObserver` (or any other
-  observer interface), call `hbasecop.Run(...)`; `Unimplemented*` embeddings
-  keep observers forward-compatible. Panics in user hooks are recovered and
-  surfaced as hook errors, never process crashes.
-- **One Go process per RegionServer**, shared across regions and coprocessor
-  instances (refcounted `SharedRuntime`), multiplexed by region/hook/req_id.
-- **Supervision**: heartbeat watchdog, crash detection and auto-restart with
-  exponential backoff; in-flight hooks during a crash window fail by policy.
-  Per-hook `strict` / `best-effort` failure policies via HBase configuration.
-- **Packaging**: `hbasecop-build` CLI assembles a deployable coproc-jar from
-  a user observer class + Go ELF; the embedded binary is integrity-checked
-  (SHA-256 manifest digest) at spawn.
-- **Performance** (T81/T82 benches, gated in CI): prePut p50 dispatch
-  overhead ~70–80µs vs a no-op Java observer (<100µs SPEC target) after the
-  spin-before-park dispatch optimization; WAL-write throughput regression
-  with a registered WALObserver inside the <50% gate.
-- **Hardening**: wire decoders on both sides bound chunk counts and pending
-  reassemblies (OOM-DoS resistant), fuzzed continuously (Go native fuzzing +
-  Java jazzer) and nightly in CI; 1h kill -9 soak with data-loss, RSS-growth
-  and zombie-supervisor gates.
+- **Все пять Observer-поверхностей**: Region, RegionServer, Master, WAL и
+  BulkLoad observers; 103 Observer-хука (143 request/response wire-сообщения)
+  диспетчеризуются через protobuf wire-протокол
+  (`virogg.hbasecop.v1`). Master-поверхность поставляется в виде
+  курируемого подмножества (20 из master-хуков HBase 2.5); остальные четыре
+  поверхности полные. Wire-фрейминг имеет кросс-языковой golden corpus и
+  Go↔proto-страж паритета hook-id; payload-сообщения хуков проходят
+  round-trip в каждом языке (полный кросс-языковой byte-parity для payload
+  отслеживается как follow-up).
+- **Go SDK** (`pkg/hbasecop`): реализуйте `RegionObserver` (или любой другой
+  observer-интерфейс), вызовите `hbasecop.Run(...)`; встраивания
+  `Unimplemented*` сохраняют observers совместимыми вперёд. Паники в
+  пользовательских хуках перехватываются и выдаются как ошибки хука, а не как
+  падения процесса.
+- **Один Go-процесс на RegionServer**, разделяемый между регионами и
+  экземплярами копроцессоров (refcounted `SharedRuntime`),
+  мультиплексируемый по region/hook/req_id.
+- **Супервизия**: heartbeat-watchdog, обнаружение падений и авто-рестарт с
+  экспоненциальным backoff; хуки, выполняющиеся в окне падения, завершаются с
+  ошибкой согласно политике. Per-hook политики отказа `strict` /
+  `best-effort` через конфигурацию HBase.
+- **Упаковка**: CLI `hbasecop-build` собирает развёртываемый coproc-jar из
+  пользовательского observer-класса + Go ELF; встроенный бинарь проверяется
+  на целостность (SHA-256 manifest digest) при spawn.
+- **Производительность** (бенчи T81/T82, под gate в CI): накладные расходы
+  диспетчеризации prePut p50 ~70-80µs против no-op Java-observer (<100µs цель
+  по SPEC) после оптимизации диспетчеризации spin-before-park; регрессия
+  пропускной способности WAL-write с зарегистрированным WALObserver
+  укладывается в gate <50%.
+- **Hardening**: wire-декодеры с обеих сторон ограничивают число chunk и
+  ожидающих reassembly (устойчивость к OOM-DoS), непрерывно фаззятся (нативный
+  фаззинг Go + Java jazzer) и еженощно в CI; часовой soak с `kill -9` с gate
+  по потере данных, росту RSS и zombie-supervisor.
 
-### Security
+### Безопасность
 
-- Wire decoder allocation bounds (`MAX_CHUNKS`, `MAX_PENDING_REASSEMBLIES`,
-  and a cumulative retained-byte cap `MAX_PENDING_BYTES`) enforced in both
-  the Go and Java decoders before any peer-controlled allocation.
-- Embedded Go ELF extracted to a 0700 temp file and verified against the
-  coproc-jar manifest SHA-256 before exec.
+- Границы аллокаций wire-декодера (`MAX_CHUNKS`, `MAX_PENDING_REASSEMBLIES`
+  и кумулятивный лимит удерживаемых байтов `MAX_PENDING_BYTES`) применяются в
+  декодерах Go и Java перед любой аллокацией, управляемой peer.
+- Встроенный Go ELF извлекается во временный файл 0700 и сверяется с
+  manifest SHA-256 из coproc-jar перед exec.
 
-### Known limitations
+### Известные ограничения
 
-- Linux x86-64 only; HBase 2.5.x; Java 11+.
-- Post-hooks dispatch synchronously (SPEC §3 fire-and-forget is future work).
-- `MutationConverter` drops mutation-level attributes (cellVisibility, ACL,
-  TTL); Get/Scan conversions drop per-CF time ranges.
-- Endpoint coprocessors are out of scope.
-- Single-RS soak topology; multi-RS chaos is untested.
+- Только Linux x86-64; HBase 2.5.x; Java 11+.
+- Post-хуки диспетчеризуются синхронно (SPEC §3 fire-and-forget — задел на
+  будущее).
+- `MutationConverter` отбрасывает атрибуты уровня мутации (cellVisibility, ACL,
+  TTL); конверсии Get/Scan отбрасывают per-CF временные диапазоны.
+- Endpoint-копроцессоры вне области охвата.
+- Топология soak с одним RS; multi-RS chaos не протестирован.

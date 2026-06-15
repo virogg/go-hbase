@@ -28,20 +28,19 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 /**
- * T81 latency bench: p50/p95/p99 of prePut/postPut dispatched through the full bridge (adapter →
- * proto conversion → wire encode → shmem ring → Go no-op observer → response) versus the Java-only
- * baseline (the same calls against a default-method no-op {@link RegionObserver}). The delta of the
- * two distributions is the per-hook overhead go-hbase adds over a native Java coprocessor — SPEC
- * §7.6 / plan T81 gate: &lt;100µs p50 on prePut.
+ * T81 latency bench: p50/p95/p99 of prePut/postPut through the full bridge (adapter, proto
+ * conversion, wire encode, shmem ring, Go no-op observer, response) vs the Java-only baseline (same
+ * calls against a default-method no-op {@link RegionObserver}). The delta of the two distributions
+ * is the per-hook overhead go-hbase adds over a native Java coprocessor. SPEC §7.6 / plan T81 gate:
+ * &lt;100µs p50 on prePut.
  *
  * <p>Batch size N models how HBase delivers hooks: a client batch of N mutations reaches the region
  * as N back-to-back prePut invocations on one handler thread. batch=1 runs continuous serial round
- * trips — the same methodology as the T19 ping-pong baseline and the regime the SPEC target
- * describes (under load the rings stay warm; an idle system does not care about µs). It carries the
- * gate. batch=100/1000 issue bursts separated by a 1ms idle gap. A fourth, non-gated "sparse" leg
- * (single calls each preceded by 1ms idle) reports the cold-resume cost after the spin-wait readers
- * have been descheduled — scheduler-dominated and noisy on WSL2/shared runners, which is why it
- * informs but does not gate.
+ * trips (same methodology as the T19 ping-pong baseline, and the regime the SPEC target describes:
+ * under load the rings stay warm, an idle system does not care about µs). It carries the gate.
+ * batch=100/1000 issue bursts separated by a 1ms idle gap. A fourth, non-gated "sparse" leg (single
+ * calls each preceded by 1ms idle) reports the cold-resume cost after the spin-wait readers have
+ * been descheduled: scheduler-dominated and noisy on WSL2/shared runners, hence informational only.
  *
  * <p>Excluded from {@code mvn verify} by the *IT suffix; run via {@code make bench-latency}, which
  * first stages the no-op Go ELF (see test/bench/noop-observer). Knobs: {@code -Dbench.ops} (per
@@ -70,7 +69,7 @@ class LatencyBenchIT {
         Thread.currentThread()
             .getContextClassLoader()
             .getResource("bench/linux-amd64/noop-runtime"),
-        "no-op bench ELF missing from test classpath — run `make bench-latency` (it stages the"
+        "no-op bench ELF missing from test classpath - run `make bench-latency` (it stages the"
             + " ELF via go-build-bench-noop before invoking this test)");
 
     tmpDir = Files.createTempDirectory("hbasecop-bench-");
@@ -115,8 +114,8 @@ class LatencyBenchIT {
 
     long gatedOverheadUs = -1;
     for (int batch : BATCH_SIZES) {
-      // batch=1 is continuous serial (the gated steady state); larger
-      // batches are bursts separated by a 1ms idle gap.
+      // batch=1 is continuous serial (the gated steady state); larger batches
+      // are bursts separated by a 1ms idle gap.
       boolean gapped = batch > 1;
       long[] bridgePre = runLeg(bridgeObserver, true, OPS, batch, gapped);
       long[] basePre = runLeg(JAVA_ONLY, true, OPS, batch, gapped);

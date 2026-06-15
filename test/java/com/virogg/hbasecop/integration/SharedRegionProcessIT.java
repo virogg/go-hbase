@@ -42,7 +42,7 @@ import org.junit.jupiter.api.Test;
  *
  * <p>Driven by {@code make test-integration-shared}: brings up the cluster, creates the pre-split
  * table, drives one Put per region, then checks both {@code pgrep} (live process count) and {@code
- * docker logs} (count of {@code GoProcess started:} lines during the test window) — both must be
+ * docker logs} (count of {@code GoProcess started:} lines during the test window) - both must be
  * exactly one.
  */
 final class SharedRegionProcessIT {

@@ -10,8 +10,8 @@ import (
 )
 
 // MasterObserver is the Go-side surface for HBase 2.5 master hooks. It
-// covers a curated subset — the 20 most common master hooks (table
-// lifecycle, enable/disable, region placement and balance) — NOT the
+// covers a curated subset: the 20 most common master hooks (table
+// lifecycle, enable/disable, region placement and balance), NOT the
 // full ~165-method HBase MasterObserver interface; ACL, quota,
 // namespace, snapshot and merge hooks are out of MVP scope (see
 // docs/coverage-region-observer.md). Implement the methods whose hooks
@@ -58,7 +58,7 @@ type UnimplementedMasterObserver struct{}
 
 var _ MasterObserver = UnimplementedMasterObserver{}
 
-// The methods below are intentionally undocumented one-liners — they
+// The methods below are intentionally undocumented one-liners: they
 // all do the same thing (return the zero value, no error). The type
 // doc-comment above is the single source of truth for the contract.
 //revive:disable:exported

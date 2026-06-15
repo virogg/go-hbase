@@ -35,7 +35,7 @@ import org.junit.jupiter.api.Test;
  * preCompact/postCompact) end-to-end through the {@code filter-observer} coproc-jar on a live HBase
  * 2.5 standalone cluster.
  *
- * <p>The observer's flush/compact handlers are passive recorders — they emit a uniquely-tagged
+ * <p>The observer's flush/compact handlers are passive recorders - they emit a uniquely-tagged
  * {@code "filter-observer: <hook>"} slog line per invocation. The IT pre-populates the table,
  * drives {@code admin.flush(tn)} twice (to materialise two HFiles), and then {@code
  * admin.majorCompact(tn)}, waiting for the compaction state to return to NONE. It then greps the
@@ -97,7 +97,7 @@ final class StorageHooksIT {
 
       createTableWithCoproc(admin, tn);
       try (Table table = conn.getTable(tn)) {
-        // First batch + flush — materialises HFile #1.
+        // First batch + flush - materialises HFile #1.
         populate(table, "row-a-", N_PER_FLUSH);
         admin.flush(tn);
         waitForLog(
@@ -109,7 +109,7 @@ final class StorageHooksIT {
             LOG_GRACE,
             "postFlush after flush #1");
 
-        // Second batch + flush — materialises HFile #2 so a major compaction
+        // Second batch + flush - materialises HFile #2 so a major compaction
         // has at least two store-files to merge (otherwise HBase may no-op).
         populate(table, "row-b-", N_PER_FLUSH);
         admin.flush(tn);

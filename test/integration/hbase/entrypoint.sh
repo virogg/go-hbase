@@ -6,7 +6,7 @@
 # Runs `hbase master start` in the foreground so PID 1 dies with HBase and
 # `docker logs` sees its stdout.
 #
-# T51: master coprocessors cannot be attached per-table — they must be
+# T51: master coprocessors cannot be attached per-table - they must be
 # registered cluster-wide via `hbase.coprocessor.master.classes` with the
 # jar on the master classpath. When HBASECOP_MASTER_COPROC_CLASS is set,
 # this entrypoint patches hbase-site.xml + HBASE_CLASSPATH before launch;
@@ -57,7 +57,7 @@ if [ -n "${HBASECOP_RS_COPROC_CLASS:-}" ]; then
   echo "entrypoint: registered region-server coprocessor ${HBASECOP_RS_COPROC_CLASS} (jar ${jar})" >&2
 fi
 
-# T82 — WAL coprocessors are cluster-wide via `hbase.coprocessor.wal.classes`.
+# T82 - WAL coprocessors are cluster-wide via `hbase.coprocessor.wal.classes`.
 # When HBASECOP_WAL_COPROC_CLASS is set, this entrypoint patches
 # hbase-site.xml + HBASE_CLASSPATH before launch; when unset it is a no-op,
 # so the shared image stays generic.

@@ -112,7 +112,7 @@ func parseCoverageMatrix(t *testing.T, doc string) map[string]coverageRow {
 			}
 			continue
 		}
-		// Separator row (`| --- | --- | … |`).
+		// Separator row (`| --- | --- | ... |`).
 		if len(cells) > 0 && strings.HasPrefix(cells[0], "-") {
 			continue
 		}

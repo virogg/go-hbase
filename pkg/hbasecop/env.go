@@ -16,7 +16,7 @@ package hbasecop
 // RegionID is the wire-level routing key allocated by the Java
 // supervisor on RegionObserver.start(env) and freed on stop. It is
 // monotonic per Go-process lifetime and stable across the lifetime of
-// the region in this process — restarts of the Go process or the
+// the region in this process - restarts of the Go process or the
 // region itself will produce a fresh id. RegionID is 0 for Observer
 // surfaces that don't carry region scope (Master, RegionServer); WAL
 // hooks may set it when the entry references a specific region.

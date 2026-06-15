@@ -47,7 +47,7 @@ class HookProtoRoundTripTest {
           "default-instance round-trip drift for " + d.getFullName());
       defaulted++;
 
-      // Mutated round-trip — populate every scalar field with a small
+      // Mutated round-trip - populate every scalar field with a small
       // typed default so the wire bytes are non-empty.
       DynamicMessage.Builder mb = DynamicMessage.newBuilder(d);
       boolean touched = false;
@@ -63,7 +63,7 @@ class HookProtoRoundTripTest {
         touched = true;
       }
       if (!touched) {
-        // No scalars on this message — default-instance check above is the only path.
+        // No scalars on this message - default-instance check above is the only path.
         continue;
       }
       Message mutatedMsg = mb.build();

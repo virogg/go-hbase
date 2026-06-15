@@ -55,9 +55,9 @@ import org.apache.hadoop.hbase.coprocessor.RegionObserver;
  * draining inbound frames, and finally exposes the {@link RegionObserver} that the host coproc
  * delegates to.
  *
- * <p>One instance owns one Go process and one ring pair; the lifecycle is {@code start() → use →
- * stop()}. Concrete HBase {@code RegionCoprocessor} classes (e.g. the counter-observer example)
- * delegate their {@code start(env) / stop(env) / getRegionObserver()} hooks to this class.
+ * <p>One instance owns one Go process and one ring pair; the lifecycle is {@code start()}, use,
+ * {@code stop()}. Concrete HBase {@code RegionCoprocessor} classes (e.g. the counter-observer
+ * example) delegate their {@code start(env) / stop(env) / getRegionObserver()} hooks to this class.
  *
  * <p>Instances are not thread-safe across {@link #start()} / {@link #stop()}, but {@link
  * #getRegionObserver()} may be called from any thread once {@link #start()} has returned.
@@ -153,14 +153,11 @@ public final class CoprocessorRuntime implements AutoCloseable {
 
       watchdog = maybeBuildWatchdog(cfg, effectiveHeartbeatMs);
       restartController = buildRestartController(cfg);
-      // The supervisor scheduler drives crash detection (detectExitedGoProcess)
-      // AND restart (restartController.tick); the heartbeat watchdog tick is an
-      // optional add-on layered on top. These must run even when heartbeats are
-      // DISABLED — otherwise a crashed or exit()ed Go process is never detected
-      // and never restarted, silently disabling the entire supervisor (strict
-      // hooks would then fail forever). So the scheduler is created
-      // unconditionally; when there is no watchdog it ticks at a crash-probe
-      // cadence. tickSchedulerTask() null-checks the watchdog.
+      // Scheduler drives crash detection (detectExitedGoProcess) and restart
+      // (restartController.tick); watchdog tick is optional. Must run even with heartbeats
+      // disabled, else a crashed/exited Go process is never detected or restarted (strict
+      // hooks fail forever). Created unconditionally; with no watchdog it ticks at a
+      // crash-probe cadence. tickSchedulerTask() null-checks the watchdog.
       long tickMs = effectiveHeartbeatMs > 0 ? effectiveHeartbeatMs : DEFAULT_CRASH_PROBE_MS;
       watchdogScheduler =
           Executors.newSingleThreadScheduledExecutor(
@@ -175,9 +172,9 @@ public final class CoprocessorRuntime implements AutoCloseable {
 
       Encoder enc = new Encoder();
       long restartDeadlineMs = resolveRestartDeadlineMs(cfg);
-      // The shmem Channel is single-producer (see Channel javadoc). Under T63 sharing the same
+      // The shmem Channel is single-producer (see Channel javadoc). Under T63, a shared
       // CoprocessorRuntime is fed by hook threads from N regions concurrently, so we serialize
-      // every send through this lock — the ring stays effectively SPSC from the producer's view.
+      // every send through this lock; the ring stays effectively SPSC from the producer's view.
       final Object sendLock = new Object();
       final Channel javaToGoRef = javaToGo;
       final long sendDeadlineMs = restartDeadlineMs;
@@ -227,8 +224,8 @@ public final class CoprocessorRuntime implements AutoCloseable {
 
   /**
    * True iff the restart controller has exhausted its consecutive-failure budget and the runtime is
-   * in the probing-only {@code UNHEALTHY} state. Hook dispatch can use this to short-circuit calls
-   * by policy without waiting on dead transport.
+   * in the probing-only {@code UNHEALTHY} state. Hook dispatch can short-circuit calls by policy
+   * without waiting on dead transport.
    */
   public boolean isUnhealthy() {
     RestartController c = restartController;
@@ -389,9 +386,9 @@ public final class CoprocessorRuntime implements AutoCloseable {
         LOG.log(Level.WARNING, "CoprocessorRuntime: watchdog tick threw", e);
       }
     }
-    // Detect process-exit independently of heartbeats so {@code exit 1} from the Go side
-    // also triggers a restart (the watchdog only catches "hung" — no heartbeats over the
-    // miss window — not an outright exit).
+    // Detect process-exit independently of heartbeats so `exit 1` from the Go side also
+    // triggers a restart. The watchdog only catches "hung" (no heartbeats over the miss
+    // window), not an outright exit.
     detectExitedGoProcess();
     RestartController c = restartController;
     if (c != null) {
@@ -439,7 +436,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
     long pid = gp == null ? -1L : gp.pid();
     LOG.log(
         Level.WARNING,
-        "CoprocessorRuntime: heartbeat watchdog fired (pid={0}, elapsed={1}ms) — SIGKILL",
+        "CoprocessorRuntime: heartbeat watchdog fired (pid={0}, elapsed={1}ms) - SIGKILL",
         pid,
         elapsedMs);
     if (gp != null) {
@@ -461,7 +458,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
    * shmem rings. Returns {@code true} on success. Called by {@link RestartController} from the
    * watchdog scheduler thread.
    *
-   * <p>Inflight requests waiting on the multiplexer are <em>not</em> cancelled here — T35 handles
+   * <p>Inflight requests waiting on the multiplexer are <em>not</em> cancelled here; T35 handles
    * mux teardown on crash.
    */
   private boolean attemptRestart() {
@@ -519,10 +516,9 @@ public final class CoprocessorRuntime implements AutoCloseable {
             .maxObjectSize(cfg.ringMaxObjectSize())
             .heartbeatPeriodMs(effectiveHeartbeatMs)
             .gracefulShutdownTimeout(cfg.gracefulShutdownTimeout())
-            // T71/CP-ε3: pass the manifest's HbaseCop-Go-Bin-SHA256 so GoProcess
-            // validates the extracted ELF BEFORE exec and fails closed on a
-            // corrupt/wrong-arch/tampered binary. Without this the checksum the
-            // hbasecop-build CLI writes is never actually verified at runtime.
+            // T71/CP-ε3: pass the manifest's HbaseCop-Go-Bin-SHA256 so GoProcess validates the
+            // extracted ELF before exec and fails closed on a corrupt/wrong-arch/tampered binary.
+            // Without this, the checksum hbasecop-build writes is never verified at runtime.
             .expectedBinarySha256(resolveExpectedBinarySha256())
             .extraEnv(cfg.extraEnv())
             .build();
@@ -530,12 +526,12 @@ public final class CoprocessorRuntime implements AutoCloseable {
   }
 
   /**
-   * Resolve the expected SHA-256 of the embedded Go ELF. Precedence: an explicit override on the
+   * Resolve the expected SHA-256 of the embedded Go ELF. Precedence: explicit override on the
    * {@link Config}, else the {@code HbaseCop-Go-Bin-SHA256} attribute from the manifest of the
-   * <em>same</em> jar that provides {@link Config#binaryResourcePath()} (so the digest is bound to
-   * the same artifact as the ELF). Returns {@code null} — checksum skipped, with a WARN — only for
-   * uninstrumented/dev classpaths (e.g. {@code target/classes}) that carry no HbaseCop manifest
-   * attributes; production coproc-jars built by {@code hbasecop-build} always carry the attribute.
+   * <em>same</em> jar that provides {@link Config#binaryResourcePath()} (binds the digest to the
+   * same artifact as the ELF). Returns {@code null} (checksum skipped, with a WARN) only for
+   * dev/uninstrumented classpaths (e.g. {@code target/classes}) that carry no HbaseCop manifest
+   * attributes; production coproc-jars from {@code hbasecop-build} always carry the attribute.
    */
   private String resolveExpectedBinarySha256() {
     String override = cfg.expectedBinarySha256();
@@ -636,7 +632,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
 
   private HeartbeatWatchdog maybeBuildWatchdog(Config cfg, long effectiveHeartbeatMs) {
     if (effectiveHeartbeatMs <= 0) {
-      // Heartbeats explicitly disabled — no watchdog.
+      // Heartbeats explicitly disabled: no watchdog.
       return null;
     }
     Duration period = Duration.ofMillis(effectiveHeartbeatMs);
@@ -656,17 +652,17 @@ public final class CoprocessorRuntime implements AutoCloseable {
     Configuration src = cfg.configuration();
     // Clone via iterator rather than `new Configuration(src)`: HBase wraps the per-region coproc
     // env in a CompoundConfiguration that merges TableDescriptor.setValue keys dynamically inside
-    // get(), and the Configuration copy-constructor only clones the base `properties` map — it
-    // would silently drop those merged values (per-table policy / timeout overrides).
+    // get(); the copy-constructor only clones the base `properties` map, so it would silently drop
+    // those merged values (per-table policy and timeout overrides).
     Configuration conf = new Configuration(false);
     if (src != null) {
       for (java.util.Map.Entry<String, String> e : src) {
         conf.set(e.getKey(), e.getValue());
       }
     }
-    // The configured hookTimeout is a global default — only inject it when the caller's
+    // The configured hookTimeout is a global default: only inject it when the caller's
     // Configuration does not already pin per-hook or global hbasecop.timeout.* keys, so
-    // explicit Configuration overrides always win.
+    // explicit overrides always win.
     if (conf.get(PolicyConfig.KEY_TIMEOUT_DEFAULT) == null) {
       conf.setTimeDuration(
           PolicyConfig.KEY_TIMEOUT_DEFAULT, cfg.hookTimeout().toNanos(), TimeUnit.NANOSECONDS);
@@ -700,10 +696,10 @@ public final class CoprocessorRuntime implements AutoCloseable {
 
   /**
    * Retry a non-blocking ring write until it succeeds, the deadline passes, or the thread is
-   * interrupted. This spin MUST be bounded: {@link Channel#send} throws {@link RingFullException}
-   * immediately (it never blocks), and the production caller holds the shared {@code sendLock}, so
-   * an unbounded spin against a full/hung/dead Go side would pin this RegionServer RPC-handler
-   * thread at 100% CPU and starve every other region's send. On timeout it throws a clear {@link
+   * interrupted. The spin must be bounded: {@link Channel#send} throws {@link RingFullException}
+   * immediately (never blocks) and the production caller holds the shared {@code sendLock}, so an
+   * unbounded spin against a full/hung/dead Go side would pin this RegionServer RPC-handler thread
+   * at 100% CPU and starve every other region's send. On timeout throws a clear {@link
    * ShmemException} so the hook fails by policy instead of hanging forever. {@code nanoClock} is
    * injected for testability.
    */
@@ -770,7 +766,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
           continue;
         }
         if (m == null) {
-          // Partial frame — Decoder will resume on next chunk; here we treat as "wait".
+          // Partial frame: Decoder will resume on next chunk; here we treat as "wait".
           continue;
         }
         switch (m.type()) {
@@ -890,8 +886,8 @@ public final class CoprocessorRuntime implements AutoCloseable {
     }
 
     /**
-     * Explicit {@link RestartConfig}; {@code null} → derive from {@link #configuration()} or fall
-     * back to {@link RestartConfig#defaults()}.
+     * Explicit {@link RestartConfig}; {@code null} means derive from {@link #configuration()} or
+     * fall back to {@link RestartConfig#defaults()}.
      */
     public RestartConfig restartConfig() {
       return restartConfig;
@@ -899,7 +895,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
 
     /**
      * Deadline a call issued during a paused-by-crash window waits for restart before failing with
-     * {@link GoSideCrashedException}. {@code null} → derive from {@link #configuration()} via
+     * {@link GoSideCrashedException}. {@code null} means derive from {@link #configuration()} via
      * {@link #KEY_RESTART_DEADLINE} or fall back to {@link #DEFAULT_RESTART_DEADLINE}.
      */
     public Duration restartDeadline() {

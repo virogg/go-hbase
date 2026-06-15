@@ -10,7 +10,7 @@ import (
 )
 
 // BulkLoadObserver is the Go-side mirror of HBase 2.5 BulkLoadObserver.
-// Both hooks are region-scoped — the table/region the bulk load targets
+// Both hooks are region-scoped - the table/region the bulk load targets
 // travels in ObserverEnv. Implement the methods whose hooks your
 // observer needs; embed UnimplementedBulkLoadObserver to inherit no-op
 // defaults for the rest.
@@ -33,7 +33,7 @@ type UnimplementedBulkLoadObserver struct{}
 
 var _ BulkLoadObserver = UnimplementedBulkLoadObserver{}
 
-// The methods below are intentionally undocumented one-liners — they all
+// The methods below are intentionally undocumented one-liners - they all
 // do the same thing (return the zero value, no error). The type
 // doc-comment above is the single source of truth for the contract.
 //revive:disable:exported

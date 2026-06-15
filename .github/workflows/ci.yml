@@ -9,7 +9,7 @@ on:
   pull_request:
   workflow_dispatch:
   schedule:
-    # Nightly (03:17 UTC) — runs the heavier integration + bench jobs that are
+    # Nightly (03:17 UTC) - runs the heavier integration + bench jobs that are
     # skipped on ordinary pushes. SPEC §7: integration on PR-to-main + nightly,
     # bench nightly with a regression alert.
     - cron: "17 3 * * *"
@@ -122,7 +122,7 @@ jobs:
     name: Integration (HBase ${{ matrix.hbase }})
     runs-on: ubuntu-22.04
     # SPEC §7: integration runs on PR targeting main, on push to main, on the
-    # nightly schedule, and on manual dispatch — not on every feature-branch push.
+    # nightly schedule, and on manual dispatch - not on every feature-branch push.
     if: >-
       github.event_name == 'schedule' ||
       github.event_name == 'workflow_dispatch' ||
@@ -133,7 +133,7 @@ jobs:
       matrix:
         # Risk table: cover the pinned 2.5.x and a newer 2.5 patch so a
         # RegionObserver-signature change between patches is caught. Each
-        # version carries its official dist sha512 — the Dockerfile verifies
+        # version carries its official dist sha512 - the Dockerfile verifies
         # the tarball, so the digest must travel with the version.
         include:
           - hbase: "2.5.0"
@@ -232,7 +232,7 @@ jobs:
       - name: Region-concurrency throughput bench (T62)
         run: make bench-region-concurrency
       # Shared GitHub runners are far noisier than the local baseline (~75µs
-      # p50), so the CI gate is loosened to 300µs here — enough to catch a gross
+      # p50), so the CI gate is loosened to 300µs here - enough to catch a gross
       # regression while tolerating runner jitter. The SPEC §7.6 SLO stays 100µs:
       # that is the Makefile/code default enforced on local and dedicated runs.
       - name: Hook latency overhead bench + CI p50 gate (T81)

@@ -1,15 +1,15 @@
-# T62 — Multi-region throughput benchmark
+# T62 - Benchmark throughput при нескольких регионах
 
-**Verifies:** plan task T62 "throughput с N регионами линейно масштабируется
+**Проверяет:** задачу плана T62 "throughput с N регионами линейно масштабируется
 до core_count Go-side".
 
-The benchmark drives PrePut wire frames through the real `cpruntime.Loop`,
-rotating across `N` distinct `region_id` values. The user observer
-(`busyObserver`) burns ~50 µs of CPU per call, so dispatch sits in the
-work-bound regime; otherwise the wire/codec floor dominates and parallel
-scaling is invisible.
+Benchmark гонит wire-кадры PrePut через реальный `cpruntime.Loop`,
+чередуя `N` различных значений `region_id`. Пользовательский observer
+(`busyObserver`) сжигает ~50 µs CPU на каждый вызов, поэтому dispatch
+находится в work-bound режиме; иначе доминирует пол по wire/codec, и
+параллельное масштабирование становится невидимым.
 
-## How to reproduce
+## Как воспроизвести
 
 ```
 go test -run='^$' \
@@ -19,17 +19,17 @@ go test -run='^$' \
     ./pkg/hbasecop/
 ```
 
-Or via Make:
+Или через Make:
 
 ```
 make bench-region-concurrency
 ```
 
-## Result (2026-05-19)
+## Результат (2026-05-19)
 
-Hardware: AMD Ryzen 7 5800H, Linux x86-64. ns/op figures are
-end-to-end per-PrePut wallclock (sender → SPSC ring → cpruntime →
-observer → SPSC ring → receiver). Lower is better.
+Железо: AMD Ryzen 7 5800H, Linux x86-64. Числа ns/op — это
+сквозное wallclock-время на один PrePut (sender → SPSC ring → cpruntime →
+observer → SPSC ring → receiver). Меньше — лучше.
 
 | Regions | GOMAXPROCS=1 | GOMAXPROCS=2 | GOMAXPROCS=4 | GOMAXPROCS=8 |
 |--------:|-------------:|-------------:|-------------:|-------------:|
@@ -41,11 +41,11 @@ observer → SPSC ring → receiver). Lower is better.
 |      32 |       279755 |       143599 |        71269 |        38424 |
 |      64 |       280316 |       139564 |        71241 |        39089 |
 
-(The `regions=2, GOMAXPROCS=1` outlier is single-iteration noise from a
-small `b.N` at the slowest core count; subsequent rows confirm the
-~280 µs floor.)
+(Выброс `regions=2, GOMAXPROCS=1` — это шум одной итерации из-за
+малого `b.N` на самом медленном core count; последующие строки подтверждают
+пол ~280 µs.)
 
-Translating to ops/sec at any region count ≥ 4:
+В пересчёте на ops/sec при любом числе регионов ≥ 4:
 
 | GOMAXPROCS | ns/op (mean) | ops/sec  | Speed-up vs 1 |
 |-----------:|-------------:|---------:|--------------:|
@@ -54,42 +54,45 @@ Translating to ops/sec at any region count ≥ 4:
 |          4 |        ~71 k |   14.1 k |          3.94× |
 |          8 |        ~40 k |   25.0 k |          7.0× |
 
-## Read
+## Чтение результатов
 
-- **Linear scaling with core_count.** Doubling GOMAXPROCS approximately
-  halves ns/op, up to GOMAXPROCS=8 (the host has 8 physical cores). The
-  shortfall from a perfect 8× (we hit ~7×) is the unavoidable
-  serialization on the SPSC reader/writer goroutines inside `cpruntime`
-  — every inbound frame queues through one reader, every outbound
-  response through one writer, so two single-threaded shims bracket the
-  parallel handler pool. This matches the architectural intent (one Go
-  process per RegionServer, one Java→Go ring, one Go→Java ring) and is
-  the design ceiling, not a regression.
+- **Линейное масштабирование с core_count.** Удвоение GOMAXPROCS
+  приблизительно вдвое сокращает ns/op, вплоть до GOMAXPROCS=8 (у хоста
+  8 физических core). Недобор до идеального 8× (мы получаем ~7×) — это
+  неизбежная сериализация на SPSC reader/writer-горутинах внутри `cpruntime`
+  - каждый входящий кадр проходит через одного reader, каждый исходящий
+  ответ — через одного writer, так что два однопоточных shim-слоя
+  обрамляют параллельный пул обработчиков. Это соответствует архитектурному
+  замыслу (один Go-процесс на RegionServer, одно Java→Go-кольцо, одно
+  Go→Java-кольцо) и является потолком дизайна, а не регрессией.
 
-- **N regions ≥ GOMAXPROCS gives no further gain.** Once enough distinct
-  region_ids are in flight to saturate the cores, adding more regions
-  cannot help: parallelism is bounded by the goroutine scheduler, not
-  by routing diversity. Equivalently, even a single region (N=1) drives
-  the full available parallelism because the runtime spawns one handler
-  goroutine per inbound frame regardless of `region_id` — `region_id` is
-  routing metadata, not a partition key for the dispatcher. This is the
-  property T62 Wave-B locks in: no per-region serialization point.
+- **N регионов ≥ GOMAXPROCS не даёт дальнейшего выигрыша.** Как только в
+  полёте достаточно различных region_id, чтобы насытить core, добавление
+  регионов уже не помогает: параллелизм ограничен планировщиком горутин,
+  а не разнообразием маршрутизации. Эквивалентно, даже один регион (N=1)
+  выжимает весь доступный параллелизм, потому что runtime порождает одну
+  горутину-обработчик на каждый входящий кадр независимо от `region_id` -
+  `region_id` это метаданные маршрутизации, а не ключ партиционирования
+  для dispatcher. Именно это свойство фиксирует T62 Wave-B: отсутствие
+  точки сериализации на регион.
 
-- **Floor at GOMAXPROCS=1 ≈ 280 µs.** Single-core ns/op is dominated by
-  the synthetic 50 µs handler work plus ~230 µs of (encode + ring send
-  + decode + dispatch + marshal + handler-spawn + response-marshal +
-  ring send + decode) overhead distributed across the path. Real
-  observers will trade this floor against their own per-call cost.
+- **Пол при GOMAXPROCS=1 ≈ 280 µs.** Однопроцессорный ns/op доминируется
+  синтетической 50 µs работой обработчика плюс ~230 µs overhead
+  (encode + ring send + decode + dispatch + marshal + handler-spawn +
+  response-marshal + ring send + decode), распределённого по всему пути.
+  Реальные observer будут размениваться между этим полом и собственной
+  стоимостью на вызов.
 
-## Caveats
+## Оговорки
 
-- `busyObserver` is a synthetic CPU-bound stand-in. Real observers vary
-  wildly (e.g. preWALWrite is latency-critical, see T82). This bench
-  isolates the dispatch fan-out, not steady-state HBase throughput.
-- WSL2 numbers are noisier than bare-metal Linux; a re-run typically
-  varies ±10 %. Treat the table as a regression baseline, not a
-  spec-grade SLO.
-- The bench currently runs sender + receiver in one process and uses
-  `shmem` over a tmpfs-backed mmap; a cross-process run (Java
-  supervisor + ELF) adds a constant context-switch term but does not
-  change the scaling shape.
+- `busyObserver` — это синтетическая CPU-bound заглушка. Реальные observer
+  варьируются очень сильно (например, preWALWrite критичен по latency,
+  см. T82). Этот bench изолирует fan-out диспетчеризации, а не
+  установившийся throughput HBase.
+- Числа на WSL2 шумнее, чем на bare-metal Linux; повторный прогон обычно
+  варьируется на ±10 %. Воспринимайте таблицу как базовую линию для
+  регрессии, а не как SLO spec-уровня.
+- Сейчас bench запускает sender + receiver в одном процессе и использует
+  `shmem` поверх mmap на tmpfs; cross-process прогон (Java-supervisor +
+  ELF) добавляет постоянное слагаемое context-switch, но не меняет форму
+  масштабирования.

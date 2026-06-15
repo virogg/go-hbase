@@ -43,7 +43,7 @@ import org.mockito.quality.Strictness;
  * T51 Wave B unit test for {@link MasterObserverAdapter}: verifies the adapter encodes the HBase
  * descriptor / table-name arguments into the right proto Request, drives the injected {@link
  * HookDispatcher}, and translates {@code bypass=true} / strict-mode error responses into the
- * matching {@code ObserverContext#bypass()} / {@code IOException} reactions — mirrors the Region
+ * matching {@code ObserverContext#bypass()} / {@code IOException} reactions; mirrors the Region
  * adapter's coverage on a representative slice of the master surface.
  */
 @ExtendWith(MockitoExtension.class)

@@ -19,14 +19,12 @@ import (
 	"github.com/virogg/go-hbase/internal/shmem"
 )
 
-// Run is the SDK entrypoint for an HBase coprocessor implemented in
-// Go. The user's main function calls Run with one or more observer
-// implementations; Run blocks for the lifetime of the coprocessor,
-// draining inbound hook invocations off the Java↔Go shmem rings and
-// dispatching them onto observer methods.
+// Run is the SDK entrypoint for a Go-implemented HBase coprocessor.
+// User main calls Run with one or more observers; Run blocks for the
+// coprocessor lifetime, draining inbound hook invocations off the
+// Java↔Go shmem rings and dispatching them onto observer methods.
 //
-// Configuration is taken from the environment, set by the Java
-// supervisor (T18):
+// Config from environment, set by the Java supervisor (T18):
 //
 //	HBASECOP_SHMEM_IN_PATH         mmap file consumed by Go (Java writes)
 //	HBASECOP_SHMEM_OUT_PATH        mmap file produced by Go (Java reads)
@@ -35,10 +33,9 @@ import (
 //	HBASECOP_HEARTBEAT_MS          heartbeat period in ms; 0 = default,
 //	                               <0 disables (tests only)
 //
-// Run returns nil on clean shutdown (SIGINT/SIGTERM or inbound
-// SHUTDOWN frame), or an error on a setup/transport failure. Phase 2
-// supports a single RegionObserver; richer fan-out across Observer
-// surfaces is T41+.
+// Returns nil on clean shutdown (SIGINT/SIGTERM or inbound SHUTDOWN
+// frame), error on setup/transport failure. Phase 2 supports a single
+// RegionObserver; fan-out across Observer surfaces is T41+.
 func Run(observers ...RegionObserver) error {
 	if len(observers) == 0 {
 		return errors.New("hbasecop.Run: at least one observer required")
@@ -102,12 +99,11 @@ func Run(observers ...RegionObserver) error {
 	return nil
 }
 
-// RunMaster is the T51 master-side counterpart of Run. It boots the
-// shared runtime (shmem + heartbeat + dispatcher loop) against a
-// MasterObserver instead of a RegionObserver. A single process serves
-// a single observer surface — region or master, not both — which keeps
-// the coproc-jar packaging symmetric between RegionCoprocessor and
-// MasterCoprocessor on the Java side.
+// RunMaster (T51) is the master-side counterpart of Run: same shared
+// runtime (shmem + heartbeat + dispatcher loop) against a MasterObserver
+// instead of a RegionObserver. One process serves one observer surface,
+// region or master, not both; keeps coproc-jar packaging symmetric
+// between RegionCoprocessor and MasterCoprocessor on the Java side.
 func RunMaster(masters ...MasterObserver) error {
 	if len(masters) == 0 {
 		return errors.New("hbasecop.RunMaster: at least one master observer required")
@@ -171,12 +167,10 @@ func RunMaster(masters ...MasterObserver) error {
 	return nil
 }
 
-// RunRegionServer is the T52 region-server counterpart of Run and
-// RunMaster. It boots the shared runtime (shmem + heartbeat + dispatcher
-// loop) against a RegionServerObserver. A single process serves a single
-// observer surface — region, master or region-server — which keeps the
-// coproc-jar packaging symmetric across the three Coprocessor kinds on
-// the Java side.
+// RunRegionServer (T52) is the region-server counterpart: shared runtime
+// against a RegionServerObserver. One process serves one observer surface
+// (region, master or region-server), keeping coproc-jar packaging
+// symmetric across the three Coprocessor kinds on the Java side.
 func RunRegionServer(observers ...RegionServerObserver) error {
 	if len(observers) == 0 {
 		return errors.New("hbasecop.RunRegionServer: at least one region-server observer required")
@@ -240,12 +234,10 @@ func RunRegionServer(observers ...RegionServerObserver) error {
 	return nil
 }
 
-// RunWAL is the T53 WAL-side counterpart of Run, RunMaster and
-// RunRegionServer. It boots the shared runtime (shmem + heartbeat +
-// dispatcher loop) against a WALObserver. A single process serves a
-// single observer surface — region, master, region-server or WAL — which
-// keeps the coproc-jar packaging symmetric across the Coprocessor kinds
-// on the Java side.
+// RunWAL (T53) is the WAL-side counterpart: shared runtime against a
+// WALObserver. One process serves one observer surface (region, master,
+// region-server or WAL), keeping coproc-jar packaging symmetric across
+// the Coprocessor kinds on the Java side.
 func RunWAL(observers ...WALObserver) error {
 	if len(observers) == 0 {
 		return errors.New("hbasecop.RunWAL: at least one WAL observer required")
@@ -309,12 +301,10 @@ func RunWAL(observers ...WALObserver) error {
 	return nil
 }
 
-// RunBulkLoad is the T54 bulk-load counterpart of Run, RunMaster,
-// RunRegionServer and RunWAL. It boots the shared runtime (shmem +
-// heartbeat + dispatcher loop) against a BulkLoadObserver. A single
-// process serves a single observer surface — region, master,
-// region-server, WAL or bulk-load — which keeps the coproc-jar
-// packaging symmetric across the Coprocessor kinds on the Java side.
+// RunBulkLoad (T54) is the bulk-load counterpart: shared runtime against
+// a BulkLoadObserver. One process serves one observer surface (region,
+// master, region-server, WAL or bulk-load), keeping coproc-jar packaging
+// symmetric across the Coprocessor kinds on the Java side.
 func RunBulkLoad(observers ...BulkLoadObserver) error {
 	if len(observers) == 0 {
 		return errors.New("hbasecop.RunBulkLoad: at least one bulk-load observer required")
@@ -379,9 +369,8 @@ func RunBulkLoad(observers ...BulkLoadObserver) error {
 }
 
 // newLogger builds the slog JSON logger shared by every Run* entrypoint.
-// The level is taken from HBASECOP_LOG_LEVEL (SPEC §6); unset or
-// unrecognized values fall back to info. JSON output to stderr with the
-// level wired in is the only observability surface in the MVP.
+// Level comes from HBASECOP_LOG_LEVEL (SPEC §6); unset or unrecognized
+// falls back to info. JSON to stderr is the only MVP observability surface.
 func newLogger() *slog.Logger {
 	return slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: logLevelFromEnv()}))
 }

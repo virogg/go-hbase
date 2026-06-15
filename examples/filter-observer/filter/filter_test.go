@@ -190,7 +190,7 @@ func TestEmptyPrefix_DisablesBypass(t *testing.T) {
 	}
 }
 
-// T45: storage hooks (flush + compaction) — observer is a passive recorder.
+// T45: storage hooks (flush + compaction) - observer is a passive recorder.
 // Each handler increments its counter and emits a uniquely-tagged slog line
 // so the live IT can grep docker logs for proof the hook fired.
 

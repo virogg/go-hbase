@@ -33,12 +33,12 @@ import org.junit.jupiter.api.Test;
 
 /**
  * T27 integration test: drives 100 PrePut hooks through a real coprocessor on a live HBase 2.5
- * standalone cluster (the T26 docker-compose target) and asserts the Go-side counter incremented
- * 100 times.
+ * standalone cluster (T26 docker-compose target); asserts the Go-side counter incremented 100
+ * times.
  *
- * <p>This test is not part of {@code mvn test} — its name doesn't match Surefire's defaults — and
- * is invoked explicitly by {@code make test-integration}, which manages the cluster lifecycle and
- * stages the coproc-jar into the bind-mount the container reads from.
+ * <p>Not in {@code mvn test} (name doesn't match Surefire defaults); run via {@code make
+ * test-integration}, which manages the cluster lifecycle and stages the coproc-jar into the
+ * container's bind-mount.
  *
  * <p>Assumptions on entry:
  *
@@ -126,7 +126,7 @@ final class PrePutCounterIT {
 
   private static Path resolveJarOnHost() {
     Path here = Paths.get("").toAbsolutePath();
-    // Test may be invoked from repo root or from target/ — climb to find the bind-mount dir.
+    // Test may be invoked from repo root or from target/; climb to find the bind-mount dir.
     while (here != null) {
       Path candidate = here.resolve(COPROC_JAR_HOST_RELATIVE);
       if (Files.exists(candidate)) {
@@ -199,7 +199,7 @@ final class PrePutCounterIT {
       }
       Thread.sleep(250);
     }
-    // Fall through on timeout — the caller's assertEquals will surface the exact delta.
+    // Fall through on timeout; caller's assertEquals surfaces the exact delta.
   }
 
   /** Runs `docker logs {container} 2>&1 | grep -c 'counter-observer: prePut'`. */

@@ -45,7 +45,7 @@ public final class WireFormat {
   /**
    * Maximum TOTAL payload bytes retained across all in-progress reassemblies. The entry-count cap
    * alone is not enough: each abandoned near-complete reassembly may hold up to (MAX_CHUNKS−1) ×
-   * {@link #MAX_PAYLOAD_BYTES} ≈ 67 MB, so 4096 entries would permit ~256 GiB of retained heap — an
+   * {@link #MAX_PAYLOAD_BYTES} ≈ 67 MB, so 4096 entries would permit ~256 GiB of retained heap - an
    * OOM long before the count cap fires. One max-size message (64 MiB) plus headroom. Mirrors
    * {@code wire.MaxPendingBytes}.
    */

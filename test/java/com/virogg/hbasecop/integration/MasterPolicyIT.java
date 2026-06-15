@@ -21,22 +21,21 @@ import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.junit.jupiter.api.Test;
 
 /**
- * T51 integration test: exercises the MasterObserver {@code preCreateTable} hook end-to-end through
- * the {@code master-policy-observer} coproc-jar on a live HBase 2.5 standalone cluster.
+ * T51 integration test for the MasterObserver {@code preCreateTable} hook, end-to-end through the
+ * {@code master-policy-observer} coproc-jar on a live HBase 2.5 standalone cluster.
  *
- * <p>Unlike region/table coprocessors, a MasterObserver is registered cluster-wide via {@code
- * hbase.coprocessor.master.classes}; the docker entrypoint patches that into hbase-site.xml when
- * {@code make test-integration-master} exports {@code HBASECOP_MASTER_COPROC_CLASS}. The Go
- * observer rejects any table whose qualifier begins with {@code "forbidden-"} by returning an
- * error, which the strict-by-default {@code MasterObserverAdapter} surfaces as an {@link
- * IOException} back to the HBase admin client.
+ * <p>The observer is registered cluster-wide via {@code hbase.coprocessor.master.classes}; the
+ * docker entrypoint patches hbase-site.xml when {@code make test-integration-master} exports {@code
+ * HBASECOP_MASTER_COPROC_CLASS}. The Go observer returns an error for any table qualifier starting
+ * with {@code "forbidden-"}; the strict-by-default {@code MasterObserverAdapter} surfaces that as
+ * an {@link IOException} to the admin client.
  *
- * <p>The test asserts:
+ * <p>Asserts:
  *
  * <ul>
- *   <li>{@code createTable("forbidden-…")} fails with an IOException carrying the observer's policy
- *       message, and the table is absent afterwards.
- *   <li>{@code createTable("ok-…")} succeeds (observer allowed it through).
+ *   <li>{@code createTable("forbidden-...")} fails with an IOException carrying the policy message,
+ *       and the table is absent afterwards.
+ *   <li>{@code createTable("ok-...")} succeeds.
  * </ul>
  *
  * <p>Not part of {@code mvn test}; invoked by {@code make test-integration-master}.
@@ -72,7 +71,7 @@ final class MasterPolicyIT {
       dropQuietly(admin, blocked);
       dropQuietly(admin, allowed);
 
-      // --- Blocked create: observer must reject it ------------------------
+      // Blocked create: observer must reject it.
       IOException rejected =
           assertThrows(
               IOException.class,
@@ -81,11 +80,11 @@ final class MasterPolicyIT {
       String msg = rootMessage(rejected);
       assertTrue(
           msg.contains("forbidden-users") || msg.contains("naming policy"),
-          "rejection should carry the observer's policy message — got: " + msg);
+          "rejection should carry the observer's policy message - got: " + msg);
       assertTrue(
           !admin.tableExists(blocked), "forbidden- table must not exist after a rejected create");
 
-      // --- Allowed create: observer must let it through -------------------
+      // Allowed create: observer must let it through.
       try {
         admin.createTable(descriptor(allowed));
         assertTrue(admin.tableExists(allowed), "ok- table must exist after an allowed create");
@@ -138,7 +137,7 @@ final class MasterPolicyIT {
       }
       admin.deleteTable(tn);
     } catch (IOException ignored) {
-      // best effort — table may never have been created (rejected path)
+      // best effort; table may never have been created (rejected path)
     }
   }
 }

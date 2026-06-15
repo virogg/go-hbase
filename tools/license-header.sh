@@ -5,9 +5,9 @@
 # Apache 2.0 license-header check / inserter.
 #
 # Modes:
-#   --check (default)  — exit 1 if any tracked source file is missing the
+#   --check (default)  - exit 1 if any tracked source file is missing the
 #                         SPDX header. Used by CI and `make license-check`.
-#   --fix              — prepend the appropriate per-language header to every
+#   --fix              - prepend the appropriate per-language header to every
 #                         source file that does not yet have it.
 #
 # Header template lives in tools/license-header.txt (single line of text per

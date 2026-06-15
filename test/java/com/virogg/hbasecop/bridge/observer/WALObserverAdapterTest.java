@@ -41,7 +41,7 @@ import org.mockito.quality.Strictness;
  * T53 Wave B unit test for {@link WALObserverAdapter}: verifies the adapter encodes the WALKey
  * scalars / WAL-roll paths into the right proto Request, drives the injected {@link
  * HookDispatcher}, and translates {@code bypass=true} / strict-mode error responses into the
- * matching {@code ObserverContext#bypass()} / {@code IOException} reactions — mirrors the master
+ * matching {@code ObserverContext#bypass()} / {@code IOException} reactions - mirrors the master
  * adapter's coverage on the WAL surface.
  */
 @ExtendWith(MockitoExtension.class)

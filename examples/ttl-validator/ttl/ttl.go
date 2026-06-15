@@ -11,7 +11,7 @@
 //
 //	ttl=<seconds>;<payload>
 //
-// e.g. "ttl=3600;{...}" — at least one digit, seconds > 0, terminated by
+// e.g. "ttl=3600;{...}" - at least one digit, seconds > 0, terminated by
 // ';'. Real deployments would carry the TTL in a structured codec; the
 // point here is in-database validation written in Go.
 package ttl
@@ -129,7 +129,7 @@ func (o *Observer) PrePut(
 					"rejected_total", n,
 				)
 				return hbasecop.HookResult{}, fmt.Errorf(
-					"ttl-validator: %s:%s — %w", family, qv.GetQualifier(), err)
+					"ttl-validator: %s:%s - %w", family, qv.GetQualifier(), err)
 			}
 		}
 	}

@@ -77,7 +77,7 @@ func TestHookIDMatchesProtoEnum(t *testing.T) {
 			continue
 		}
 		if int32(r.id) != val {
-			t.Errorf("hook %q: Go HookID=%d but proto enum=%d — on-wire dispatch key drift",
+			t.Errorf("hook %q: Go HookID=%d but proto enum=%d - on-wire dispatch key drift",
 				r.name, r.id, val)
 		}
 	}

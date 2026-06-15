@@ -57,7 +57,7 @@ import org.mockito.quality.Strictness;
  * lifecycle, flush, compaction, scanner, storage-file, WAL-replay/restore, bulk-load and before-WAL
  * passthrough hooks. Each invocation must reach {@code dispatcher.dispatchHook}; the
  * value-returning passthrough hooks must hand back their input argument unchanged on an empty
- * response. The arg-serializing hooks (Get/Put/Delete/CheckAndMutate/…) are covered separately in
+ * response. The arg-serializing hooks (Get/Put/Delete/CheckAndMutate/...) are covered separately in
  * {@link RegionObserverAdapterPayloadHooksTest}.
  */
 @ExtendWith(MockitoExtension.class)
