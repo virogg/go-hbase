@@ -108,7 +108,29 @@ stock class in `setCoprocessor` and writes **zero** Java.
 **AC.** counter example runs end-to-end with no example-specific Java class.
 **Verify.** `make test-integration` against the generic delegate.
 
-## DX3 — Single `hbasecop package` command
+## DX3 — Single `hbasecop package` command — DONE
+
+> `hbasecop-build package --src ./obs --surface region --out x.jar`: cross-compiles
+> the ELF (GOOS=linux GOARCH=amd64), fails fast on a non-amd64 ELF (reads the
+> header), selects the DX2 stock delegate per `--surface`, resolves the bridge
+> jar from `~/.m2` (newest), and shades+embeds+SHA-256 via the existing Build.
+> coproc-id defaults to the output basename. The legacy low-level flag mode is
+> kept for back-compat.
+>
+> **Latent defect found & fixed via the live test:** `mvn install` published only
+> the THIN bridge jar (module classes, no protobuf/jgshmem), so any coproc-jar
+> shaded from it died at region-open with `NoClassDefFoundError:
+> com/jgshmem/config/Config$Ring` — the example jars only worked because each
+> example pom ran its own maven-shade. Added an uber-bridge shade execution to
+> the root pom (classifier `all`: bridge + protobuf + jgshmem, hbase provided),
+> and `resolveBridgeJar` now requires `hbasecop-bridge-*-all.jar`.
+>
+> **Verified end-to-end on live HBase 2.5.11:** packaged the counter observer via
+> `package` with the stock GenericRegionObserver (zero hand-written Java),
+> deployed, 3 puts → exactly 3 Go-side prePut firings.
+>
+> Follow-up: README quickstart still shows the old multi-step flow (DX9); BulkLoad
+> surface excluded (per DX2).
 
 **Problem.** 5–7 manual, order-dependent, cross-language steps from "Go
 func" to deployable jar; `hbasecop-build` needs 5 flags incl. a
