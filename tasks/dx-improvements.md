@@ -237,9 +237,14 @@ surfaces. **Verify.** new chain + multi-surface dispatch tests.
 > (exit non-zero on malformed, notice on unknown). Go rules mirror the Java
 > preflight. Unit-tested + smoke-checked.
 >
-> Deferred: `deploy`/`list`/`remove` admin subcommands — they need a real HBase
-> Admin client (disable/alter/enable cycle); a print-only stub adds little. Track
-> separately if operators want one-command registration.
+> **Admin (variant A) — DONE:** `DeployTool` (bridge.admin) registers/lists/
+> removes an hbasecop coprocessor on an existing table via the HBase `Admin` API
+> (disable → modifyTable → enable). `hbasecop-build deploy` is a thin wrapper:
+> resolves the uber bridge jar and execs `HBASE_CLASSPATH=<jar> hbase
+> DeployTool ...` (printing the command if `hbase` is not on PATH, since the
+> Admin client needs HBase client jars). Pure descriptor helpers unit-tested (6);
+> verified end-to-end on live HBase 2.5.11: deploy onto a coproc-less table →
+> 2 puts → 2 Go prePut firings → list shows it → remove → 0 refs left.
 
 ### (original notes)
 

@@ -47,6 +47,13 @@ func main() {
 		}
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "deploy" {
+		if err := runDeploy(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "hbasecop-build deploy:", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	opts, err := parseFlags(os.Args[1:])
 	if err != nil {
