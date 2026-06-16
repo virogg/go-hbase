@@ -77,6 +77,27 @@ func TestCheckSiteFile(t *testing.T) {
 	})
 }
 
+func TestUnknownHookSuffix(t *testing.T) {
+	tests := []struct {
+		name string
+		want string // the flagged unknown hook, or "" when the key is fine
+	}{
+		{"hbasecop.policy.prePut", ""},              // valid lower-camel hook
+		{"hbasecop.timeout.preWALAppend", ""},       // valid multi-caps hook
+		{"hbasecop.timeout.default", ""},            // the one non-hook suffix
+		{"hbasecop.timeout.PrePut", "PrePut"},       // Go casing is not the key form
+		{"hbasecop.policy.prePutt", "prePutt"},      // typo
+		{"hbasecop.timeout.bogusHook", "bogusHook"}, // unknown hook
+		{"hbasecop.ring.capacity", ""},              // not a per-hook key
+		{"hbasecop.policy.", ""},                    // empty suffix: not a hook claim
+	}
+	for _, tc := range tests {
+		if got := unknownHookSuffix(tc.name); got != tc.want {
+			t.Errorf("unknownHookSuffix(%q) = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestRunConfigRequiresMode(t *testing.T) {
 	if err := runConfig(nil); err == nil {
 		t.Error("config with no flags should error")

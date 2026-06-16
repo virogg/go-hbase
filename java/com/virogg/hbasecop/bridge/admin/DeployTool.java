@@ -105,17 +105,60 @@ public final class DeployTool {
     }
   }
 
-  /** Disable, swap the descriptor, re-enable - the registration cycle HBase requires. */
+  /**
+   * Disable, swap the descriptor, re-enable - the registration cycle HBase requires. If {@code
+   * modifyTable} fails the original availability is restored (the prior descriptor is re-enabled)
+   * before rethrowing. If only the final {@code enableTable} fails - the typical symptom of a
+   * coprocessor that cannot load - the table is left disabled and a message points the operator at
+   * the manual recovery, since silently swallowing it would leave the table offline with no hint.
+   */
   private static void modifyInPlace(Admin admin, TableName tn, TableDescriptor next)
       throws IOException {
     boolean wasEnabled = admin.isTableEnabled(tn);
     if (wasEnabled) {
       admin.disableTable(tn);
     }
-    admin.modifyTable(next);
-    if (wasEnabled) {
-      admin.enableTable(tn);
+    try {
+      admin.modifyTable(next);
+    } catch (IOException modifyErr) {
+      // Modify failed: restore the prior availability before surfacing the cause.
+      if (wasEnabled) {
+        try {
+          admin.enableTable(tn);
+        } catch (IOException reEnableErr) {
+          IOException stuck = leftDisabled(tn, modifyErr);
+          stuck.addSuppressed(reEnableErr);
+          throw stuck;
+        }
+      }
+      throw modifyErr;
     }
+    if (wasEnabled) {
+      try {
+        admin.enableTable(tn);
+      } catch (IOException enableErr) {
+        // Typical symptom of a coprocessor that cannot load: the descriptor is in
+        // place but regions won't open, so the table stays disabled.
+        throw leftDisabled(tn, enableErr);
+      }
+    }
+  }
+
+  /**
+   * IOException for the cases where the registration cycle leaves the table disabled and could not
+   * re-enable it, carrying {@code cause} and the manual recovery step so the operator is never left
+   * to discover an offline table from a bare stack trace.
+   */
+  private static IOException leftDisabled(TableName tn, Throwable cause) {
+    return new IOException(
+        "table "
+            + tn
+            + " is left DISABLED and could not be re-enabled automatically (a bad coprocessor"
+            + " jar/class commonly blocks region open). Fix it, then re-enable with"
+            + " `hbase shell> enable '"
+            + tn
+            + "'`.",
+        cause);
   }
 
   // ---- Pure descriptor helpers (unit-testable without a cluster) ----

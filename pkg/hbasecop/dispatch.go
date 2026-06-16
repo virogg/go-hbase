@@ -69,12 +69,14 @@ func orDefaultLogger(logger *slog.Logger) *slog.Logger {
 	return logger
 }
 
-// foldObservers runs invoke for each observer in order, folding their
-// HookResults: Bypass is OR-ed, BlockedIndices unioned, ResultCells
-// last-non-empty wins. The first non-nil error (or recovered panic)
-// short-circuits the chain; the erroring observer's own result is still folded
-// in before returning, so a single observer (the common case) yields exactly
-// the (result, err) pair the old single-observer dispatch did.
+// foldObservers runs invoke for each observer in registration order, folding
+// their HookResults: Bypass is OR-ed, BlockedIndices concatenated (duplicates
+// are tolerated Java-side), and ResultCells follow last-non-empty-wins, so a
+// later observer's substitute Result overrides an earlier one's. The first
+// non-nil error (or recovered panic) short-circuits the chain; the erroring
+// observer's own result is still folded in before returning, so a single
+// observer (the common case) yields exactly the (result, err) pair the old
+// single-observer dispatch did.
 func foldObservers[O any](d *dispatcher, hookName string, reqID uint64, observers []O, invoke func(O) (HookResult, error)) (HookResult, error) {
 	var fold HookResult
 	for _, obs := range observers {
@@ -253,7 +255,7 @@ func extractHookCtx(msg proto.Message) *hookpb.HookContext {
 }
 
 func envFromHookContext(logger *slog.Logger, hookName string, reqID uint64, regionID uint32, hc *hookpb.HookContext) ObserverEnv {
-	env := ObserverEnv{RegionID: regionID}
+	env := ObserverEnv{RegionID: regionID, logger: logger, hook: hookName, reqID: reqID}
 	if hc != nil {
 		if t := hc.GetTableName(); t != nil {
 			ns, q := t.GetNamespace(), t.GetQualifier()
@@ -265,10 +267,6 @@ func envFromHookContext(logger *slog.Logger, hookName string, reqID uint64, regi
 		}
 		env.RegionName = string(hc.GetRegionName())
 	}
-	if logger == nil {
-		logger = slog.Default()
-	}
-	env.Logger = logger.With("hook", hookName, "req_id", reqID, "table", env.TableName, "region", env.RegionName)
 	return env
 }
 

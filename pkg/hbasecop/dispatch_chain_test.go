@@ -145,3 +145,79 @@ func TestNewMixedDispatcher(t *testing.T) {
 		t.Error("zero observers should error")
 	}
 }
+
+// dualSurfaceObs satisfies both RegionObserver and MasterObserver from one
+// value - the headline RunAll case: a single observer fanned out to every
+// surface it implements.
+type dualSurfaceObs struct {
+	UnimplementedRegionObserver
+	UnimplementedMasterObserver
+	region, master *int
+}
+
+func (o dualSurfaceObs) PrePut(context.Context, ObserverEnv, *MutationProto) (HookResult, error) {
+	*o.region++
+	return HookResult{}, nil
+}
+
+func (o dualSurfaceObs) PreCreateTable(context.Context, ObserverEnv, *hookpb.PreCreateTableRequest) (HookResult, error) {
+	*o.master++
+	return HookResult{}, nil
+}
+
+func TestNewMixedDispatcherFansOutOneValueToEverySurface(t *testing.T) {
+	var region, master int
+	obs := dualSurfaceObs{region: &region, master: &master}
+
+	d, err := newMixedDispatcher(slog.Default(), obs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.observers) != 1 || len(d.masters) != 1 {
+		t.Fatalf("one value should register on both surfaces: region=%d master=%d", len(d.observers), len(d.masters))
+	}
+
+	dispatchPrePut(t, d) // region hook
+	mInner, err := proto.Marshal(&hookpb.PreCreateTableRequest{Ctx: &hookpb.HookContext{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.dispatch(context.Background(), buildRequestFrame(t, HookIDPreCreateTable, 2, mInner)) // master hook
+
+	if region != 1 || master != 1 {
+		t.Fatalf("both surfaces of the one observer should fire: region=%d master=%d", region, master)
+	}
+}
+
+// allSurfaceObs satisfies every Observer surface, pinning each independent
+// type-assertion branch in newMixedDispatcher against an else-if regression that
+// would route a value to only the first surface it matches.
+type allSurfaceObs struct {
+	UnimplementedRegionObserver
+	UnimplementedMasterObserver
+	UnimplementedRegionServerObserver
+	UnimplementedWALObserver
+	UnimplementedBulkLoadObserver
+}
+
+func TestNewMixedDispatcherRegistersOnAllSurfaces(t *testing.T) {
+	d, err := newMixedDispatcher(slog.Default(), allSurfaceObs{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := len(d.observers); n != 1 {
+		t.Errorf("region: got %d, want 1", n)
+	}
+	if n := len(d.masters); n != 1 {
+		t.Errorf("master: got %d, want 1", n)
+	}
+	if n := len(d.regionServers); n != 1 {
+		t.Errorf("region-server: got %d, want 1", n)
+	}
+	if n := len(d.wals); n != 1 {
+		t.Errorf("wal: got %d, want 1", n)
+	}
+	if n := len(d.bulkLoads); n != 1 {
+		t.Errorf("bulk-load: got %d, want 1", n)
+	}
+}

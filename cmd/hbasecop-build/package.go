@@ -7,11 +7,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 // surfaceDelegate maps a --surface value to the stock generic entrypoint class
@@ -119,7 +121,7 @@ func checkLinuxAmd64ELF(path string) error {
 	}
 	defer func() { _ = f.Close() }()
 	var h [20]byte
-	if _, err := f.Read(h[:]); err != nil {
+	if _, err := io.ReadFull(f, h[:]); err != nil {
 		return fmt.Errorf("read ELF header %s: %w", path, err)
 	}
 	if h[0] != 0x7f || h[1] != 'E' || h[2] != 'L' || h[3] != 'F' {
@@ -154,10 +156,17 @@ func resolveBridgeJar(flagVal string) (string, error) {
 	if len(matches) == 0 {
 		return "", fmt.Errorf("no uber bridge jar (hbasecop-bridge-*-all.jar) under %s; run `mvn install` or pass --bridge-jar", filepath.Dir(filepath.Dir(glob)))
 	}
+	// Stat each once up front: a jar vanishing between Glob and the sort would
+	// otherwise nil-deref in the comparator. A missing/unreadable entry sorts
+	// oldest (zero time), so it never wins "newest".
+	modTimes := make(map[string]time.Time, len(matches))
+	for _, m := range matches {
+		if fi, statErr := os.Stat(m); statErr == nil {
+			modTimes[m] = fi.ModTime()
+		}
+	}
 	sort.Slice(matches, func(i, j int) bool {
-		fi, _ := os.Stat(matches[i])
-		fj, _ := os.Stat(matches[j])
-		return fi.ModTime().After(fj.ModTime())
+		return modTimes[matches[i]].After(modTimes[matches[j]])
 	})
 	return matches[0], nil
 }

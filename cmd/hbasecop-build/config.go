@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/virogg/go-hbase/pkg/hbasecop"
 )
 
 // configKey documents one hbasecop.* setting for `config --list` and drives
@@ -41,6 +43,28 @@ var configKeys = []configKey{
 }
 
 var durationRe = regexp.MustCompile(`^\d+\s*(ns|us|ms|s|m|h|d)$`)
+
+// knownHooks is the set of valid hook suffixes a per-hook policy/timeout key may
+// carry, sourced from the SDK so it never drifts. Config keys use the HBase Java
+// method name (lower-camel, e.g. prePut), while hbasecop.HookNames returns the
+// Go-exported names (PrePut); lowering the first letter bridges the two, the
+// same convention HookId.methodName uses. Mirrors Java ConfigPreflight.
+var knownHooks = func() map[string]bool {
+	names := hbasecop.HookNames()
+	m := make(map[string]bool, len(names))
+	for _, n := range names {
+		m[lowerFirst(n)] = true
+	}
+	return m
+}()
+
+// lowerFirst returns s with its first byte lower-cased (hook names are ASCII).
+func lowerFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToLower(s[:1]) + s[1:]
+}
 
 func runConfig(args []string) error {
 	fs := flag.NewFlagSet("hbasecop-build config", flag.ContinueOnError)
@@ -86,20 +110,23 @@ func checkSiteFile(path string) error {
 	if err := xml.Unmarshal(raw, &site); err != nil {
 		return fmt.Errorf("parse %s: %w", path, err)
 	}
-	var bad, unknown []string
+	var bad, notices []string
 	for _, p := range site.Properties {
 		if !strings.HasPrefix(p.Name, "hbasecop.") {
 			continue
 		}
 		if msg := validateKey(p.Name, p.Value); msg != "" {
 			bad = append(bad, msg)
+		}
+		if hook := unknownHookSuffix(p.Name); hook != "" {
+			notices = append(notices, fmt.Sprintf("%s names unknown hook %q (ignored at runtime)", p.Name, hook))
 		} else if !knownKey(p.Name) {
-			unknown = append(unknown, p.Name)
+			notices = append(notices, fmt.Sprintf("unknown key %s (ignored at runtime)", p.Name))
 		}
 	}
-	sort.Strings(unknown)
-	for _, u := range unknown {
-		fmt.Printf("notice: unknown key %s (ignored at runtime)\n", u)
+	sort.Strings(notices)
+	for _, n := range notices {
+		fmt.Println("notice:", n)
 	}
 	if len(bad) > 0 {
 		sort.Strings(bad)
@@ -154,4 +181,25 @@ func knownKey(name string) bool {
 		}
 	}
 	return false
+}
+
+// unknownHookSuffix returns the hook suffix of a per-hook policy/timeout key
+// when that suffix is not a known hook (so a typo like hbasecop.timeout.PrePutt
+// is flagged), else "". hbasecop.timeout.default is the one non-hook suffix and
+// is treated as known. Mirrors the Java ConfigPreflight.checkHookSuffix WARN.
+func unknownHookSuffix(name string) string {
+	for _, prefix := range []string{"hbasecop.policy.", "hbasecop.timeout."} {
+		if !strings.HasPrefix(name, prefix) {
+			continue
+		}
+		if name == "hbasecop.timeout.default" {
+			return ""
+		}
+		hook := name[len(prefix):]
+		if hook != "" && !knownHooks[hook] {
+			return hook
+		}
+		return ""
+	}
+	return ""
 }

@@ -34,8 +34,15 @@ import (
 //	                               <0 disables (tests only)
 //
 // Returns nil on clean shutdown (SIGINT/SIGTERM or inbound SHUTDOWN
-// frame), error on setup/transport failure. Phase 2 supports a single
-// RegionObserver; fan-out across Observer surfaces is T41+.
+// frame), error on setup/transport failure.
+//
+// Passing several observers chains them in argument order on each hook:
+// Bypass is OR-ed, BlockedIndices concatenated, and substitute ResultCells
+// follow last-writer-wins (a later observer overrides an earlier one's
+// Result), so order matters for the value-returning bypass hooks. The first
+// observer to return an error (or panic) stops the chain and that error is
+// what surfaces. To serve more than one Observer surface (e.g. region +
+// master) from one process, use [RunAll].
 func Run(observers ...RegionObserver) error {
 	if len(observers) == 0 {
 		return errors.New("hbasecop.Run: at least one observer required")
@@ -103,8 +110,13 @@ func runDispatcher(d *dispatcher, label string) error {
 
 // RunAll serves observers of mixed surfaces in one process over a single shmem
 // pair. Each argument is routed to every Observer surface it satisfies
-// (Region/Master/RegionServer/WAL/BulkLoad); an argument implementing none is
-// an error. Same-surface observers are chained (see foldObservers).
+// (Region/Master/RegionServer/WAL/BulkLoad), so one value implementing two
+// surfaces is registered on both; an argument implementing none is an error.
+//
+// Observers sharing a surface are chained in argument order with the same
+// precedence [Run] documents: Bypass OR-ed, BlockedIndices concatenated,
+// ResultCells last-writer-wins, and the first error (or panic) stops that
+// surface's chain.
 func RunAll(observers ...any) error {
 	d, err := newMixedDispatcher(newLogger(), observers...)
 	if err != nil {
