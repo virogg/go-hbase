@@ -59,15 +59,21 @@ public final class ConfigPreflight {
       }
       String val = e.getValue();
       if (key.startsWith(PolicyConfig.KEY_POLICY_PREFIX)) {
-        checkHookSuffix(key, PolicyConfig.KEY_POLICY_PREFIX, log);
-        if (!val.equals("strict") && !val.equals("best-effort")) {
+        // Only a known hook suffix is a framework failure-policy key; value-check just those.
+        // An unknown suffix (e.g. an observer's own hbasecop.policy.* app key) is a WARN, never
+        // an error — else a stray key would abort coprocessor start and, for a cluster-wide
+        // master/RS coprocessor, take the whole HMaster/RegionServer down with it.
+        if (knownHookKey(key, PolicyConfig.KEY_POLICY_PREFIX, log)
+            && !val.equals("strict")
+            && !val.equals("best-effort")) {
           errors.add(key + "=" + val + " (want strict|best-effort)");
         }
       } else if (key.equals(PolicyConfig.KEY_TIMEOUT_DEFAULT)) {
         checkDuration(key, val, errors);
       } else if (key.startsWith(PolicyConfig.KEY_TIMEOUT_PREFIX)) {
-        checkHookSuffix(key, PolicyConfig.KEY_TIMEOUT_PREFIX, log);
-        checkDuration(key, val, errors);
+        if (knownHookKey(key, PolicyConfig.KEY_TIMEOUT_PREFIX, log)) {
+          checkDuration(key, val, errors);
+        }
       } else if (DURATION_KEYS.contains(key)) {
         checkDuration(key, val, errors);
       } else if (POSITIVE_INT_KEYS.contains(key)) {
@@ -82,14 +88,21 @@ public final class ConfigPreflight {
     }
   }
 
-  private static void checkHookSuffix(String key, String prefix, Logger log) {
+  /**
+   * True iff {@code key}'s per-hook suffix names a known hook, so its value is a framework
+   * policy/timeout key worth validating. Otherwise WARNs (an observer may read it as its own
+   * config) and returns false so the caller skips the value check.
+   */
+  private static boolean knownHookKey(String key, String prefix, Logger log) {
     String hook = key.substring(prefix.length());
-    if (!hook.isEmpty() && HookId.byMethodName(hook) == null) {
-      log.log(
-          Level.WARNING,
-          "hbasecop: config key {0} names unknown hook {1}",
-          new Object[] {key, hook});
+    if (!hook.isEmpty() && HookId.byMethodName(hook) != null) {
+      return true;
     }
+    log.log(
+        Level.WARNING,
+        "hbasecop: config key {0} is not a recognized hbasecop hook key (ignored)",
+        key);
+    return false;
   }
 
   private static void checkDuration(String key, String val, List<String> errors) {
