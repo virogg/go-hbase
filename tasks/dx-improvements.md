@@ -255,7 +255,23 @@ manifest), `hbasecop list`, `hbasecop remove`; `hbasecop config --list` /
 every `hbasecop.*` key for the loaded hook bitmap (unknown → WARN, malformed
 → fail fast) instead of lazy per-hook failure on a live write path.
 
-## DX8 — Observability (P2)
+## DX8 — Observability (P2) — DESCOPED to ObserverEnv.Logger
+
+> Done: `ObserverEnv.Logger` — the runtime sets a non-nil `*slog.Logger`
+> pre-tagged with hook/req_id/table/region (inherits HBASECOP_LOG_LEVEL), so
+> observers stop reinventing `atomic.Pointer[slog.Logger]` + SetLogger (audit/
+> filter/ttl examples did). Set in envFromHookContext; falls back to
+> slog.Default() if nil.
+>
+> Dropped from DX8 (with rationale): **per-hook metrics** — operational, not
+> authoring; pre-release with no operator/consumer yet, so speculative; revisit
+> when a real deployment needs scraping. **Error taxonomy** (replace flat
+> HookError.Code=1) — already owned by the project roadmap (T31, see
+> dispatch.go:22 "production hook-error taxonomy lands in T31"); don't duplicate.
+> **Panic-value redaction** — a real SPEC §8 leak but a correctness/privacy fix,
+> not DX; tracked separately.
+
+### (original notes)
 
 `Logger` on `ObserverEnv` (or `FromContext(ctx)`) pre-tagged hook+req_id+
 region; opt-in per-hook metrics sink (count/latency/panic via the

@@ -169,7 +169,7 @@ func (d *dispatcher) dispatchRegion(ctx context.Context, req *wire.Message, wire
 		return d.errorFrame(req, errCodeInvalidWireRequest,
 			"invalid "+entry.name+"Request: "+err.Error())
 	}
-	env := envFromHookContext(req.RegionID, extractHookCtx(inner))
+	env := envFromHookContext(d.logger, entry.name, req.ReqID, req.RegionID, extractHookCtx(inner))
 	result, callErr := foldObservers(d, entry.name, req.ReqID, d.observers, func(o RegionObserver) (HookResult, error) {
 		return entry.invoke(o, ctx, env, inner)
 	})
@@ -184,7 +184,7 @@ func (d *dispatcher) dispatchMaster(ctx context.Context, req *wire.Message, wire
 		return d.errorFrame(req, errCodeInvalidWireRequest,
 			"invalid "+entry.name+"Request: "+err.Error())
 	}
-	env := envFromHookContext(req.RegionID, extractHookCtx(inner))
+	env := envFromHookContext(d.logger, entry.name, req.ReqID, req.RegionID, extractHookCtx(inner))
 	result, callErr := foldObservers(d, entry.name, req.ReqID, d.masters, func(o MasterObserver) (HookResult, error) {
 		return entry.invoke(o, ctx, env, inner)
 	})
@@ -199,7 +199,7 @@ func (d *dispatcher) dispatchRegionServer(ctx context.Context, req *wire.Message
 		return d.errorFrame(req, errCodeInvalidWireRequest,
 			"invalid "+entry.name+"Request: "+err.Error())
 	}
-	env := envFromHookContext(req.RegionID, extractHookCtx(inner))
+	env := envFromHookContext(d.logger, entry.name, req.ReqID, req.RegionID, extractHookCtx(inner))
 	result, callErr := foldObservers(d, entry.name, req.ReqID, d.regionServers, func(o RegionServerObserver) (HookResult, error) {
 		return entry.invoke(o, ctx, env, inner)
 	})
@@ -214,7 +214,7 @@ func (d *dispatcher) dispatchWAL(ctx context.Context, req *wire.Message, wireReq
 		return d.errorFrame(req, errCodeInvalidWireRequest,
 			"invalid "+entry.name+"Request: "+err.Error())
 	}
-	env := envFromHookContext(req.RegionID, extractHookCtx(inner))
+	env := envFromHookContext(d.logger, entry.name, req.ReqID, req.RegionID, extractHookCtx(inner))
 	result, callErr := foldObservers(d, entry.name, req.ReqID, d.wals, func(o WALObserver) (HookResult, error) {
 		return entry.invoke(o, ctx, env, inner)
 	})
@@ -229,7 +229,7 @@ func (d *dispatcher) dispatchBulkLoad(ctx context.Context, req *wire.Message, wi
 		return d.errorFrame(req, errCodeInvalidWireRequest,
 			"invalid "+entry.name+"Request: "+err.Error())
 	}
-	env := envFromHookContext(req.RegionID, extractHookCtx(inner))
+	env := envFromHookContext(d.logger, entry.name, req.ReqID, req.RegionID, extractHookCtx(inner))
 	result, callErr := foldObservers(d, entry.name, req.ReqID, d.bulkLoads, func(o BulkLoadObserver) (HookResult, error) {
 		return entry.invoke(o, ctx, env, inner)
 	})
@@ -252,25 +252,24 @@ func extractHookCtx(msg proto.Message) *hookpb.HookContext {
 	return nil
 }
 
-func envFromHookContext(regionID uint32, hc *hookpb.HookContext) ObserverEnv {
-	if hc == nil {
-		return ObserverEnv{RegionID: regionID}
-	}
-	var tn string
-	if t := hc.GetTableName(); t != nil {
-		ns := t.GetNamespace()
-		q := t.GetQualifier()
-		if len(ns) == 0 {
-			tn = string(q)
-		} else {
-			tn = string(ns) + ":" + string(q)
+func envFromHookContext(logger *slog.Logger, hookName string, reqID uint64, regionID uint32, hc *hookpb.HookContext) ObserverEnv {
+	env := ObserverEnv{RegionID: regionID}
+	if hc != nil {
+		if t := hc.GetTableName(); t != nil {
+			ns, q := t.GetNamespace(), t.GetQualifier()
+			if len(ns) == 0 {
+				env.TableName = string(q)
+			} else {
+				env.TableName = string(ns) + ":" + string(q)
+			}
 		}
+		env.RegionName = string(hc.GetRegionName())
 	}
-	return ObserverEnv{
-		TableName:  tn,
-		RegionName: string(hc.GetRegionName()),
-		RegionID:   regionID,
+	if logger == nil {
+		logger = slog.Default()
 	}
+	env.Logger = logger.With("hook", hookName, "req_id", reqID, "table", env.TableName, "region", env.RegionName)
+	return env
 }
 
 func (d *dispatcher) responseFrame(req *wire.Message, result HookResult, callErr error) *wire.Message {

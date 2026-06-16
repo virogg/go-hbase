@@ -3,6 +3,8 @@
 
 package hbasecop
 
+import "log/slog"
+
 // ObserverEnv identifies the table/region scope of a single hook
 // invocation. It mirrors the relevant subset of
 // org.apache.hadoop.hbase.coprocessor.ObserverContext for the Go SDK.
@@ -24,4 +26,10 @@ type ObserverEnv struct {
 	TableName  string
 	RegionName string
 	RegionID   uint32
+
+	// Logger is set by the runtime, pre-tagged with hook/req_id/table/region,
+	// and inherits HBASECOP_LOG_LEVEL; use it instead of the global slog so
+	// observer log lines correlate with the framework's. Nil only when an
+	// ObserverEnv is hand-constructed outside the runtime.
+	Logger *slog.Logger
 }
