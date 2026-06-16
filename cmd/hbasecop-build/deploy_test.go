@@ -9,14 +9,14 @@ import (
 	"testing"
 )
 
-func TestRunDeployRequiresSubcommand(t *testing.T) {
+func TestRunAdminRequiresSubcommand(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	if err := runDeploy([]string{"--bridge-jar", "/tmp/b.jar"}); err == nil {
+	if err := runAdmin([]string{"--bridge-jar", "/tmp/b.jar"}); err == nil {
 		t.Error("deploy with no subcommand should error")
 	}
 }
 
-func TestRunDeployPrintsCommandWithoutHbase(t *testing.T) {
+func TestRunAdminPrintsCommandWithoutHbase(t *testing.T) {
 	// Force the "hbase not on PATH" branch: empty PATH, explicit bridge jar.
 	t.Setenv("PATH", "")
 	jar := filepath.Join(t.TempDir(), "hbasecop-bridge-0.0.1-all.jar")
@@ -24,7 +24,7 @@ func TestRunDeployPrintsCommandWithoutHbase(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Should not error: it prints the ready-to-run command and returns nil.
-	if err := runDeploy([]string{"--bridge-jar", jar, "list", "--table", "t"}); err != nil {
+	if err := runAdmin([]string{"--bridge-jar", jar, "list", "--table", "t"}); err != nil {
 		t.Fatalf("expected printed-command fallback, got %v", err)
 	}
 }

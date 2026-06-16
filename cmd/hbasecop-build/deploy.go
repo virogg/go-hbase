@@ -13,19 +13,19 @@ import (
 
 const deployToolClass = "com.virogg.hbasecop.bridge.admin.DeployTool"
 
-// runDeploy registers/removes/lists an hbasecop coprocessor by invoking the
-// Java DeployTool through the `hbase` CLI (which supplies the HBase client
-// classpath) with the bridge jar on HBASE_CLASSPATH. If `hbase` is not on PATH,
-// it prints the ready-to-run command for a host that has HBase installed.
-func runDeploy(args []string) error {
-	fs := flag.NewFlagSet("hbasecop-build deploy", flag.ContinueOnError)
+// runAdmin registers/removes/lists an hbasecop coprocessor by invoking the Java
+// DeployTool through the `hbase` CLI (which supplies the HBase client classpath)
+// with the bridge jar on HBASE_CLASSPATH. If `hbase` is not on PATH, it prints
+// the ready-to-run command for a host that has HBase installed.
+func runAdmin(args []string) error {
+	fs := flag.NewFlagSet("hbasecop-build admin", flag.ContinueOnError)
 	bridgeJar := fs.String("bridge-jar", "", "bridge jar (default: newest -all jar in ~/.m2)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	rest := fs.Args() // <subcommand> [--flags] passed through to DeployTool
+	rest := fs.Args() // <deploy|remove|list> [--flags] passed through to DeployTool
 	if len(rest) == 0 {
-		return fmt.Errorf("usage: hbasecop-build deploy [--bridge-jar J] <deploy|remove|list> [--flags]")
+		return fmt.Errorf("usage: hbasecop-build admin [--bridge-jar J] <deploy|remove|list> [--flags]")
 	}
 
 	jar, err := resolveBridgeJar(*bridgeJar)

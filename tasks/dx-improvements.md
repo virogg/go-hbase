@@ -264,7 +264,19 @@ region; opt-in per-hook metrics sink (count/latency/panic via the
 flat `Code=1` (`dispatch.go:262`); redact panic value before it crosses the
 bridge to the client.
 
-## DX9 — Onboarding (P3)
+## DX9 — Onboarding (P3) — DONE
+
+> `hbasecop-build init <name> [--surface]` scaffolds a buildable observer
+> (main.go + README); region uses the NewRegion builder, other surfaces embed
+> the Unimplemented type. All 5 generated scaffolds compile + vet against the SDK
+> (test parses output; CI-equivalent build check run). README quickstart rewritten
+> to the real flow: `package` (one command, stock delegate, zero Java) → `admin
+> deploy` (Admin API). The Go admin wrapper was renamed `deploy`→`admin` so
+> `admin deploy|list|remove` reads cleanly. Examples table gains the missing
+> wal-observer row (count reconciled to eight); FAQ gains setup-failure entries
+> (submodule/`make deps`, NoClassDefFound→uber jar, JDK 11, no-cluster test).
+
+### (original notes)
 
 `hbasecop init <name> --surface region` scaffolding (Go main + DX2 wiring +
 build target); per-example READMEs; add the missing `wal-observer` row and
