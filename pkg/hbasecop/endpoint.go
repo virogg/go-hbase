@@ -23,10 +23,13 @@ import (
 // GoEndpointService forwards each client Call to this method, routed by method
 // name. payload and the returned bytes are opaque, user-defined bodies.
 //
-// Reverse data access (server-side scan/get of region-local data) arrives in a
-// later phase; this minimal surface round-trips a request/response only.
+// env (Tier 2, TE32) gives the handler region-local read access via
+// [EndpointEnv.Get], so it can read data inside the call — including
+// data-dependent reads (read A, then read B by a key from A). When the reverse
+// path is disabled, env.Get returns an error; an endpoint that does no reverse
+// reads can ignore env entirely.
 type Endpoint interface {
-	Call(ctx context.Context, method string, payload []byte) ([]byte, error)
+	Call(ctx context.Context, env *EndpointEnv, method string, payload []byte) ([]byte, error)
 }
 
 // dispatchEndpoint decodes one EndpointInvoke frame, invokes the registered
@@ -43,10 +46,10 @@ func (d *dispatcher) dispatchEndpoint(ctx context.Context, req *wire.Message) *w
 			"req_id", req.ReqID, "method", invoke.GetMethod())
 		return d.errorFrame(req, errCodeUnknownHook, "no endpoint registered")
 	}
-	// TE31: carry the reverse-RPC handle (bound to the invoking region) on the
-	// ctx so the handler can read region-local data via ReverseGet.
-	ctx = d.withReverse(ctx, req.RegionID)
-	out, callErr := d.callEndpoint(ctx, invoke.GetMethod(), invoke.GetPayload())
+	// TE32: hand the handler an EndpointEnv bound to the invoking region so it can
+	// read region-local data (env.Get), including data-dependent reads.
+	env := &EndpointEnv{rc: d.reverse, regionID: req.RegionID}
+	out, callErr := d.callEndpoint(ctx, env, invoke.GetMethod(), invoke.GetPayload())
 	if callErr != nil {
 		return d.errorFrame(req, errCodeEndpointFailed, callErr.Error())
 	}
@@ -62,7 +65,7 @@ func (d *dispatcher) dispatchEndpoint(ctx context.Context, req *wire.Message) *w
 // endpoint code can never crash the shared per-RegionServer Go process (mirrors
 // recoverInvoke for observer hooks).
 func (d *dispatcher) callEndpoint(
-	ctx context.Context, method string, payload []byte,
+	ctx context.Context, env *EndpointEnv, method string, payload []byte,
 ) (out []byte, err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -71,5 +74,5 @@ func (d *dispatcher) callEndpoint(
 			err = fmt.Errorf("endpoint panic in %q: %v", method, r)
 		}
 	}()
-	return d.endpoint.Call(ctx, method, payload)
+	return d.endpoint.Call(ctx, env, method, payload)
 }

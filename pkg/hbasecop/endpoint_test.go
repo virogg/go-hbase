@@ -15,10 +15,10 @@ import (
 	"github.com/virogg/go-hbase/internal/wire/wirepb"
 )
 
-type funcEndpoint func(ctx context.Context, method string, payload []byte) ([]byte, error)
+type funcEndpoint func(ctx context.Context, env *EndpointEnv, method string, payload []byte) ([]byte, error)
 
-func (f funcEndpoint) Call(ctx context.Context, method string, payload []byte) ([]byte, error) {
-	return f(ctx, method, payload)
+func (f funcEndpoint) Call(ctx context.Context, env *EndpointEnv, method string, payload []byte) ([]byte, error) {
+	return f(ctx, env, method, payload)
 }
 
 func endpointInvokeFrame(t *testing.T, reqID uint64, method string, payload []byte) *wire.Message {
@@ -34,7 +34,7 @@ func TestDispatchEndpointReturnsResult(t *testing.T) {
 	var gotMethod string
 	d := &dispatcher{
 		logger: slog.Default(),
-		endpoint: funcEndpoint(func(_ context.Context, method string, payload []byte) ([]byte, error) {
+		endpoint: funcEndpoint(func(_ context.Context, _ *EndpointEnv, method string, payload []byte) ([]byte, error) {
 			gotMethod = method
 			return append([]byte("ok:"), payload...), nil
 		}),
@@ -60,7 +60,7 @@ func TestDispatchEndpointReturnsResult(t *testing.T) {
 func TestDispatchEndpointErrorBecomesErrorFrame(t *testing.T) {
 	d := &dispatcher{
 		logger: slog.Default(),
-		endpoint: funcEndpoint(func(_ context.Context, _ string, _ []byte) ([]byte, error) {
+		endpoint: funcEndpoint(func(_ context.Context, _ *EndpointEnv, _ string, _ []byte) ([]byte, error) {
 			return nil, errors.New("boom")
 		}),
 	}
@@ -80,7 +80,7 @@ func TestDispatchEndpointErrorBecomesErrorFrame(t *testing.T) {
 func TestDispatchEndpointPanicBecomesError(t *testing.T) {
 	d := &dispatcher{
 		logger: slog.Default(),
-		endpoint: funcEndpoint(func(_ context.Context, _ string, _ []byte) ([]byte, error) {
+		endpoint: funcEndpoint(func(_ context.Context, _ *EndpointEnv, _ string, _ []byte) ([]byte, error) {
 			panic("kaboom")
 		}),
 	}

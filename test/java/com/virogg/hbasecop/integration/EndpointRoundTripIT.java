@@ -113,6 +113,42 @@ final class EndpointRoundTripIT {
     }
   }
 
+  /**
+   * TE32: data-dependent reverse reads. The "follow" endpoint reads row A, takes its cf:next cell
+   * as a pointer to row B, reads B, and returns B's cf:val — proving "read A → read B by a key from
+   * A" over two correlated reverse round-trips within one endpoint call.
+   */
+  @Test
+  void clientReverseGetDataDependent() throws Throwable {
+    requireStagedJar();
+    TableName tn = TableName.valueOf("hbasecop_endpoint_follow_it");
+    byte[] rowA = "a".getBytes(StandardCharsets.UTF_8);
+    byte[] rowB = "b".getBytes(StandardCharsets.UTF_8);
+    byte[] next = "next".getBytes(StandardCharsets.UTF_8);
+    byte[] val = "val".getBytes(StandardCharsets.UTF_8);
+    byte[] deep = "deep-value".getBytes(StandardCharsets.UTF_8);
+
+    try (Connection conn = ConnectionFactory.createConnection(clientConfig());
+        Admin admin = conn.getAdmin()) {
+
+      waitForClusterReady(admin, Duration.ofSeconds(300));
+      dropTable(admin, tn);
+      createTableWithCoproc(admin, tn);
+      try (Table table = conn.getTable(tn)) {
+        table.put(new Put(rowA).addColumn(CF, next, rowB)); // a: cf:next -> "b"
+        table.put(new Put(rowB).addColumn(CF, val, deep)); // b: cf:val -> "deep-value"
+
+        byte[] result = callEndpoint(table, "follow", ByteString.copyFrom(rowA));
+        assertEquals(
+            new String(deep, StandardCharsets.UTF_8),
+            new String(result, StandardCharsets.UTF_8),
+            "follow must read A's cf:next pointer, then return B's cf:val (data-dependent)");
+      } finally {
+        dropTable(admin, tn);
+      }
+    }
+  }
+
   private static void requireStagedJar() {
     Path jarOnHost = resolveJarOnHost();
     assertTrue(

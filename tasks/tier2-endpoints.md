@@ -262,7 +262,9 @@ IT → собрать логи → `compose down`). Новые ключи `hbase
 - [x] TE31 2-е J→G кольцо + servicing-pool + shaded-конверсия — **live reverse-GET IT зелёный**
       (EndpointRoundTripIT seed→reverse-GET→assert, HBase 2.5.11, 2026-06-18); F4 shaded-конверсия
       (byte-identity) + fail-closed пул насыщения unit-доказаны
-- [ ] TE32 `RpcRequest{GET}` round-trip (data-dependent A→B)
+- [x] TE32 `RpcRequest{GET}` round-trip (data-dependent A→B) — `EndpointEnv.Get` (планируемая форма
+      `Call(ctx, env, method, payload)`); **live IT зелёный** (EndpointRoundTripIT "follow" A→B,
+      HBase 2.5.11, 2026-06-18); env.Get/CellValue + data-dependent unit-доказаны
 - [ ] TE33 pull-scan SCAN_OPEN/NEXT/CLOSE + реестр + leak-reaping
 - [ ] TE34 Go SDK `EndpointEnv.OpenScanner/Get`
 - [ ] **CP-E3:** серверная агрегация по данным региона + leak-safety сканеров
