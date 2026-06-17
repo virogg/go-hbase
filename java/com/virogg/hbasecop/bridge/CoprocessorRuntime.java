@@ -190,7 +190,15 @@ public final class CoprocessorRuntime implements AutoCloseable {
               .scheduler(watchdogScheduler)
               .build();
 
-      reader = new ChannelReader(goToJava, new Decoder(), mux, watchdog);
+      // TE12 stub: reverse-RPC requests are recognized and demuxed, but the
+      // servicing pool that executes them against the region lands in TE31.
+      ReverseRpcSink reverseRpcStub =
+          m ->
+              LOG.log(
+                  Level.DEBUG,
+                  "CoprocessorRuntime: reverse RPC request req_id={0} (servicing lands in TE31)",
+                  m.reqId());
+      reader = new ChannelReader(goToJava, new Decoder(), mux, watchdog, reverseRpcStub);
       readerThread = new Thread(reader, "hbasecop-reader");
       readerThread.setDaemon(true);
       readerThread.start();
@@ -729,19 +737,68 @@ public final class CoprocessorRuntime implements AutoCloseable {
     }
   }
 
+  /**
+   * Sink for inbound {@code RPC_REQUEST} frames: a Go-initiated reverse RPC (Tier 2). The bounded
+   * servicing pool that executes scan/get/mutate against the region lands in TE31; in E1 this is a
+   * stub. Correlation is by the wire-header {@code req_id} carried on the {@link Message}; the
+   * router does not unmarshal the protobuf payload.
+   */
+  @FunctionalInterface
+  interface ReverseRpcSink {
+    void accept(Message m);
+  }
+
+  /**
+   * Routes one decoded Go→Java frame. Package-private and static so it can be unit-tested by
+   * injecting Messages without standing up a Channel/Thread.
+   */
+  static void routeFrame(
+      Message m, Multiplexer mux, HeartbeatWatchdog watchdog, ReverseRpcSink reverseRpc) {
+    switch (m.type()) {
+      case RESPONSE:
+      case ERROR:
+        // Both carry the same req_id; the Go side picks ERROR when a hook
+        // call fails (e.g. unknown hook, malformed payload, marshal fail).
+        // MuxHookDispatcher inspects FrameType and surfaces an IOException.
+        if (!mux.deliver(m)) {
+          LOG.log(Level.DEBUG, "CoprocessorRuntime: unmatched {0} req_id={1}", m.type(), m.reqId());
+        }
+        break;
+      case HEARTBEAT:
+        if (watchdog != null) {
+          watchdog.recordHeartbeat();
+        }
+        break;
+      case RPC_REQUEST:
+        // Go-initiated reverse RPC (Tier 2); hand to the stub sink keyed by
+        // req_id. No PB decode here.
+        reverseRpc.accept(m);
+        break;
+      default:
+        LOG.log(Level.WARNING, "CoprocessorRuntime: unexpected frame type {0}", m.type());
+    }
+  }
+
   /** Reader thread: drains the Go→Java ring and routes frames to the multiplexer. */
   private static final class ChannelReader implements Runnable {
     private final Channel ch;
     private final Decoder decoder;
     private final Multiplexer mux;
     private final HeartbeatWatchdog watchdog;
+    private final ReverseRpcSink reverseRpc;
     private volatile boolean stop;
 
-    ChannelReader(Channel ch, Decoder decoder, Multiplexer mux, HeartbeatWatchdog watchdog) {
+    ChannelReader(
+        Channel ch,
+        Decoder decoder,
+        Multiplexer mux,
+        HeartbeatWatchdog watchdog,
+        ReverseRpcSink reverseRpc) {
       this.ch = ch;
       this.decoder = decoder;
       this.mux = mux;
       this.watchdog = watchdog;
+      this.reverseRpc = reverseRpc;
     }
 
     void shutdown() {
@@ -773,25 +830,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
           // Partial frame: Decoder will resume on next chunk; here we treat as "wait".
           continue;
         }
-        switch (m.type()) {
-          case RESPONSE:
-          case ERROR:
-            // Both carry the same req_id; the Go side picks ERROR when a hook
-            // call fails (e.g. unknown hook, malformed payload, marshal fail).
-            // MuxHookDispatcher inspects FrameType and surfaces an IOException.
-            if (!mux.deliver(m)) {
-              LOG.log(
-                  Level.DEBUG, "CoprocessorRuntime: unmatched {0} req_id={1}", m.type(), m.reqId());
-            }
-            break;
-          case HEARTBEAT:
-            if (watchdog != null) {
-              watchdog.recordHeartbeat();
-            }
-            break;
-          default:
-            LOG.log(Level.WARNING, "CoprocessorRuntime: unexpected frame type {0}", m.type());
-        }
+        routeFrame(m, mux, watchdog, reverseRpc);
       }
     }
   }

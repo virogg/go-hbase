@@ -61,6 +61,16 @@ type Config struct {
 	// fine for T17/T19, not for real coprocessors. The SDK (pkg/hbasecop)
 	// supplies a dispatcher routing to user-implemented Observer methods.
 	Handler Handler
+
+	// ReverseResponseHandler receives inbound RpcResponse frames: the
+	// Java-side replies to a Go-initiated reverse RPC (Tier 2). Correlation
+	// is by the wire-header req_id, which the handler reads from the Message;
+	// the reader does NOT unmarshal the protobuf payload. The handler must be
+	// quick and non-blocking (it runs on the single reader goroutine); the
+	// real implementation (E3) just wakes the waiting caller keyed by req_id.
+	// Nil drops RpcResponse frames silently (endpoints disabled), matching how
+	// other unsolicited inbound types are ignored here.
+	ReverseResponseHandler func(*wire.Message)
 }
 
 // Loop owns one in-process Go-runtime event loop: one reader goroutine
@@ -166,6 +176,12 @@ func (l *Loop) runReader(ctx context.Context, cancel context.CancelFunc) {
 		switch msg.Type {
 		case wire.TypeRequest:
 			go l.handle(ctx, msg)
+		case wire.TypeRpcResponse:
+			// Reply to a Go-initiated reverse RPC (Tier 2). Route to the
+			// stub waiter keyed by req_id; no PB decode in the router.
+			if h := l.cfg.ReverseResponseHandler; h != nil {
+				h(msg)
+			}
 		case wire.TypeShutdown:
 			l.cfg.Logger.Info("cpruntime: inbound SHUTDOWN received")
 			cancel()
