@@ -43,6 +43,9 @@ func (d *dispatcher) dispatchEndpoint(ctx context.Context, req *wire.Message) *w
 			"req_id", req.ReqID, "method", invoke.GetMethod())
 		return d.errorFrame(req, errCodeUnknownHook, "no endpoint registered")
 	}
+	// TE31: carry the reverse-RPC handle (bound to the invoking region) on the
+	// ctx so the handler can read region-local data via ReverseGet.
+	ctx = d.withReverse(ctx, req.RegionID)
 	out, callErr := d.callEndpoint(ctx, invoke.GetMethod(), invoke.GetPayload())
 	if callErr != nil {
 		return d.errorFrame(req, errCodeEndpointFailed, callErr.Error())

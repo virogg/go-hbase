@@ -113,8 +113,19 @@ public final class CoprocessorRuntime implements AutoCloseable {
 
   private final Config cfg;
 
+  // TE31: shared per-process region_id space + region_id -> live Region map. The
+  // RegionObserverAdapter populates both over the region open/close lifecycle;
+  // the endpoint path resolves region_id (regionIdFor) to stamp reverse RPCs and
+  // the servicing pool resolves the Region (regionRegistry) to execute them.
+  private final com.virogg.hbasecop.multiplex.RegionIdAllocator regionIdAllocator =
+      new com.virogg.hbasecop.multiplex.RegionIdAllocator();
+  private final com.virogg.hbasecop.bridge.rpc.RegionRegistry regionRegistry =
+      new com.virogg.hbasecop.bridge.rpc.RegionRegistry();
+
   private Channel javaToGo;
   private Channel goToJava;
+  private Channel javaToGoBulk; // TE31: bulk J->G ring carrying reverse-RPC replies
+  private com.virogg.hbasecop.bridge.rpc.ReverseRpcServicer reverseRpcServicer;
   private GoProcess goProcess;
   private Multiplexer mux;
   private ChannelReader reader;
@@ -155,6 +166,15 @@ public final class CoprocessorRuntime implements AutoCloseable {
           Channel.open(
               shmemConfig(
                   cfg.goToJavaFile(), Role.CONSUMER, cfg.ringCapacity(), cfg.ringMaxObjectSize()));
+      // TE31: dedicated bulk J->G ring for reverse-RPC replies (Result data), isolated from the
+      // control ring so a large reply never queues behind a hook invoke or starves the heartbeat.
+      javaToGoBulk =
+          Channel.open(
+              shmemConfig(
+                  cfg.javaToGoBulkFile(),
+                  Role.PRODUCER,
+                  cfg.bulkRingCapacity(),
+                  cfg.bulkRingMaxObjectSize()));
 
       effectiveHeartbeatMs = resolveHeartbeatPeriodMs(cfg);
       goProcess = buildGoProcess();
@@ -198,22 +218,47 @@ public final class CoprocessorRuntime implements AutoCloseable {
               .scheduler(watchdogScheduler)
               .build();
 
-      // TE12 stub: reverse-RPC requests are recognized and demuxed, but the
-      // servicing pool that executes them against the region lands in TE31.
-      ReverseRpcSink reverseRpcStub =
-          m ->
-              LOG.log(
-                  Level.DEBUG,
-                  "CoprocessorRuntime: reverse RPC request req_id={0} (servicing lands in TE31)",
-                  m.reqId());
-      reader = new ChannelReader(goToJava, new Decoder(), mux, watchdog, reverseRpcStub);
+      // TE31: reverse-RPC replies ride a SECOND send funnel on the dedicated bulk ring, so a large
+      // Result never contends with hook/endpoint/heartbeat traffic under the control sendLock. The
+      // bulk ring has one logical producer; the lock guards the concurrent servicing-pool threads.
+      final Encoder bulkEnc = new Encoder();
+      final Object bulkSendLock = new Object();
+      final Channel javaToGoBulkRef = javaToGoBulk;
+      java.util.function.Consumer<Message> bulkReplySink =
+          msg -> {
+            synchronized (bulkSendLock) {
+              try {
+                sendOnChannel(javaToGoBulkRef, bulkEnc, msg, sendDeadlineMs);
+              } catch (ShmemException | WireException e) {
+                // The Go caller's reverse RPC will fail on its own deadline; a lost reply must not
+                // take down the servicing thread or the bridge.
+                LOG.log(Level.WARNING, "CoprocessorRuntime: reverse-RPC reply send failed", e);
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                LOG.log(
+                    Level.WARNING, "CoprocessorRuntime: interrupted sending reverse-RPC reply", e);
+              }
+            }
+          };
+      reverseRpcServicer =
+          new com.virogg.hbasecop.bridge.rpc.ReverseRpcServicer(
+              regionRegistry,
+              bulkReplySink,
+              cfg.servicingPoolSize(),
+              cfg.servicingQueueDepth(),
+              cfg.servicingTimeout());
+
+      // TE31: route reverse-RPC requests to the bounded, fail-closed servicing pool (never the
+      // reader thread). accept() only submits, so the reader keeps routing hooks/heartbeats.
+      reader =
+          new ChannelReader(goToJava, new Decoder(), mux, watchdog, reverseRpcServicer::accept);
       readerThread = new Thread(reader, "hbasecop-reader");
       readerThread.setDaemon(true);
       readerThread.start();
 
       HookDispatcher dispatcher = new MuxHookDispatcher(mux);
       com.virogg.hbasecop.bridge.config.PolicyConfig policy = buildPolicyConfig(cfg);
-      observer = new RegionObserverAdapter(dispatcher, policy);
+      observer = new RegionObserverAdapter(dispatcher, policy, regionIdAllocator, regionRegistry);
       masterObserver = new MasterObserverAdapter(dispatcher, policy);
       regionServerObserver = new RegionServerObserverAdapter(dispatcher, policy);
       walObserver = new WALObserverAdapter(dispatcher, policy);
@@ -283,11 +328,30 @@ public final class CoprocessorRuntime implements AutoCloseable {
    * error.
    */
   public byte[] invokeEndpoint(EndpointInvoke invoke) throws IOException {
+    return invokeEndpoint(invoke, 0);
+  }
+
+  /**
+   * The region id under which the named region was allocated (TE61/TE31), or 0 if it is not
+   * currently open here. The endpoint path stamps this onto an {@link EndpointInvoke} so a Go
+   * handler's reverse RPCs target the region the client invoked the endpoint on.
+   */
+  public int regionIdFor(String encodedRegionName) {
+    return regionIdAllocator.idFor(encodedRegionName);
+  }
+
+  /**
+   * TE31 variant: forward an endpoint invocation stamped with {@code regionId}, so a Go endpoint
+   * handler's reverse RPCs (reads of region-local data) resolve to the originating region. {@code
+   * regionId} 0 means no region scope (e.g. master endpoints).
+   */
+  public byte[] invokeEndpoint(EndpointInvoke invoke, int regionId) throws IOException {
     Multiplexer m = mux;
     if (m == null) {
       throw new IOException("hbasecop: endpoint invoked before runtime start");
     }
-    Message req = new Message(FrameType.ENDPOINT_INVOKE, 0L, 0, (byte) 0, invoke.toByteArray());
+    Message req =
+        new Message(FrameType.ENDPOINT_INVOKE, 0L, regionId, (byte) 0, invoke.toByteArray());
     Multiplexer.Call call = m.callTracked(req);
     CompletableFuture<Message> fut = call.future;
 
@@ -412,6 +476,11 @@ public final class CoprocessorRuntime implements AutoCloseable {
         Thread.currentThread().interrupt();
       }
     }
+    // TE31: stop the reverse-RPC servicing pool after the reader has joined (no new requests are
+    // handed off) and before the bulk channel is closed (in-flight replies still have a sink).
+    if (reverseRpcServicer != null) {
+      reverseRpcServicer.close();
+    }
     if (mux != null) {
       mux.close();
     }
@@ -427,13 +496,16 @@ public final class CoprocessorRuntime implements AutoCloseable {
     }
     closeChannelQuietly(goToJava);
     closeChannelQuietly(javaToGo);
+    closeChannelQuietly(javaToGoBulk);
 
     reader = null;
     readerThread = null;
+    reverseRpcServicer = null;
     mux = null;
     goProcess = null;
     goToJava = null;
     javaToGo = null;
+    javaToGoBulk = null;
     observer = null;
     masterObserver = null;
     regionServerObserver = null;
@@ -584,6 +656,13 @@ public final class CoprocessorRuntime implements AutoCloseable {
   }
 
   private GoProcess buildGoProcess() {
+    // TE31: tell the Go child where the bulk ring is and how it is sized, so it opens the matching
+    // consumer endpoint and stands up its reverse in-pump. Carried as extra env on top of the
+    // caller's, so no GoProcess change is needed.
+    Map<String, String> env = new LinkedHashMap<>(cfg.extraEnv());
+    env.put("HBASECOP_SHMEM_BULK_PATH", cfg.javaToGoBulkFile().toString());
+    env.put("HBASECOP_BULK_RING_CAPACITY", Integer.toString(cfg.bulkRingCapacity()));
+    env.put("HBASECOP_BULK_RING_MAX_OBJECT_SIZE", Integer.toString(cfg.bulkRingMaxObjectSize()));
     GoProcessConfig procCfg =
         GoProcessConfig.builder()
             .binaryResourcePath(cfg.binaryResourcePath())
@@ -597,7 +676,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
             // extracted ELF before exec and fails closed on a corrupt/wrong-arch/tampered binary.
             // Without this, the checksum hbasecop-build writes is never verified at runtime.
             .expectedBinarySha256(resolveExpectedBinarySha256())
-            .extraEnv(cfg.extraEnv())
+            .extraEnv(env)
             .build();
     return new GoProcess(procCfg, javaToGo);
   }
@@ -922,6 +1001,12 @@ public final class CoprocessorRuntime implements AutoCloseable {
     private final RestartConfig restartConfig;
     private final Duration restartDeadline;
     private final Map<String, String> extraEnv;
+    // TE31 reverse-RPC servicing pool + bulk ring sizing.
+    private final int servicingPoolSize;
+    private final int servicingQueueDepth;
+    private final Duration servicingTimeout;
+    private final int bulkRingCapacity;
+    private final int bulkRingMaxObjectSize;
 
     private Config(Builder b) {
       this.binaryResourcePath = b.binaryResourcePath;
@@ -948,6 +1033,23 @@ public final class CoprocessorRuntime implements AutoCloseable {
           b.extraEnv.isEmpty()
               ? Collections.emptyMap()
               : Collections.unmodifiableMap(new LinkedHashMap<>(b.extraEnv));
+      if (b.servicingPoolSize <= 0) {
+        throw new IllegalArgumentException("servicingPoolSize must be > 0");
+      }
+      if (b.servicingQueueDepth <= 0) {
+        throw new IllegalArgumentException("servicingQueueDepth must be > 0");
+      }
+      if (b.bulkRingCapacity <= 0) {
+        throw new IllegalArgumentException("bulkRingCapacity must be > 0");
+      }
+      if (b.bulkRingMaxObjectSize <= 0) {
+        throw new IllegalArgumentException("bulkRingMaxObjectSize must be > 0");
+      }
+      this.servicingPoolSize = b.servicingPoolSize;
+      this.servicingQueueDepth = b.servicingQueueDepth;
+      this.servicingTimeout = Objects.requireNonNull(b.servicingTimeout, "servicingTimeout");
+      this.bulkRingCapacity = b.bulkRingCapacity;
+      this.bulkRingMaxObjectSize = b.bulkRingMaxObjectSize;
     }
 
     public String binaryResourcePath() {
@@ -1031,6 +1133,36 @@ public final class CoprocessorRuntime implements AutoCloseable {
       return extraEnv;
     }
 
+    /** TE31: max concurrent reverse-RPC servicing threads. */
+    public int servicingPoolSize() {
+      return servicingPoolSize;
+    }
+
+    /** TE31: bounded reverse-RPC backlog before requests fail closed. */
+    public int servicingQueueDepth() {
+      return servicingQueueDepth;
+    }
+
+    /** TE31: how long teardown waits for in-flight reverse-RPC tasks to drain. */
+    public Duration servicingTimeout() {
+      return servicingTimeout;
+    }
+
+    /** TE31: slot count of the dedicated bulk Java->Go ring carrying reverse-RPC replies. */
+    public int bulkRingCapacity() {
+      return bulkRingCapacity;
+    }
+
+    /** TE31: slot byte size of the bulk Java->Go ring. */
+    public int bulkRingMaxObjectSize() {
+      return bulkRingMaxObjectSize;
+    }
+
+    /** TE31: the bulk ring's segment path, derived next to the control Java->Go segment. */
+    public Path javaToGoBulkFile() {
+      return Path.of(javaToGoFile.toString() + ".bulk");
+    }
+
     public static Builder builder() {
       return new Builder();
     }
@@ -1051,6 +1183,11 @@ public final class CoprocessorRuntime implements AutoCloseable {
       private RestartConfig restartConfig;
       private Duration restartDeadline;
       private Map<String, String> extraEnv = new LinkedHashMap<>();
+      private int servicingPoolSize = 8;
+      private int servicingQueueDepth = 64;
+      private Duration servicingTimeout = Duration.ofSeconds(30);
+      private int bulkRingCapacity = 16;
+      private int bulkRingMaxObjectSize = 1 << 20; // 1 MiB
 
       public Builder binaryResourcePath(String s) {
         this.binaryResourcePath = s;
@@ -1144,6 +1281,36 @@ public final class CoprocessorRuntime implements AutoCloseable {
        */
       public Builder extraEnv(Map<String, String> env) {
         this.extraEnv = env == null ? new LinkedHashMap<>() : new LinkedHashMap<>(env);
+        return this;
+      }
+
+      /** TE31: max concurrent reverse-RPC servicing threads (default 8). */
+      public Builder servicingPoolSize(int n) {
+        this.servicingPoolSize = n;
+        return this;
+      }
+
+      /** TE31: bounded reverse-RPC backlog before requests fail closed (default 64). */
+      public Builder servicingQueueDepth(int n) {
+        this.servicingQueueDepth = n;
+        return this;
+      }
+
+      /** TE31: teardown drain timeout for in-flight reverse-RPC tasks (default 30s). */
+      public Builder servicingTimeout(Duration d) {
+        this.servicingTimeout = d;
+        return this;
+      }
+
+      /** TE31: bulk ring slot count (default 16). */
+      public Builder bulkRingCapacity(int n) {
+        this.bulkRingCapacity = n;
+        return this;
+      }
+
+      /** TE31: bulk ring slot byte size (default 1 MiB). */
+      public Builder bulkRingMaxObjectSize(int n) {
+        this.bulkRingMaxObjectSize = n;
         return this;
       }
 

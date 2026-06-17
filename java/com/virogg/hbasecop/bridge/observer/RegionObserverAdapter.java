@@ -166,6 +166,7 @@ public final class RegionObserverAdapter implements RegionObserver {
   private final HookDispatcher dispatcher;
   private final PolicyConfig policyConfig;
   private final com.virogg.hbasecop.multiplex.RegionIdAllocator regionIdAllocator;
+  private final com.virogg.hbasecop.bridge.rpc.RegionRegistry regionRegistry;
 
   public RegionObserverAdapter(HookDispatcher dispatcher, PolicyConfig policyConfig) {
     this(dispatcher, policyConfig, new com.virogg.hbasecop.multiplex.RegionIdAllocator());
@@ -179,9 +180,44 @@ public final class RegionObserverAdapter implements RegionObserver {
       HookDispatcher dispatcher,
       PolicyConfig policyConfig,
       com.virogg.hbasecop.multiplex.RegionIdAllocator regionIdAllocator) {
+    this(dispatcher, policyConfig, regionIdAllocator, null);
+  }
+
+  /**
+   * TE31 ctor: additionally inject a shared {@link com.virogg.hbasecop.bridge.rpc.RegionRegistry}
+   * so each region's live {@link Region} is registered under its wire region_id at open and dropped
+   * at close, letting the reverse-RPC servicing pool resolve a Go-initiated GET's target region.
+   */
+  public RegionObserverAdapter(
+      HookDispatcher dispatcher,
+      PolicyConfig policyConfig,
+      com.virogg.hbasecop.multiplex.RegionIdAllocator regionIdAllocator,
+      com.virogg.hbasecop.bridge.rpc.RegionRegistry regionRegistry) {
     this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
     this.policyConfig = Objects.requireNonNull(policyConfig, "policyConfig");
     this.regionIdAllocator = Objects.requireNonNull(regionIdAllocator, "regionIdAllocator");
+    this.regionRegistry = regionRegistry; // optional: null when reverse RPC is not wired
+  }
+
+  /**
+   * Allocate the wire region_id for {@code env}'s region and, when a {@link
+   * com.virogg.hbasecop.bridge.rpc.RegionRegistry} is wired, register the live region under it so
+   * the reverse-RPC servicing pool can resolve it.
+   */
+  private void registerRegion(RegionCoprocessorEnvironment env) {
+    int id = regionIdAllocator.allocate(env.getRegion().getRegionInfo().getEncodedName());
+    if (regionRegistry != null) {
+      regionRegistry.register(id, env.getRegion());
+    }
+  }
+
+  /** Counterpart of {@link #registerRegion}: drop the region from the registry, then the id. */
+  private void releaseRegion(RegionCoprocessorEnvironment env) {
+    String name = env.getRegion().getRegionInfo().getEncodedName();
+    if (regionRegistry != null) {
+      regionRegistry.release(regionIdAllocator.idFor(name));
+    }
+    regionIdAllocator.release(name);
   }
 
   // --- Region lifecycle: region_id allocation (T61) ---------------------
@@ -200,13 +236,13 @@ public final class RegionObserverAdapter implements RegionObserver {
    */
   public void start(RegionCoprocessorEnvironment env) {
     Objects.requireNonNull(env, "env");
-    regionIdAllocator.allocate(env.getRegion().getRegionInfo().getEncodedName());
+    registerRegion(env);
   }
 
   /** Counterpart of {@link #start(RegionCoprocessorEnvironment)}. */
   public void stop(RegionCoprocessorEnvironment env) {
     Objects.requireNonNull(env, "env");
-    regionIdAllocator.release(env.getRegion().getRegionInfo().getEncodedName());
+    releaseRegion(env);
   }
 
   // --- Lifecycle ---------------------------------------------------------
@@ -215,7 +251,8 @@ public final class RegionObserverAdapter implements RegionObserver {
   public void preOpen(ObserverContext<RegionCoprocessorEnvironment> c) throws IOException {
     // T61: allocate the wire region_id before dispatching so the preOpen
     // frame and every subsequent hook on this region share the same id.
-    regionIdAllocator.allocate(c.getEnvironment().getRegion().getRegionInfo().getEncodedName());
+    // TE31: also register the live region so reverse-RPC GETs can resolve it.
+    registerRegion(c.getEnvironment());
     dispatchStub(c, HookId.PRE_OPEN, PreOpenRequest.newBuilder());
   }
 
@@ -251,7 +288,8 @@ public final class RegionObserverAdapter implements RegionObserver {
     } finally {
       // T61: release the region_id mapping last, so postClose's own frame
       // is dispatched under the same id as the rest of the region's lifecycle.
-      regionIdAllocator.release(c.getEnvironment().getRegion().getRegionInfo().getEncodedName());
+      // TE31: drop the live region from the registry in the same step.
+      releaseRegion(c.getEnvironment());
     }
   }
 

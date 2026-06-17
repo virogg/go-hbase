@@ -11,6 +11,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/virogg/go-hbase/internal/cpruntime"
 	"github.com/virogg/go-hbase/internal/wire"
 	"github.com/virogg/go-hbase/internal/wire/hbasepb"
 	"github.com/virogg/go-hbase/internal/wire/hookpb"
@@ -42,6 +43,11 @@ type dispatcher struct {
 	bulkLoads     []BulkLoadObserver
 	endpoint      Endpoint
 	logger        *slog.Logger
+
+	// reverse is the Go-initiated reverse-RPC client (Tier 2, TE31), set when
+	// the supervisor provisioned the bulk ring. It lets an endpoint Call read
+	// region-local data; nil when the reverse path is disabled.
+	reverse *cpruntime.ReverseClient
 }
 
 func newDispatcher(observer RegionObserver, logger *slog.Logger) *dispatcher {

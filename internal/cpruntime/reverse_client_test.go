@@ -1,0 +1,141 @@
+// Copyright 2026 The go-hbase Authors
+// SPDX-License-Identifier: Apache-2.0
+
+package cpruntime_test
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"google.golang.org/protobuf/proto"
+
+	"github.com/virogg/go-hbase/internal/cpruntime"
+	"github.com/virogg/go-hbase/internal/wire"
+	"github.com/virogg/go-hbase/internal/wire/hbasepb"
+	"github.com/virogg/go-hbase/internal/wire/wirepb"
+)
+
+// TE31: ReverseClient.Get marshals an RpcRequest(GET), sends it on the bound
+// writer, and blocks until the matching RpcResponse is delivered by req_id.
+func TestReverseClientGetRoutesResponseByReqID(t *testing.T) {
+	out := make(chan *wire.Message, 4)
+	rc := cpruntime.NewReverseClient(nil)
+	rc.Bind(out)
+
+	getProto, err := proto.Marshal(&hbasepb.Get{Row: []byte("row-1")})
+	if err != nil {
+		t.Fatalf("marshal Get: %v", err)
+	}
+
+	gotReq := make(chan *wire.Message, 1)
+	go func() {
+		req := <-out
+		gotReq <- req
+		respPayload, _ := proto.Marshal(&wirepb.RpcResponse{
+			Status:  wirepb.RpcResponse_OK,
+			Payload: []byte("RESULT-BYTES"),
+		})
+		rc.Deliver(&wire.Message{Type: wire.TypeRpcResponse, ReqID: req.ReqID, Payload: respPayload})
+	}()
+
+	resp, err := rc.Get(context.Background(), 7, getProto)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if resp.GetStatus() != wirepb.RpcResponse_OK {
+		t.Fatalf("status = %v, want OK", resp.GetStatus())
+	}
+	if string(resp.GetPayload()) != "RESULT-BYTES" {
+		t.Fatalf("payload = %q, want %q", resp.GetPayload(), "RESULT-BYTES")
+	}
+
+	// The frame that went out must be a GET RpcRequest carrying the Get proto
+	// and the target region id in the wire header.
+	req := <-gotReq
+	if req.Type != wire.TypeRpcRequest {
+		t.Fatalf("outbound type = %v, want RpcRequest", req.Type)
+	}
+	if req.RegionID != 7 {
+		t.Fatalf("outbound region_id = %d, want 7", req.RegionID)
+	}
+	var rr wirepb.RpcRequest
+	if err := proto.Unmarshal(req.Payload, &rr); err != nil {
+		t.Fatalf("unmarshal RpcRequest: %v", err)
+	}
+	if rr.GetOp() != wirepb.RpcRequest_GET {
+		t.Fatalf("op = %v, want GET", rr.GetOp())
+	}
+	if string(rr.GetOpPayload()) != string(getProto) {
+		t.Fatalf("op_payload mismatch")
+	}
+}
+
+// An ERROR status surfaces as an error carrying the servicer's detail.
+func TestReverseClientGetErrorStatus(t *testing.T) {
+	out := make(chan *wire.Message, 4)
+	rc := cpruntime.NewReverseClient(nil)
+	rc.Bind(out)
+
+	go func() {
+		req := <-out
+		respPayload, _ := proto.Marshal(&wirepb.RpcResponse{
+			Status:  wirepb.RpcResponse_ERROR,
+			Payload: []byte("no region for id"),
+		})
+		rc.Deliver(&wire.Message{Type: wire.TypeRpcResponse, ReqID: req.ReqID, Payload: respPayload})
+	}()
+
+	_, err := rc.Get(context.Background(), 1, nil)
+	if err == nil {
+		t.Fatal("want error for ERROR status, got nil")
+	}
+}
+
+// With no matching reply the call blocks until ctx is done and returns its error
+// (a response delivered for a different req_id must not wake it).
+func TestReverseClientGetBlocksUntilCtxDone(t *testing.T) {
+	out := make(chan *wire.Message, 4)
+	rc := cpruntime.NewReverseClient(nil)
+	rc.Bind(out)
+
+	go func() {
+		<-out // drain the request, then deliver a mismatched req_id
+		rc.Deliver(&wire.Message{Type: wire.TypeRpcResponse, ReqID: 999999})
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+	_, err := rc.Get(ctx, 1, nil)
+	if err == nil {
+		t.Fatal("want ctx error, got nil")
+	}
+}
+
+// req_ids are monotonic and start at 1 (0 is the reserved no-correlation id).
+func TestReverseClientReqIDStartsAtOneMonotonic(t *testing.T) {
+	out := make(chan *wire.Message, 8)
+	rc := cpruntime.NewReverseClient(nil)
+	rc.Bind(out)
+
+	okPayload, _ := proto.Marshal(&wirepb.RpcResponse{Status: wirepb.RpcResponse_OK})
+	for want := uint64(1); want <= 3; want++ {
+		done := make(chan struct{})
+		go func() { _, _ = rc.Get(context.Background(), 1, nil); close(done) }()
+
+		req := <-out
+		if req.ReqID != want {
+			t.Fatalf("req_id = %d, want %d", req.ReqID, want)
+		}
+		rc.Deliver(&wire.Message{Type: wire.TypeRpcResponse, ReqID: req.ReqID, Payload: okPayload})
+		<-done
+	}
+}
+
+// Get on an unbound client fails cleanly rather than panicking on a nil writer.
+func TestReverseClientGetUnboundErrors(t *testing.T) {
+	rc := cpruntime.NewReverseClient(nil)
+	if _, err := rc.Get(context.Background(), 1, nil); err == nil {
+		t.Fatal("want error for unbound client, got nil")
+	}
+}

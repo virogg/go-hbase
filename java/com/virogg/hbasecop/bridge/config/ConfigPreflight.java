@@ -30,6 +30,7 @@ public final class ConfigPreflight {
           "hbasecop.restart.probe-interval",
           "hbasecop.shutdown.graceful-timeout",
           "hbasecop.endpoint.timeout",
+          "hbasecop.endpoint.servicing-timeout",
           PolicyConfig.KEY_TIMEOUT_DEFAULT);
 
   // Exact keys whose value must be a positive integer.
@@ -38,7 +39,11 @@ public final class ConfigPreflight {
           "hbasecop.heartbeat.miss-threshold",
           "hbasecop.restart.max-fails",
           "hbasecop.ring.capacity",
-          "hbasecop.ring.max-object-size");
+          "hbasecop.ring.max-object-size",
+          "hbasecop.endpoint.servicing-pool-size",
+          "hbasecop.endpoint.servicing-queue-depth",
+          "hbasecop.endpoint.bulk-ring.capacity",
+          "hbasecop.endpoint.bulk-ring.max-object-size");
 
   private static final Pattern DURATION = Pattern.compile("\\d+\\s*(ns|us|ms|s|m|h|d)");
 

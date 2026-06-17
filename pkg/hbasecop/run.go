@@ -82,16 +82,44 @@ func runDispatcher(d *dispatcher, label string) error {
 	}
 	defer func() { _ = outCh.Close() }()
 
-	loop, err := cpruntime.New(cpruntime.Config{
+	loopCfg := cpruntime.Config{
 		InCh:            inCh,
 		OutCh:           outCh,
 		HeartbeatPeriod: cfg.heartbeat,
 		Logger:          d.logger,
 		Handler:         d.dispatch,
 		EndpointHandler: d.dispatchEndpoint,
-	})
+	}
+
+	// Tier 2 (TE31): when the supervisor provisioned the bulk ring, open its
+	// consumer endpoint and stand up the reverse-RPC client so an endpoint Call
+	// can read region-local data. The client routes replies off the bulk ring
+	// and sends requests through the loop's shared writer (bound after New).
+	var reverse *cpruntime.ReverseClient
+	if cfg.bulkPath != "" {
+		inBulkCh, err := shmem.Open(shmem.Config{
+			Filename:      cfg.bulkPath,
+			Capacity:      cfg.bulkCapacity,
+			MaxObjectSize: cfg.bulkMaxObjectSize,
+			Role:          shmem.RoleConsumer,
+		})
+		if err != nil {
+			return fmt.Errorf("hbasecop: open bulk ring: %w", err)
+		}
+		defer func() { _ = inBulkCh.Close() }()
+
+		reverse = cpruntime.NewReverseClient(d.logger)
+		loopCfg.InBulkCh = inBulkCh
+		loopCfg.ReverseResponseHandler = reverse.Deliver
+	}
+
+	loop, err := cpruntime.New(loopCfg)
 	if err != nil {
 		return err
+	}
+	if reverse != nil {
+		reverse.Bind(loop.OutboundChan())
+		d.reverse = reverse
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
@@ -233,6 +261,12 @@ type shmemEnvConfig struct {
 	inPath, outPath         string
 	capacity, maxObjectSize int
 	heartbeat               time.Duration
+
+	// Tier 2 (TE31) reverse path. bulkPath empty means the supervisor did not
+	// provision the bulk ring, so reverse data access is off and no second
+	// reader is opened. Capacity/slot default to the control ring's when unset.
+	bulkPath                        string
+	bulkCapacity, bulkMaxObjectSize int
 }
 
 func loadShmemConfigFromEnv() (shmemEnvConfig, error) {
@@ -265,6 +299,19 @@ func loadShmemConfigFromEnv() (shmemEnvConfig, error) {
 		c.heartbeat = 0
 	default:
 		c.heartbeat = time.Duration(hbMs) * time.Millisecond
+	}
+
+	// Tier 2 (TE31): the bulk ring is optional. Its path is absent on a build
+	// that did not provision reverse data access; capacity/slot fall back to the
+	// control ring's so a single knob still works for the common case.
+	c.bulkPath = os.Getenv("HBASECOP_SHMEM_BULK_PATH")
+	if c.bulkPath != "" {
+		if c.bulkCapacity, err = optionalEnvInt("HBASECOP_BULK_RING_CAPACITY", c.capacity); err != nil {
+			return c, err
+		}
+		if c.bulkMaxObjectSize, err = optionalEnvInt("HBASECOP_BULK_RING_MAX_OBJECT_SIZE", c.maxObjectSize); err != nil {
+			return c, err
+		}
 	}
 	return c, nil
 }

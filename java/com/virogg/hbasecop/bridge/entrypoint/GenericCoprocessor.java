@@ -37,6 +37,12 @@ final class GenericCoprocessor {
   static final String KEY_RING_MAX_OBJECT_SIZE = "hbasecop.ring.max-object-size";
   static final String KEY_GRACEFUL_SHUTDOWN = "hbasecop.shutdown.graceful-timeout";
   static final String KEY_ENDPOINT_TIMEOUT = "hbasecop.endpoint.timeout";
+  // TE31 reverse-RPC servicing pool + bulk ring tunables.
+  static final String KEY_SERVICING_POOL_SIZE = "hbasecop.endpoint.servicing-pool-size";
+  static final String KEY_SERVICING_QUEUE_DEPTH = "hbasecop.endpoint.servicing-queue-depth";
+  static final String KEY_SERVICING_TIMEOUT = "hbasecop.endpoint.servicing-timeout";
+  static final String KEY_BULK_RING_CAPACITY = "hbasecop.endpoint.bulk-ring.capacity";
+  static final String KEY_BULK_RING_MAX_OBJECT_SIZE = "hbasecop.endpoint.bulk-ring.max-object-size";
 
   static final int DEFAULT_RING_CAPACITY = 16;
   static final int DEFAULT_RING_MAX_OBJECT_SIZE = 1 << 20; // 1 MiB
@@ -45,6 +51,9 @@ final class GenericCoprocessor {
   // hook (and, from E3, drive server-side scans), so they get a larger default.
   static final Duration DEFAULT_ENDPOINT_TIMEOUT = Duration.ofSeconds(30);
   static final Duration DEFAULT_GRACEFUL_SHUTDOWN = Duration.ofSeconds(2);
+  static final int DEFAULT_SERVICING_POOL_SIZE = 8;
+  static final int DEFAULT_SERVICING_QUEUE_DEPTH = 64;
+  static final Duration DEFAULT_SERVICING_TIMEOUT = Duration.ofSeconds(30);
 
   private static final String ELF_RESOURCE_PATH = "bin/linux-amd64/hbasecop-runtime";
 
@@ -58,13 +67,22 @@ final class GenericCoprocessor {
    * still {@code null}) fails cleanly rather than throwing NPE.
    */
   static Iterable<Service> endpointServices(Supplier<SharedRuntime.Handle> handleSupplier) {
+    // No region scope (region_id 0): master endpoints and pre-start invocations.
+    return endpointServices(handleSupplier, () -> 0);
+  }
+
+  static Iterable<Service> endpointServices(
+      Supplier<SharedRuntime.Handle> handleSupplier,
+      java.util.function.IntSupplier regionIdSupplier) {
     EndpointInvoker invoker =
         invoke -> {
           SharedRuntime.Handle h = handleSupplier.get();
           if (h == null) {
             throw new IOException("hbasecop: endpoint invoked before coprocessor start");
           }
-          return h.invokeEndpoint(invoke);
+          // TE31: stamp the originating region_id so a Go handler's reverse RPCs
+          // (region-local reads) resolve to the region the client invoked on.
+          return h.invokeEndpoint(invoke, regionIdSupplier.getAsInt());
         };
     return Collections.singletonList(new GoEndpointServiceImpl(invoker));
   }
@@ -90,6 +108,19 @@ final class GenericCoprocessor {
         conf != null
             ? conf.getInt(KEY_RING_MAX_OBJECT_SIZE, DEFAULT_RING_MAX_OBJECT_SIZE)
             : DEFAULT_RING_MAX_OBJECT_SIZE;
+    // TE31: the bulk ring defaults to the control ring's sizing (Results fit one slot for a GET);
+    // operators can size it independently since it carries larger reverse-read payloads.
+    int bulkCapacity = conf != null ? conf.getInt(KEY_BULK_RING_CAPACITY, capacity) : capacity;
+    int bulkMaxObject =
+        conf != null ? conf.getInt(KEY_BULK_RING_MAX_OBJECT_SIZE, maxObject) : maxObject;
+    int poolSize =
+        conf != null
+            ? conf.getInt(KEY_SERVICING_POOL_SIZE, DEFAULT_SERVICING_POOL_SIZE)
+            : DEFAULT_SERVICING_POOL_SIZE;
+    int queueDepth =
+        conf != null
+            ? conf.getInt(KEY_SERVICING_QUEUE_DEPTH, DEFAULT_SERVICING_QUEUE_DEPTH)
+            : DEFAULT_SERVICING_QUEUE_DEPTH;
     return CoprocessorRuntime.Config.builder()
         .javaToGoFile(tmpDir.resolve("in.mmap"))
         .goToJavaFile(tmpDir.resolve("out.mmap"))
@@ -98,6 +129,11 @@ final class GenericCoprocessor {
         .hookTimeout(duration(conf, PolicyConfig.KEY_TIMEOUT_DEFAULT, DEFAULT_HOOK_TIMEOUT))
         .endpointTimeout(duration(conf, KEY_ENDPOINT_TIMEOUT, DEFAULT_ENDPOINT_TIMEOUT))
         .gracefulShutdownTimeout(duration(conf, KEY_GRACEFUL_SHUTDOWN, DEFAULT_GRACEFUL_SHUTDOWN))
+        .servicingPoolSize(poolSize)
+        .servicingQueueDepth(queueDepth)
+        .servicingTimeout(duration(conf, KEY_SERVICING_TIMEOUT, DEFAULT_SERVICING_TIMEOUT))
+        .bulkRingCapacity(bulkCapacity)
+        .bulkRingMaxObjectSize(bulkMaxObject)
         .configuration(conf)
         .build();
   }

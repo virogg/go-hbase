@@ -262,6 +262,26 @@ public final class SharedRuntime {
     }
 
     /**
+     * TE31: forward an endpoint invocation stamped with {@code regionId} so a Go handler's reverse
+     * RPCs target the originating region.
+     */
+    public byte[] invokeEndpoint(
+        com.virogg.hbasecop.bridge.wire.pb.EndpointInvoke invoke, int regionId)
+        throws java.io.IOException {
+      if (released) {
+        throw new java.io.IOException("hbasecop: endpoint invoked on a released runtime handle");
+      }
+      return runtime.invokeEndpoint(invoke, regionId);
+    }
+
+    /**
+     * TE31: the wire region_id for {@code encodedRegionName}, or 0 if unknown / handle released.
+     */
+    public int regionId(String encodedRegionName) {
+      return released ? 0 : runtime.regionIdFor(encodedRegionName);
+    }
+
+    /**
      * Decrement the refcount on this handle's runtime. When the last handle for a key releases, the
      * runtime is stopped (SHUTDOWN frame + {@code process.waitFor}). Idempotent: subsequent calls
      * are no-ops.

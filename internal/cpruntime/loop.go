@@ -46,6 +46,13 @@ type Config struct {
 	InCh *shmem.Channel
 	// OutCh is the producer endpoint of the Go→Java ring.
 	OutCh *shmem.Channel
+	// InBulkCh is the consumer endpoint of the dedicated bulk Java→Go ring
+	// (Tier 2, TE31): the Java servicing pool replies to Go-initiated reverse
+	// RPCs (RpcResponse, e.g. scan/get data) here, isolated from hook/endpoint
+	// invokes and heartbeats on InCh so a large reply never delays a hook or
+	// starves the watchdog. Nil disables the reverse path (no second reader is
+	// started), matching a build with endpoints' reverse data access off.
+	InBulkCh *shmem.Channel
 
 	// HeartbeatPeriod is the interval between outbound Heartbeat
 	// frames. Zero defaults to 500ms; a negative value disables
@@ -151,9 +158,24 @@ func (l *Loop) Run(parent context.Context) error {
 		go func() { defer wg.Done(); l.runHeartbeat(ctx) }()
 	}
 
+	// Tier 2 (TE31): a second reader drains the dedicated bulk ring carrying
+	// reverse-RPC replies, so a large RpcResponse never queues behind a hook
+	// invoke on InCh. Shares ctx/cancel with the primary reader: a transport
+	// error on either ring tears the whole loop down.
+	if l.cfg.InBulkCh != nil {
+		wg.Add(1)
+		go func() { defer wg.Done(); l.runBulkReader(ctx, cancel) }()
+	}
+
 	wg.Wait()
 	return parent.Err()
 }
+
+// OutboundChan returns the loop's single outbound writer queue, so a
+// [ReverseClient] can enqueue Go-initiated frames (Tier 2) through the same
+// funnel as hook responses. Bind it before Run; sends are serialized by the
+// writer goroutine.
+func (l *Loop) OutboundChan() chan<- *wire.Message { return l.out }
 
 func (l *Loop) runReader(ctx context.Context, cancel context.CancelFunc) {
 	for {
@@ -201,6 +223,44 @@ func (l *Loop) runReader(ctx context.Context, cancel context.CancelFunc) {
 		}
 		// Other inbound types (Heartbeat, Log, Response, Error) are ignored
 		// here; the supervisor (T18+) drives them from the Java side.
+	}
+}
+
+// runBulkReader drains the dedicated bulk Java→Go ring (Tier 2, TE31), routing
+// each RpcResponse to the ReverseResponseHandler keyed by req_id. It mirrors
+// runReader's non-blocking poll and shares its cancel: a transport error tears
+// the loop down so the writer/heartbeat goroutines also exit. The bulk ring
+// carries only reverse-RPC replies; any other type is unexpected and logged.
+func (l *Loop) runBulkReader(ctx context.Context, cancel context.CancelFunc) {
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		frame, err := l.cfg.InBulkCh.Recv()
+		if errors.Is(err, shmem.ErrNoData) {
+			runtime.Gosched()
+			continue
+		}
+		if err != nil {
+			l.cfg.Logger.Error("cpruntime: bulk recv failed", "err", err)
+			cancel()
+			return
+		}
+
+		msg, err := decodeFrame(frame)
+		if err != nil {
+			l.cfg.Logger.Error("cpruntime: bulk decode failed", "err", err)
+			continue
+		}
+
+		if msg.Type == wire.TypeRpcResponse {
+			if h := l.cfg.ReverseResponseHandler; h != nil {
+				h(msg)
+			}
+			continue
+		}
+		l.cfg.Logger.Warn("cpruntime: unexpected frame on bulk ring (ignored)",
+			"type", uint8(msg.Type), "req_id", msg.ReqID)
 	}
 }
 

@@ -28,6 +28,7 @@ import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.CoprocessorDescriptorBuilder;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
@@ -58,33 +59,17 @@ final class EndpointRoundTripIT {
 
   @Test
   void clientEndpointCallRoundTripsToGo() throws Throwable {
-    Path jarOnHost = resolveJarOnHost();
-    assertTrue(
-        Files.isReadable(jarOnHost),
-        "coproc-jar not staged on host bind-mount: "
-            + jarOnHost
-            + " (run `make endpoint-observer-jar` and copy into test/integration/coproc-jars/)");
-
-    Configuration cfg = HBaseConfiguration.create();
-    cfg.set("hbase.zookeeper.quorum", ZK_QUORUM);
-    cfg.set("hbase.zookeeper.property.clientPort", ZK_PORT);
-    cfg.set("zookeeper.recovery.retry", "2");
-    cfg.set("hbase.client.retries.number", "10");
-    cfg.set("hbase.client.pause", "1000");
-    cfg.set("hbase.rpc.timeout", "30000");
-    cfg.set("hbase.client.operation.timeout", "60000");
-    cfg.set("hbase.client.meta.operation.timeout", "60000");
-
+    requireStagedJar();
     TableName tn = TableName.valueOf("hbasecop_endpoint_it");
 
-    try (Connection conn = ConnectionFactory.createConnection(cfg);
+    try (Connection conn = ConnectionFactory.createConnection(clientConfig());
         Admin admin = conn.getAdmin()) {
 
       waitForClusterReady(admin, Duration.ofSeconds(300));
       dropTable(admin, tn);
       createTableWithCoproc(admin, tn);
       try (Table table = conn.getTable(tn)) {
-        byte[] result = callUpper(table, "hello");
+        byte[] result = callEndpoint(table, "upper", ByteString.copyFromUtf8("hello"));
         assertEquals(
             "HELLO",
             new String(result, StandardCharsets.UTF_8),
@@ -96,14 +81,67 @@ final class EndpointRoundTripIT {
   }
 
   /**
-   * Invokes GoEndpointService.Call(method="upper") over every region, returning the sole result.
+   * TE31: a client invokes the endpoint method "get", whose Go handler issues a reverse-RPC GET
+   * back into the region for the row named by the payload and returns the cell value. Proves the
+   * reverse channel end to end on a live cluster: seed a row, reverse-GET it, assert the value.
    */
-  private static byte[] callUpper(Table table, String payload) throws Throwable {
+  @Test
+  void clientReverseGetRoundTrips() throws Throwable {
+    requireStagedJar();
+    TableName tn = TableName.valueOf("hbasecop_endpoint_revget_it");
+    byte[] row = "row-1".getBytes(StandardCharsets.UTF_8);
+    byte[] qualifier = "q".getBytes(StandardCharsets.UTF_8);
+    byte[] value = "reverse-value".getBytes(StandardCharsets.UTF_8);
+
+    try (Connection conn = ConnectionFactory.createConnection(clientConfig());
+        Admin admin = conn.getAdmin()) {
+
+      waitForClusterReady(admin, Duration.ofSeconds(300));
+      dropTable(admin, tn);
+      createTableWithCoproc(admin, tn);
+      try (Table table = conn.getTable(tn)) {
+        table.put(new Put(row).addColumn(CF, qualifier, value));
+
+        byte[] result = callEndpoint(table, "get", ByteString.copyFrom(row));
+        assertEquals(
+            new String(value, StandardCharsets.UTF_8),
+            new String(result, StandardCharsets.UTF_8),
+            "endpoint reverse GET must read the seeded row's value from the region");
+      } finally {
+        dropTable(admin, tn);
+      }
+    }
+  }
+
+  private static void requireStagedJar() {
+    Path jarOnHost = resolveJarOnHost();
+    assertTrue(
+        Files.isReadable(jarOnHost),
+        "coproc-jar not staged on host bind-mount: "
+            + jarOnHost
+            + " (run `make endpoint-observer-jar` and copy into test/integration/coproc-jars/)");
+  }
+
+  private static Configuration clientConfig() {
+    Configuration cfg = HBaseConfiguration.create();
+    cfg.set("hbase.zookeeper.quorum", ZK_QUORUM);
+    cfg.set("hbase.zookeeper.property.clientPort", ZK_PORT);
+    cfg.set("zookeeper.recovery.retry", "2");
+    cfg.set("hbase.client.retries.number", "10");
+    cfg.set("hbase.client.pause", "1000");
+    cfg.set("hbase.rpc.timeout", "30000");
+    cfg.set("hbase.client.operation.timeout", "60000");
+    cfg.set("hbase.client.meta.operation.timeout", "60000");
+    return cfg;
+  }
+
+  /**
+   * Invokes GoEndpointService.Call(method, payload) over every region, returning the sole result.
+   */
+  private static byte[] callEndpoint(Table table, String method, ByteString payload)
+      throws Throwable {
     GoEndpointRequest request =
-        GoEndpointRequest.newBuilder()
-            .setMethod("upper")
-            .setPayload(ByteString.copyFromUtf8(payload))
-            .build();
+        GoEndpointRequest.newBuilder().setMethod(method).setPayload(payload).build();
 
     Map<byte[], byte[]> perRegion =
         table.coprocessorService(

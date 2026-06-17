@@ -259,7 +259,9 @@ IT → собрать логи → `compose down`). Новые ключи `hbase
 > protobuf 2.5.0, а jar-first CoprocessorClassLoader не делегирует `com.google.protobuf` родителю.
 
 ### Phase E3 — реверс-чтения
-- [ ] TE31 2-е J→G кольцо + servicing-pool + shaded-конверсия *(РИСК; спайк)*
+- [x] TE31 2-е J→G кольцо + servicing-pool + shaded-конверсия — **live reverse-GET IT зелёный**
+      (EndpointRoundTripIT seed→reverse-GET→assert, HBase 2.5.11, 2026-06-18); F4 shaded-конверсия
+      (byte-identity) + fail-closed пул насыщения unit-доказаны
 - [ ] TE32 `RpcRequest{GET}` round-trip (data-dependent A→B)
 - [ ] TE33 pull-scan SCAN_OPEN/NEXT/CLOSE + реестр + leak-reaping
 - [ ] TE34 Go SDK `EndpointEnv.OpenScanner/Get`
