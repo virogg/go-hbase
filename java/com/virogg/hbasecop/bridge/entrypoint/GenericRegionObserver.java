@@ -3,6 +3,7 @@
 
 package com.virogg.hbasecop.bridge.entrypoint;
 
+import com.google.protobuf.Service;
 import com.virogg.hbasecop.bridge.SharedRuntime;
 import java.io.IOException;
 import java.util.Optional;
@@ -39,5 +40,11 @@ public final class GenericRegionObserver implements RegionCoprocessor {
   @Override
   public Optional<RegionObserver> getRegionObserver() {
     return handle == null ? Optional.empty() : Optional.ofNullable(handle.getRegionObserver());
+  }
+
+  /** Exposes the generic Go endpoint Service (Tier 2) alongside the region observer. */
+  @Override
+  public Iterable<Service> getServices() {
+    return GenericCoprocessor.endpointServices();
   }
 }

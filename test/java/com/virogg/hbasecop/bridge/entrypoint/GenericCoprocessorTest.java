@@ -4,9 +4,12 @@
 package com.virogg.hbasecop.bridge.entrypoint;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.virogg.hbasecop.bridge.CoprocessorRuntime;
 import com.virogg.hbasecop.bridge.config.PolicyConfig;
+import com.virogg.hbasecop.bridge.endpoint.GoEndpointServiceImpl;
 import java.nio.file.Path;
 import java.time.Duration;
 import org.apache.hadoop.conf.Configuration;
@@ -43,5 +46,25 @@ final class GenericCoprocessorTest {
   void sharedKeyFallsBackToClassNameWithoutCoprocJar() {
     // The bridge test classpath carries no coproc-jar manifest, so the key is the fallback.
     assertEquals("fallback-key", GenericCoprocessor.sharedKey("fallback-key"));
+  }
+
+  @Test
+  void endpointServicesExposesOneGoEndpointService() {
+    var services = GenericCoprocessor.endpointServices();
+    var it = services.iterator();
+    assertTrue(it.hasNext(), "one endpoint service expected");
+    assertTrue(it.next() instanceof GoEndpointServiceImpl);
+    assertFalse(it.hasNext(), "exactly one endpoint service");
+  }
+
+  @Test
+  void regionAndMasterEntrypointsRegisterTheEndpointService() {
+    // getServices() is independent of start(): the service registers without a running handle.
+    assertTrue(
+        new GenericRegionObserver().getServices().iterator().next()
+            instanceof GoEndpointServiceImpl);
+    assertTrue(
+        new GenericMasterObserver().getServices().iterator().next()
+            instanceof GoEndpointServiceImpl);
   }
 }

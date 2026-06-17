@@ -3,17 +3,23 @@
 
 package com.virogg.hbasecop.bridge.entrypoint;
 
+import com.google.protobuf.Service;
 import com.virogg.hbasecop.bridge.CoprocessorRuntime;
 import com.virogg.hbasecop.bridge.SharedRuntime;
 import com.virogg.hbasecop.bridge.config.PolicyConfig;
+import com.virogg.hbasecop.bridge.endpoint.EndpointInvoker;
+import com.virogg.hbasecop.bridge.endpoint.GoEndpointServiceImpl;
 import com.virogg.hbasecop.bridge.supervisor.ManifestBinaryDescriptor;
 import java.io.IOException;
+import java.lang.System.Logger;
+import java.lang.System.Logger.Level;
 import java.net.JarURLConnection;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Collections;
 import java.util.concurrent.TimeUnit;
 import java.util.jar.Manifest;
 import java.util.stream.Stream;
@@ -39,7 +45,28 @@ final class GenericCoprocessor {
 
   private static final String ELF_RESOURCE_PATH = "bin/linux-amd64/hbasecop-runtime";
 
+  private static final Logger LOG = System.getLogger(GenericCoprocessor.class.getName());
+
   private GenericCoprocessor() {}
+
+  /**
+   * The endpoint services the stock entrypoints expose via {@code getServices()}: a single generic
+   * {@link GoEndpointServiceImpl}. TE21 backs it with a logging/echo invoker that maps the call
+   * onto an {@code EndpointInvoke} and returns the request payload; the real forward over the shmem
+   * ring lands in TE22.
+   */
+  static Iterable<Service> endpointServices() {
+    EndpointInvoker echoStub =
+        invoke -> {
+          LOG.log(
+              Level.DEBUG,
+              "GenericCoprocessor: endpoint invoke service={0} method={1} bytes={2}"
+                  + " (Go dispatch lands in TE22)",
+              new Object[] {invoke.getService(), invoke.getMethod(), invoke.getPayload().size()});
+          return invoke.getPayload().toByteArray();
+        };
+    return Collections.singletonList(new GoEndpointServiceImpl(echoStub));
+  }
 
   /** Acquires the shared runtime for key, spawning the Go process on the first acquire. */
   static SharedRuntime.Handle acquire(String key, CoprocessorEnvironment env) throws IOException {

@@ -243,7 +243,7 @@ IT → собрать логи → `compose down`). Новые ключи `hbase
 - [x] **CP-E1:** endpoints OFF, существующие IT зелёные (counter + master на живом HBase 2026-06-17), нет регрессии
 
 ### Phase E2 — stateless endpoint end-to-end
-- [ ] TE21 `GoEndpointService` через `getServices()` (unshaded protobuf)
+- [x] TE21 `GoEndpointService` через `getServices()` (unshaded protobuf) — core+unit; live IT отложен в TE22
 - [ ] TE22 round-trip `EndpointInvoke`/`EndpointResult` на существующей паре
 - [ ] TE23 Go SDK `Endpoint` + `RunEndpoint`/`RunAll`
 - [ ] TE24 таймаут / panic→error / crash→strict-fail
