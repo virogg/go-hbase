@@ -87,17 +87,124 @@ func (Log_Level) EnumDescriptor() ([]byte, []int) {
 	return file_wire_proto_rawDescGZIP(), []int{6, 0}
 }
 
+type RpcRequest_Op int32
+
+const (
+	RpcRequest_OP_UNSPECIFIED RpcRequest_Op = 0
+	RpcRequest_SCAN_OPEN      RpcRequest_Op = 1
+	RpcRequest_SCAN_NEXT      RpcRequest_Op = 2
+	RpcRequest_SCAN_CLOSE     RpcRequest_Op = 3
+	RpcRequest_GET            RpcRequest_Op = 4
+	RpcRequest_MUTATE         RpcRequest_Op = 5
+)
+
+// Enum value maps for RpcRequest_Op.
+var (
+	RpcRequest_Op_name = map[int32]string{
+		0: "OP_UNSPECIFIED",
+		1: "SCAN_OPEN",
+		2: "SCAN_NEXT",
+		3: "SCAN_CLOSE",
+		4: "GET",
+		5: "MUTATE",
+	}
+	RpcRequest_Op_value = map[string]int32{
+		"OP_UNSPECIFIED": 0,
+		"SCAN_OPEN":      1,
+		"SCAN_NEXT":      2,
+		"SCAN_CLOSE":     3,
+		"GET":            4,
+		"MUTATE":         5,
+	}
+)
+
+func (x RpcRequest_Op) Enum() *RpcRequest_Op {
+	p := new(RpcRequest_Op)
+	*p = x
+	return p
+}
+
+func (x RpcRequest_Op) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RpcRequest_Op) Descriptor() protoreflect.EnumDescriptor {
+	return file_wire_proto_enumTypes[1].Descriptor()
+}
+
+func (RpcRequest_Op) Type() protoreflect.EnumType {
+	return &file_wire_proto_enumTypes[1]
+}
+
+func (x RpcRequest_Op) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RpcRequest_Op.Descriptor instead.
+func (RpcRequest_Op) EnumDescriptor() ([]byte, []int) {
+	return file_wire_proto_rawDescGZIP(), []int{9, 0}
+}
+
+type RpcResponse_Status int32
+
+const (
+	RpcResponse_STATUS_UNSPECIFIED RpcResponse_Status = 0
+	RpcResponse_OK                 RpcResponse_Status = 1
+	RpcResponse_ERROR              RpcResponse_Status = 2
+)
+
+// Enum value maps for RpcResponse_Status.
+var (
+	RpcResponse_Status_name = map[int32]string{
+		0: "STATUS_UNSPECIFIED",
+		1: "OK",
+		2: "ERROR",
+	}
+	RpcResponse_Status_value = map[string]int32{
+		"STATUS_UNSPECIFIED": 0,
+		"OK":                 1,
+		"ERROR":              2,
+	}
+)
+
+func (x RpcResponse_Status) Enum() *RpcResponse_Status {
+	p := new(RpcResponse_Status)
+	*p = x
+	return p
+}
+
+func (x RpcResponse_Status) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RpcResponse_Status) Descriptor() protoreflect.EnumDescriptor {
+	return file_wire_proto_enumTypes[2].Descriptor()
+}
+
+func (RpcResponse_Status) Type() protoreflect.EnumType {
+	return &file_wire_proto_enumTypes[2]
+}
+
+func (x RpcResponse_Status) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RpcResponse_Status.Descriptor instead.
+func (RpcResponse_Status) EnumDescriptor() ([]byte, []int) {
+	return file_wire_proto_rawDescGZIP(), []int{10, 0}
+}
+
 // FrameHeader is the routing metadata carried on every frame.
 //
-//	req_id      — caller-assigned request id; correlates Request↔Response
+//	req_id      - caller-assigned request id; correlates Request↔Response
 //	              (and Error responses). Heartbeats carry req_id=0.
-//	region_id   — HBase region identifier for routing on the Go side.
+//	region_id   - HBase region identifier for routing on the Go side.
 //	              Always 0 in Phase 1 (single-region E2E); real values
 //	              land in T61.
-//	hook_id     — Observer-method discriminator (T41 hook table).
+//	hook_id     - Observer-method discriminator (T41 hook table).
 //	              0 means "no hook" (control frames: Heartbeat/Shutdown/Log).
-//	chunk_idx   — 0-based index of this chunk in a multi-chunk message.
-//	chunk_total — total number of chunks (>=1). =1 for single-chunk.
+//	chunk_idx   - 0-based index of this chunk in a multi-chunk message.
+//	chunk_total - total number of chunks (>=1). =1 for single-chunk.
 type FrameHeader struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ReqId         uint64                 `protobuf:"varint,1,opt,name=req_id,json=reqId,proto3" json:"req_id,omitempty"`
@@ -467,6 +574,235 @@ func (x *Log) GetMessage() string {
 	return ""
 }
 
+// EndpointInvoke (Tier 2) carries a client-initiated server-side RPC,
+// dispatched to a Go Endpoint handler. service/method name the target;
+// payload is the opaque user-defined request body.
+type EndpointInvoke struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Service       string                 `protobuf:"bytes,1,opt,name=service,proto3" json:"service,omitempty"`
+	Method        string                 `protobuf:"bytes,2,opt,name=method,proto3" json:"method,omitempty"`
+	Payload       []byte                 `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EndpointInvoke) Reset() {
+	*x = EndpointInvoke{}
+	mi := &file_wire_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EndpointInvoke) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EndpointInvoke) ProtoMessage() {}
+
+func (x *EndpointInvoke) ProtoReflect() protoreflect.Message {
+	mi := &file_wire_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EndpointInvoke.ProtoReflect.Descriptor instead.
+func (*EndpointInvoke) Descriptor() ([]byte, []int) {
+	return file_wire_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *EndpointInvoke) GetService() string {
+	if x != nil {
+		return x.Service
+	}
+	return ""
+}
+
+func (x *EndpointInvoke) GetMethod() string {
+	if x != nil {
+		return x.Method
+	}
+	return ""
+}
+
+func (x *EndpointInvoke) GetPayload() []byte {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+// EndpointResult is the success reply to an EndpointInvoke; failures use the
+// Error payload instead. payload is the opaque user-defined response body.
+type EndpointResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Payload       []byte                 `protobuf:"bytes,1,opt,name=payload,proto3" json:"payload,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EndpointResult) Reset() {
+	*x = EndpointResult{}
+	mi := &file_wire_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EndpointResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EndpointResult) ProtoMessage() {}
+
+func (x *EndpointResult) ProtoReflect() protoreflect.Message {
+	mi := &file_wire_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EndpointResult.ProtoReflect.Descriptor instead.
+func (*EndpointResult) Descriptor() ([]byte, []int) {
+	return file_wire_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *EndpointResult) GetPayload() []byte {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+// RpcRequest (Tier 2) is the Go-initiated reverse channel: a running endpoint
+// handler reads/writes region-local data. Correlated by the wire
+// FrameHeader.req_id; call_id groups a reverse RPC with its originating
+// EndpointInvoke (e.g. for scanner lifecycle). op_payload carries the vendored
+// HBase Scan/Get/Mutation protobuf for the op.
+type RpcRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CallId        uint64                 `protobuf:"varint,1,opt,name=call_id,json=callId,proto3" json:"call_id,omitempty"`
+	Op            RpcRequest_Op          `protobuf:"varint,2,opt,name=op,proto3,enum=virogg.hbasecop.v1.RpcRequest_Op" json:"op,omitempty"`
+	OpPayload     []byte                 `protobuf:"bytes,3,opt,name=op_payload,json=opPayload,proto3" json:"op_payload,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RpcRequest) Reset() {
+	*x = RpcRequest{}
+	mi := &file_wire_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RpcRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RpcRequest) ProtoMessage() {}
+
+func (x *RpcRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wire_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RpcRequest.ProtoReflect.Descriptor instead.
+func (*RpcRequest) Descriptor() ([]byte, []int) {
+	return file_wire_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *RpcRequest) GetCallId() uint64 {
+	if x != nil {
+		return x.CallId
+	}
+	return 0
+}
+
+func (x *RpcRequest) GetOp() RpcRequest_Op {
+	if x != nil {
+		return x.Op
+	}
+	return RpcRequest_OP_UNSPECIFIED
+}
+
+func (x *RpcRequest) GetOpPayload() []byte {
+	if x != nil {
+		return x.OpPayload
+	}
+	return nil
+}
+
+// RpcResponse is the Java-side reply to an RpcRequest. payload carries the
+// vendored HBase Result / scan batch (chunked via the wire header when large);
+// status distinguishes success from a servicing error.
+type RpcResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Status        RpcResponse_Status     `protobuf:"varint,1,opt,name=status,proto3,enum=virogg.hbasecop.v1.RpcResponse_Status" json:"status,omitempty"`
+	Payload       []byte                 `protobuf:"bytes,2,opt,name=payload,proto3" json:"payload,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RpcResponse) Reset() {
+	*x = RpcResponse{}
+	mi := &file_wire_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RpcResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RpcResponse) ProtoMessage() {}
+
+func (x *RpcResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_wire_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RpcResponse.ProtoReflect.Descriptor instead.
+func (*RpcResponse) Descriptor() ([]byte, []int) {
+	return file_wire_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *RpcResponse) GetStatus() RpcResponse_Status {
+	if x != nil {
+		return x.Status
+	}
+	return RpcResponse_STATUS_UNSPECIFIED
+}
+
+func (x *RpcResponse) GetPayload() []byte {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
 // Frame is the wire envelope. Every frame on the ring carries a header
 // and exactly one payload.
 type Frame struct {
@@ -480,6 +816,10 @@ type Frame struct {
 	//	*Frame_Error
 	//	*Frame_Shutdown
 	//	*Frame_Log
+	//	*Frame_EndpointInvoke
+	//	*Frame_EndpointResult
+	//	*Frame_RpcRequest
+	//	*Frame_RpcResponse
 	Payload       isFrame_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -487,7 +827,7 @@ type Frame struct {
 
 func (x *Frame) Reset() {
 	*x = Frame{}
-	mi := &file_wire_proto_msgTypes[7]
+	mi := &file_wire_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -499,7 +839,7 @@ func (x *Frame) String() string {
 func (*Frame) ProtoMessage() {}
 
 func (x *Frame) ProtoReflect() protoreflect.Message {
-	mi := &file_wire_proto_msgTypes[7]
+	mi := &file_wire_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -512,7 +852,7 @@ func (x *Frame) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Frame.ProtoReflect.Descriptor instead.
 func (*Frame) Descriptor() ([]byte, []int) {
-	return file_wire_proto_rawDescGZIP(), []int{7}
+	return file_wire_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *Frame) GetHeader() *FrameHeader {
@@ -583,6 +923,42 @@ func (x *Frame) GetLog() *Log {
 	return nil
 }
 
+func (x *Frame) GetEndpointInvoke() *EndpointInvoke {
+	if x != nil {
+		if x, ok := x.Payload.(*Frame_EndpointInvoke); ok {
+			return x.EndpointInvoke
+		}
+	}
+	return nil
+}
+
+func (x *Frame) GetEndpointResult() *EndpointResult {
+	if x != nil {
+		if x, ok := x.Payload.(*Frame_EndpointResult); ok {
+			return x.EndpointResult
+		}
+	}
+	return nil
+}
+
+func (x *Frame) GetRpcRequest() *RpcRequest {
+	if x != nil {
+		if x, ok := x.Payload.(*Frame_RpcRequest); ok {
+			return x.RpcRequest
+		}
+	}
+	return nil
+}
+
+func (x *Frame) GetRpcResponse() *RpcResponse {
+	if x != nil {
+		if x, ok := x.Payload.(*Frame_RpcResponse); ok {
+			return x.RpcResponse
+		}
+	}
+	return nil
+}
+
 type isFrame_Payload interface {
 	isFrame_Payload()
 }
@@ -611,6 +987,22 @@ type Frame_Log struct {
 	Log *Log `protobuf:"bytes,7,opt,name=log,proto3,oneof"`
 }
 
+type Frame_EndpointInvoke struct {
+	EndpointInvoke *EndpointInvoke `protobuf:"bytes,8,opt,name=endpoint_invoke,json=endpointInvoke,proto3,oneof"`
+}
+
+type Frame_EndpointResult struct {
+	EndpointResult *EndpointResult `protobuf:"bytes,9,opt,name=endpoint_result,json=endpointResult,proto3,oneof"`
+}
+
+type Frame_RpcRequest struct {
+	RpcRequest *RpcRequest `protobuf:"bytes,10,opt,name=rpc_request,json=rpcRequest,proto3,oneof"`
+}
+
+type Frame_RpcResponse struct {
+	RpcResponse *RpcResponse `protobuf:"bytes,11,opt,name=rpc_response,json=rpcResponse,proto3,oneof"`
+}
+
 func (*Frame_Request) isFrame_Payload() {}
 
 func (*Frame_Response) isFrame_Payload() {}
@@ -622,6 +1014,14 @@ func (*Frame_Error) isFrame_Payload() {}
 func (*Frame_Shutdown) isFrame_Payload() {}
 
 func (*Frame_Log) isFrame_Payload() {}
+
+func (*Frame_EndpointInvoke) isFrame_Payload() {}
+
+func (*Frame_EndpointResult) isFrame_Payload() {}
+
+func (*Frame_RpcRequest) isFrame_Payload() {}
+
+func (*Frame_RpcResponse) isFrame_Payload() {}
 
 var File_wire_proto protoreflect.FileDescriptor
 
@@ -655,7 +1055,35 @@ const file_wire_proto_rawDesc = "" +
 	"\x05DEBUG\x10\x01\x12\b\n" +
 	"\x04INFO\x10\x02\x12\b\n" +
 	"\x04WARN\x10\x03\x12\t\n" +
-	"\x05ERROR\x10\x04\"\x9b\x03\n" +
+	"\x05ERROR\x10\x04\"\\\n" +
+	"\x0eEndpointInvoke\x12\x18\n" +
+	"\aservice\x18\x01 \x01(\tR\aservice\x12\x16\n" +
+	"\x06method\x18\x02 \x01(\tR\x06method\x12\x18\n" +
+	"\apayload\x18\x03 \x01(\fR\apayload\"*\n" +
+	"\x0eEndpointResult\x12\x18\n" +
+	"\apayload\x18\x01 \x01(\fR\apayload\"\xd4\x01\n" +
+	"\n" +
+	"RpcRequest\x12\x17\n" +
+	"\acall_id\x18\x01 \x01(\x04R\x06callId\x121\n" +
+	"\x02op\x18\x02 \x01(\x0e2!.virogg.hbasecop.v1.RpcRequest.OpR\x02op\x12\x1d\n" +
+	"\n" +
+	"op_payload\x18\x03 \x01(\fR\topPayload\"[\n" +
+	"\x02Op\x12\x12\n" +
+	"\x0eOP_UNSPECIFIED\x10\x00\x12\r\n" +
+	"\tSCAN_OPEN\x10\x01\x12\r\n" +
+	"\tSCAN_NEXT\x10\x02\x12\x0e\n" +
+	"\n" +
+	"SCAN_CLOSE\x10\x03\x12\a\n" +
+	"\x03GET\x10\x04\x12\n" +
+	"\n" +
+	"\x06MUTATE\x10\x05\"\x9c\x01\n" +
+	"\vRpcResponse\x12>\n" +
+	"\x06status\x18\x01 \x01(\x0e2&.virogg.hbasecop.v1.RpcResponse.StatusR\x06status\x12\x18\n" +
+	"\apayload\x18\x02 \x01(\fR\apayload\"3\n" +
+	"\x06Status\x12\x16\n" +
+	"\x12STATUS_UNSPECIFIED\x10\x00\x12\x06\n" +
+	"\x02OK\x10\x01\x12\t\n" +
+	"\x05ERROR\x10\x02\"\xc2\x05\n" +
 	"\x05Frame\x127\n" +
 	"\x06header\x18\x01 \x01(\v2\x1f.virogg.hbasecop.v1.FrameHeaderR\x06header\x127\n" +
 	"\arequest\x18\x02 \x01(\v2\x1b.virogg.hbasecop.v1.RequestH\x00R\arequest\x12:\n" +
@@ -663,7 +1091,13 @@ const file_wire_proto_rawDesc = "" +
 	"\theartbeat\x18\x04 \x01(\v2\x1d.virogg.hbasecop.v1.HeartbeatH\x00R\theartbeat\x121\n" +
 	"\x05error\x18\x05 \x01(\v2\x19.virogg.hbasecop.v1.ErrorH\x00R\x05error\x12:\n" +
 	"\bshutdown\x18\x06 \x01(\v2\x1c.virogg.hbasecop.v1.ShutdownH\x00R\bshutdown\x12+\n" +
-	"\x03log\x18\a \x01(\v2\x17.virogg.hbasecop.v1.LogH\x00R\x03logB\t\n" +
+	"\x03log\x18\a \x01(\v2\x17.virogg.hbasecop.v1.LogH\x00R\x03log\x12M\n" +
+	"\x0fendpoint_invoke\x18\b \x01(\v2\".virogg.hbasecop.v1.EndpointInvokeH\x00R\x0eendpointInvoke\x12M\n" +
+	"\x0fendpoint_result\x18\t \x01(\v2\".virogg.hbasecop.v1.EndpointResultH\x00R\x0eendpointResult\x12A\n" +
+	"\vrpc_request\x18\n" +
+	" \x01(\v2\x1e.virogg.hbasecop.v1.RpcRequestH\x00R\n" +
+	"rpcRequest\x12D\n" +
+	"\frpc_response\x18\v \x01(\v2\x1f.virogg.hbasecop.v1.RpcResponseH\x00R\vrpcResponseB\t\n" +
 	"\apayloadBb\n" +
 	"\"com.virogg.hbasecop.bridge.wire.pbB\tWireProtoP\x01Z/github.com/virogg/go-hbase/internal/wire/wirepbb\x06proto3"
 
@@ -679,33 +1113,45 @@ func file_wire_proto_rawDescGZIP() []byte {
 	return file_wire_proto_rawDescData
 }
 
-var file_wire_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_wire_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_wire_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_wire_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_wire_proto_goTypes = []any{
-	(Log_Level)(0),      // 0: virogg.hbasecop.v1.Log.Level
-	(*FrameHeader)(nil), // 1: virogg.hbasecop.v1.FrameHeader
-	(*Request)(nil),     // 2: virogg.hbasecop.v1.Request
-	(*Response)(nil),    // 3: virogg.hbasecop.v1.Response
-	(*Heartbeat)(nil),   // 4: virogg.hbasecop.v1.Heartbeat
-	(*Error)(nil),       // 5: virogg.hbasecop.v1.Error
-	(*Shutdown)(nil),    // 6: virogg.hbasecop.v1.Shutdown
-	(*Log)(nil),         // 7: virogg.hbasecop.v1.Log
-	(*Frame)(nil),       // 8: virogg.hbasecop.v1.Frame
+	(Log_Level)(0),          // 0: virogg.hbasecop.v1.Log.Level
+	(RpcRequest_Op)(0),      // 1: virogg.hbasecop.v1.RpcRequest.Op
+	(RpcResponse_Status)(0), // 2: virogg.hbasecop.v1.RpcResponse.Status
+	(*FrameHeader)(nil),     // 3: virogg.hbasecop.v1.FrameHeader
+	(*Request)(nil),         // 4: virogg.hbasecop.v1.Request
+	(*Response)(nil),        // 5: virogg.hbasecop.v1.Response
+	(*Heartbeat)(nil),       // 6: virogg.hbasecop.v1.Heartbeat
+	(*Error)(nil),           // 7: virogg.hbasecop.v1.Error
+	(*Shutdown)(nil),        // 8: virogg.hbasecop.v1.Shutdown
+	(*Log)(nil),             // 9: virogg.hbasecop.v1.Log
+	(*EndpointInvoke)(nil),  // 10: virogg.hbasecop.v1.EndpointInvoke
+	(*EndpointResult)(nil),  // 11: virogg.hbasecop.v1.EndpointResult
+	(*RpcRequest)(nil),      // 12: virogg.hbasecop.v1.RpcRequest
+	(*RpcResponse)(nil),     // 13: virogg.hbasecop.v1.RpcResponse
+	(*Frame)(nil),           // 14: virogg.hbasecop.v1.Frame
 }
 var file_wire_proto_depIdxs = []int32{
-	0, // 0: virogg.hbasecop.v1.Log.level:type_name -> virogg.hbasecop.v1.Log.Level
-	1, // 1: virogg.hbasecop.v1.Frame.header:type_name -> virogg.hbasecop.v1.FrameHeader
-	2, // 2: virogg.hbasecop.v1.Frame.request:type_name -> virogg.hbasecop.v1.Request
-	3, // 3: virogg.hbasecop.v1.Frame.response:type_name -> virogg.hbasecop.v1.Response
-	4, // 4: virogg.hbasecop.v1.Frame.heartbeat:type_name -> virogg.hbasecop.v1.Heartbeat
-	5, // 5: virogg.hbasecop.v1.Frame.error:type_name -> virogg.hbasecop.v1.Error
-	6, // 6: virogg.hbasecop.v1.Frame.shutdown:type_name -> virogg.hbasecop.v1.Shutdown
-	7, // 7: virogg.hbasecop.v1.Frame.log:type_name -> virogg.hbasecop.v1.Log
-	8, // [8:8] is the sub-list for method output_type
-	8, // [8:8] is the sub-list for method input_type
-	8, // [8:8] is the sub-list for extension type_name
-	8, // [8:8] is the sub-list for extension extendee
-	0, // [0:8] is the sub-list for field type_name
+	0,  // 0: virogg.hbasecop.v1.Log.level:type_name -> virogg.hbasecop.v1.Log.Level
+	1,  // 1: virogg.hbasecop.v1.RpcRequest.op:type_name -> virogg.hbasecop.v1.RpcRequest.Op
+	2,  // 2: virogg.hbasecop.v1.RpcResponse.status:type_name -> virogg.hbasecop.v1.RpcResponse.Status
+	3,  // 3: virogg.hbasecop.v1.Frame.header:type_name -> virogg.hbasecop.v1.FrameHeader
+	4,  // 4: virogg.hbasecop.v1.Frame.request:type_name -> virogg.hbasecop.v1.Request
+	5,  // 5: virogg.hbasecop.v1.Frame.response:type_name -> virogg.hbasecop.v1.Response
+	6,  // 6: virogg.hbasecop.v1.Frame.heartbeat:type_name -> virogg.hbasecop.v1.Heartbeat
+	7,  // 7: virogg.hbasecop.v1.Frame.error:type_name -> virogg.hbasecop.v1.Error
+	8,  // 8: virogg.hbasecop.v1.Frame.shutdown:type_name -> virogg.hbasecop.v1.Shutdown
+	9,  // 9: virogg.hbasecop.v1.Frame.log:type_name -> virogg.hbasecop.v1.Log
+	10, // 10: virogg.hbasecop.v1.Frame.endpoint_invoke:type_name -> virogg.hbasecop.v1.EndpointInvoke
+	11, // 11: virogg.hbasecop.v1.Frame.endpoint_result:type_name -> virogg.hbasecop.v1.EndpointResult
+	12, // 12: virogg.hbasecop.v1.Frame.rpc_request:type_name -> virogg.hbasecop.v1.RpcRequest
+	13, // 13: virogg.hbasecop.v1.Frame.rpc_response:type_name -> virogg.hbasecop.v1.RpcResponse
+	14, // [14:14] is the sub-list for method output_type
+	14, // [14:14] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_wire_proto_init() }
@@ -713,21 +1159,25 @@ func file_wire_proto_init() {
 	if File_wire_proto != nil {
 		return
 	}
-	file_wire_proto_msgTypes[7].OneofWrappers = []any{
+	file_wire_proto_msgTypes[11].OneofWrappers = []any{
 		(*Frame_Request)(nil),
 		(*Frame_Response)(nil),
 		(*Frame_Heartbeat)(nil),
 		(*Frame_Error)(nil),
 		(*Frame_Shutdown)(nil),
 		(*Frame_Log)(nil),
+		(*Frame_EndpointInvoke)(nil),
+		(*Frame_EndpointResult)(nil),
+		(*Frame_RpcRequest)(nil),
+		(*Frame_RpcResponse)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wire_proto_rawDesc), len(file_wire_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   8,
+			NumEnums:      3,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -56,6 +56,48 @@ class WireRoundTripTest {
     assertMessageEquals(msg, decoded);
   }
 
+  // --- Tier 2 (wire v2) endpoint / reverse-RPC frame types ----------------
+
+  static Stream<Arguments> endpointTypeCases() {
+    return Stream.of(
+        Arguments.of(
+            "endpoint_invoke",
+            new Message(FrameType.ENDPOINT_INVOKE, 11L, 4, (byte) 0, "invoke".getBytes())),
+        Arguments.of(
+            "endpoint_result",
+            new Message(FrameType.ENDPOINT_RESULT, 11L, 0, (byte) 0, "result".getBytes())),
+        Arguments.of(
+            "rpc_request",
+            new Message(FrameType.RPC_REQUEST, 12L, 4, (byte) 0, "scan-open".getBytes())),
+        Arguments.of(
+            "rpc_response",
+            new Message(FrameType.RPC_RESPONSE, 12L, 0, (byte) 0, new byte[] {1, 2, 3})));
+  }
+
+  @ParameterizedTest(name = "[{index}] {0}")
+  @MethodSource("endpointTypeCases")
+  @DisplayName("v2 endpoint/reverse-RPC types encode→decode==input")
+  void roundTripEndpointTypes(String name, Message msg) throws IOException {
+    ByteBuffer encoded = new Encoder().encode(msg);
+    Message decoded = new Decoder().decode(encoded);
+    assertMessageEquals(msg, decoded);
+  }
+
+  @Test
+  @DisplayName("v2 RpcResponse is not a control frame: may span multiple chunks")
+  void roundTripRpcResponseMultiChunk() throws IOException {
+    Message msg =
+        new Message(
+            FrameType.RPC_RESPONSE,
+            13L,
+            0,
+            (byte) 0,
+            ascending(WireFormat.MAX_PAYLOAD_BYTES * 2 + 7));
+    ByteBuffer encoded = new Encoder().encode(msg);
+    Message decoded = new Decoder().decode(encoded);
+    assertMessageEquals(msg, decoded);
+  }
+
   // --- Multi-chunk round-trip ---------------------------------------------
 
   @Test

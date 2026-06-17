@@ -238,7 +238,7 @@ IT → собрать логи → `compose down`). Новые ключи `hbase
 - [ ] **CP-E0:** два независимых кольца Go↔Java, parity зелёный
 
 ### Phase E1 — плумбинг (поведение не меняется)
-- [ ] TE11 wire v2 (новые типы + oneof, lockstep Go+Java)
+- [x] TE11 wire v2 (новые типы + oneof, lockstep Go+Java)
 - [ ] TE12 демукс ридера на stub-реверс-хендлер (корреляция `req_id`)
 - [ ] **CP-E1:** endpoints OFF, все существующие IT зелёные, нет регрессии латентности
 

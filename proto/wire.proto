@@ -83,6 +83,53 @@ message Log {
   string message = 2;
 }
 
+// EndpointInvoke (Tier 2) carries a client-initiated server-side RPC,
+// dispatched to a Go Endpoint handler. service/method name the target;
+// payload is the opaque user-defined request body.
+message EndpointInvoke {
+  string service = 1;
+  string method = 2;
+  bytes payload = 3;
+}
+
+// EndpointResult is the success reply to an EndpointInvoke; failures use the
+// Error payload instead. payload is the opaque user-defined response body.
+message EndpointResult {
+  bytes payload = 1;
+}
+
+// RpcRequest (Tier 2) is the Go-initiated reverse channel: a running endpoint
+// handler reads/writes region-local data. Correlated by the wire
+// FrameHeader.req_id; call_id groups a reverse RPC with its originating
+// EndpointInvoke (e.g. for scanner lifecycle). op_payload carries the vendored
+// HBase Scan/Get/Mutation protobuf for the op.
+message RpcRequest {
+  enum Op {
+    OP_UNSPECIFIED = 0;
+    SCAN_OPEN = 1;
+    SCAN_NEXT = 2;
+    SCAN_CLOSE = 3;
+    GET = 4;
+    MUTATE = 5;
+  }
+  uint64 call_id = 1;
+  Op op = 2;
+  bytes op_payload = 3;
+}
+
+// RpcResponse is the Java-side reply to an RpcRequest. payload carries the
+// vendored HBase Result / scan batch (chunked via the wire header when large);
+// status distinguishes success from a servicing error.
+message RpcResponse {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    OK = 1;
+    ERROR = 2;
+  }
+  Status status = 1;
+  bytes payload = 2;
+}
+
 // Frame is the wire envelope. Every frame on the ring carries a header
 // and exactly one payload.
 message Frame {
@@ -94,5 +141,9 @@ message Frame {
     Error error = 5;
     Shutdown shutdown = 6;
     Log log = 7;
+    EndpointInvoke endpoint_invoke = 8;
+    EndpointResult endpoint_result = 9;
+    RpcRequest rpc_request = 10;
+    RpcResponse rpc_response = 11;
   }
 }

@@ -77,10 +77,18 @@ const (
 	TypeError     Type = 4
 	TypeShutdown  Type = 5
 	TypeLog       Type = 6
+
+	// Tier 2 (wire v2). Endpoint invoke/result carry a client-initiated
+	// server-side RPC; RpcRequest/RpcResponse carry the Go-initiated reverse
+	// data-access channel. New bytes are appended; v1 values are unchanged.
+	TypeEndpointInvoke Type = 7
+	TypeEndpointResult Type = 8
+	TypeRpcRequest     Type = 9
+	TypeRpcResponse    Type = 10
 )
 
 // Valid reports whether t is a known payload type.
-func (t Type) Valid() bool { return t >= TypeRequest && t <= TypeLog }
+func (t Type) Valid() bool { return t >= TypeRequest && t <= TypeRpcResponse }
 
 // isControl reports whether a frame type is a stateless control frame
 // that must be single-chunk (Heartbeat/Shutdown/Log).
