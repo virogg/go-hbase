@@ -93,50 +93,39 @@ func main() {
 Master / RegionServer / WAL / BulkLoad используют `RunMaster` / `RunRegionServer` /
 `RunWAL` / `RunBulkLoad`.
 
-**3. Соберите ELF и упакуйте coproc-jar** с помощью CLI `hbasecop-build`:
+Не хотите писать с нуля — `go run ./cmd/hbasecop-build init my-observer`
+генерирует готовый к сборке скелет (`--surface region|master|regionserver|wal|bulkload`).
+
+**3. Упакуйте coproc-jar — одна команда.** `package` кросс-компилирует ELF,
+встраивает стоковый Java-делегат (Java писать не нужно) и шейдит мост:
 
 ```bash
-GOOS=linux GOARCH=amd64 go build -o myobserver ./path/to/your/observer
-mvn install -DskipTests   # publishes the bridge jar into ~/.m2
-
-go run ./cmd/hbasecop-build \
-  --go-bin         ./myobserver \
-  --bridge-jar     ~/.m2/repository/com/virogg/hbasecop-bridge/0.0.1-SNAPSHOT/hbasecop-bridge-0.0.1-SNAPSHOT.jar \
-  --observer-class com.virogg.hbasecop.examples.counter.CounterRegionObserver \
-  --coproc-id      my-observer \
-  --out            my-observer.jar
+mvn install -DskipTests   # один раз: публикует uber-мост (…-all.jar) в ~/.m2
+go run ./cmd/hbasecop-build package \
+  --src ./path/to/your/observer --surface region --out my-observer.jar
 ```
 
-CLI shade'ит мост, встраивает ваш ELF по пути
-`bin/linux-amd64/hbasecop-runtime` и записывает его SHA-256 в манифест
-(`HbaseCop-Go-Bin-SHA256`); supervisor проверяет дайджест перед exec
-и отказывается запускать повреждённый бинарь или бинарь не той архитектуры.
+В jar встроены ELF (по пути `bin/linux-amd64/hbasecop-runtime`), его SHA-256 в
+манифесте и стоковый класс `com.virogg.hbasecop.bridge.entrypoint.GenericRegionObserver`
+(+ `Master`/`RegionServer`/`WAL` по `--surface`); supervisor проверяет дайджест
+перед exec. Низкоуровневый режим (`--go-bin/--bridge-jar/--observer-class`) для
+своего Java-делегата сохранён.
 
-`--observer-class` — это Java-класс `RegionCoprocessor`, который инстанцирует HBase.
-Каждый пример поставляет небольшой делегирующий класс (~30 строк boilerplate; см.
-[`examples/counter-observer`](examples/counter-observer)); переиспользуйте один
-из них или скопируйте под своим именем пакета в jar.
-
-**4. Разверните на таблице:**
+**4. Разверните на таблице — одна команда.** `deploy` регистрирует копроцессор
+через HBase Admin API (disable → modify → enable):
 
 ```bash
-make hbase-up      # dockerized HBase 2.5 standalone with a /coproc-jars bind-mount
+make hbase-up      # dockerized HBase 2.5 с bind-mount /coproc-jars
 cp my-observer.jar test/integration/coproc-jars/
+go run ./cmd/hbasecop-build admin deploy \
+  --table my-table --jar file:///coproc-jars/my-observer.jar \
+  --class com.virogg.hbasecop.bridge.entrypoint.GenericRegionObserver
+# admin list | admin remove — то же; нужен `hbase` в PATH
 ```
 
-```java
-admin.createTable(TableDescriptorBuilder.newBuilder(tableName)
-    .setColumnFamily(ColumnFamilyDescriptorBuilder.of(cf))
-    .setCoprocessor(CoprocessorDescriptorBuilder
-        .newBuilder("com.your.pkg.MyObserver")
-        .setJarPath("file:///coproc-jars/my-observer.jar")
-        .build())
-    .build());
-```
-
-Теперь каждый Put по этой таблице проходит через ваш Go-код. Чтобы сразу увидеть
-работу end-to-end: `make test-integration` (пример counter, 100 Put'ов →
-100 вызовов хука на Go-стороне, с проверкой).
+Теперь каждый Put по таблице проходит через ваш Go-код. End-to-end сразу:
+`make test-integration` (пример counter, 100 Put'ов → 100 вызовов хука, с проверкой).
+Проверить конфиг до деплоя: `hbasecop-build config --check hbase-site.xml`.
 
 ## Примеры
 
@@ -149,6 +138,7 @@ admin.createTable(TableDescriptorBuilder.newBuilder(tableName)
 | [`fault-observer`](examples/fault-observer) | PrePut/PostPut | инъекция crash/hang/OOM (fault matrix) | `make test-fault` |
 | [`master-policy-observer`](examples/master-policy-observer) | PreCreateTable | veto политики MasterObserver | `make test-integration-master` |
 | [`rs-policy-observer`](examples/rs-policy-observer) | PreRollWALWriterRequest | RegionServerObserver | `make test-integration-rs` |
+| [`wal-observer`](examples/wal-observer) | PreWALWrite | WALObserver (бенч throughput) | `make bench-wal` |
 
 ## Справочник по конфигурации
 
@@ -241,6 +231,22 @@ HBase 2.5 это допускает (где нет — логируется WARN
 использующим этот jar на RS). Каждый отдельный jar получает собственный процесс
 и пару ring'ов.
 
+**Сборка падает: shmem-сабмодуль не найден / `mvn` не находит `hbasecop-bridge`?**
+Клонируйте с `--recursive` (или `git submodule update --init --recursive`), затем
+`make deps` (ставит java-go-shmem в `~/.m2`). Bridge нужен в `~/.m2` до `package` —
+`mvn install -DskipTests` один раз.
+
+**`NoClassDefFoundError: com/jgshmem/...` при открытии региона?**
+В coproc-jar нет runtime-зависимостей моста: используйте `hbasecop-build package`
+(шейдит uber-мост `…-all.jar`), а не «тонкий» модульный jar.
+
+**`class file version` mismatch при сборке Java?**
+Нужен JDK 11.
+
+**Как протестировать observer без кластера?**
+`pkg/hbasecop/hbasecoptest`: гоняет ваш observer через реальный диспетчер
+in-process (`go test`, без Docker).
+
 ## Структура репозитория
 
 ```
@@ -249,7 +255,7 @@ internal/            wire codec, shmem wrapper, multiplexer, event loop
 java/com/virogg/     Java bridge: adapters, supervisor, mux, shmem
 cmd/hbasecop-build/  coproc-jar packer CLI
 proto/               canonical .proto (wire, hooks, vendored HBase)
-examples/            seven runnable observers (see table above)
+examples/            eight runnable observers (see table above)
 test/integration/    dockerized HBase 2.5 + *IT tests
 docs/                architecture, benches, coverage matrix
 ```

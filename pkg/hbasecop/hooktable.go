@@ -191,3 +191,29 @@ var hooksByID = func() map[HookID]hookEntry {
 	}
 	return m
 }()
+
+// HookNames returns the method name of every hook across all observer surfaces
+// (region, master, region-server, WAL, bulk-load). It is the canonical set a
+// config linter checks per-hook policy/timeout suffixes against, mirroring the
+// Java HookId.byMethodName lookup. The order matches each surface's dispatch
+// table; callers wanting membership should build their own set.
+func HookNames() []string {
+	names := make([]string, 0,
+		len(hookTable)+len(masterHookTable)+len(regionServerHookTable)+len(walHookTable)+len(bulkLoadHookTable))
+	for _, h := range hookTable {
+		names = append(names, h.name)
+	}
+	for _, h := range masterHookTable {
+		names = append(names, h.name)
+	}
+	for _, h := range regionServerHookTable {
+		names = append(names, h.name)
+	}
+	for _, h := range walHookTable {
+		names = append(names, h.name)
+	}
+	for _, h := range bulkLoadHookTable {
+		names = append(names, h.name)
+	}
+	return names
+}

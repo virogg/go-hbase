@@ -30,7 +30,29 @@ import (
 	"os"
 )
 
+// subcommands maps the first CLI arg to its handler. Each handler receives the
+// args following the subcommand and returns a non-nil error to exit non-zero.
+var subcommands = map[string]func([]string) error{
+	"package": runPackage,
+	"config":  runConfig,
+	"admin":   runAdmin,
+	"init":    runInit,
+}
+
 func main() {
+	// Subcommands: `package` is the one-shot pipeline (cross-compile + stock
+	// delegate + shade), `config`/`admin`/`init` the DX helpers. Bare flags (no
+	// recognized subcommand) stay the low-level packer for back-compat.
+	if len(os.Args) > 1 {
+		if run, ok := subcommands[os.Args[1]]; ok {
+			if err := run(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "hbasecop-build %s: %v\n", os.Args[1], err)
+				os.Exit(1)
+			}
+			return
+		}
+	}
+
 	opts, err := parseFlags(os.Args[1:])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "hbasecop-build:", err)

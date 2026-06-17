@@ -3,6 +3,7 @@
 
 package com.virogg.hbasecop.bridge;
 
+import com.virogg.hbasecop.bridge.config.ConfigPreflight;
 import com.virogg.hbasecop.bridge.config.PolicyConfig;
 import com.virogg.hbasecop.bridge.observer.BulkLoadObserverAdapter;
 import com.virogg.hbasecop.bridge.observer.HookDispatcher;
@@ -667,6 +668,9 @@ public final class CoprocessorRuntime implements AutoCloseable {
       conf.setTimeDuration(
           PolicyConfig.KEY_TIMEOUT_DEFAULT, cfg.hookTimeout().toNanos(), TimeUnit.NANOSECONDS);
     }
+    // Fail fast at start on a malformed hbasecop.* value (else it would surface
+    // lazily on the first hook of a live write path); WARN on unknown keys.
+    ConfigPreflight.validate(conf, LOG);
     return new PolicyConfig(conf);
   }
 

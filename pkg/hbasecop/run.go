@@ -34,17 +34,27 @@ import (
 //	                               <0 disables (tests only)
 //
 // Returns nil on clean shutdown (SIGINT/SIGTERM or inbound SHUTDOWN
-// frame), error on setup/transport failure. Phase 2 supports a single
-// RegionObserver; fan-out across Observer surfaces is T41+.
+// frame), error on setup/transport failure.
+//
+// Passing several observers chains them in argument order on each hook:
+// Bypass is OR-ed, BlockedIndices concatenated, and substitute ResultCells
+// follow last-writer-wins (a later observer overrides an earlier one's
+// Result), so order matters for the value-returning bypass hooks. The first
+// observer to return an error (or panic) stops the chain and that error is
+// what surfaces. To serve more than one Observer surface (e.g. region +
+// master) from one process, use [RunAll].
 func Run(observers ...RegionObserver) error {
 	if len(observers) == 0 {
 		return errors.New("hbasecop.Run: at least one observer required")
 	}
-	if len(observers) > 1 {
-		return errors.New("hbasecop.Run: multiple observers not supported in Phase 2")
-	}
-	logger := newLogger()
+	return runDispatcher(&dispatcher{observers: observers, logger: newLogger()}, "")
+}
 
+// runDispatcher is the shared event-loop core behind every Run* entrypoint:
+// load the shmem config from env, open the in/out rings, then drain inbound
+// hook frames onto the dispatcher until SIGINT/SIGTERM or a SHUTDOWN frame.
+// label is appended to the start/exit log lines to name the surface(s).
+func runDispatcher(d *dispatcher, label string) error {
 	cfg, err := loadShmemConfigFromEnv()
 	if err != nil {
 		return err
@@ -57,7 +67,7 @@ func Run(observers ...RegionObserver) error {
 		Role:          shmem.RoleConsumer,
 	})
 	if err != nil {
-		return fmt.Errorf("hbasecop.Run: open inbound ring: %w", err)
+		return fmt.Errorf("hbasecop: open inbound ring: %w", err)
 	}
 	defer func() { _ = inCh.Close() }()
 
@@ -68,16 +78,15 @@ func Run(observers ...RegionObserver) error {
 		Role:          shmem.RoleProducer,
 	})
 	if err != nil {
-		return fmt.Errorf("hbasecop.Run: open outbound ring: %w", err)
+		return fmt.Errorf("hbasecop: open outbound ring: %w", err)
 	}
 	defer func() { _ = outCh.Close() }()
 
-	d := newDispatcher(observers[0], logger)
 	loop, err := cpruntime.New(cpruntime.Config{
 		InCh:            inCh,
 		OutCh:           outCh,
 		HeartbeatPeriod: cfg.heartbeat,
-		Logger:          logger,
+		Logger:          d.logger,
 		Handler:         d.dispatch,
 	})
 	if err != nil {
@@ -87,7 +96,7 @@ func Run(observers ...RegionObserver) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
-	logger.Info("hbasecop: started",
+	d.logger.Info("hbasecop: started"+label,
 		"pid", os.Getpid(),
 		"in_path", cfg.inPath,
 		"out_path", cfg.outPath,
@@ -95,277 +104,98 @@ func Run(observers ...RegionObserver) error {
 	if err := loop.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		return err
 	}
-	logger.Info("hbasecop: clean exit")
+	d.logger.Info("hbasecop: clean exit" + label)
 	return nil
 }
 
-// RunMaster (T51) is the master-side counterpart of Run: same shared
-// runtime (shmem + heartbeat + dispatcher loop) against a MasterObserver
-// instead of a RegionObserver. One process serves one observer surface,
-// region or master, not both; keeps coproc-jar packaging symmetric
-// between RegionCoprocessor and MasterCoprocessor on the Java side.
+// RunAll serves observers of mixed surfaces in one process over a single shmem
+// pair. Each argument is routed to every Observer surface it satisfies
+// (Region/Master/RegionServer/WAL/BulkLoad), so one value implementing two
+// surfaces is registered on both; an argument implementing none is an error.
+//
+// Observers sharing a surface are chained in argument order with the same
+// precedence [Run] documents: Bypass OR-ed, BlockedIndices concatenated,
+// ResultCells last-writer-wins, and the first error (or panic) stops that
+// surface's chain.
+func RunAll(observers ...any) error {
+	d, err := newMixedDispatcher(newLogger(), observers...)
+	if err != nil {
+		return err
+	}
+	return runDispatcher(d, " (multi)")
+}
+
+func newMixedDispatcher(logger *slog.Logger, observers ...any) (*dispatcher, error) {
+	if len(observers) == 0 {
+		return nil, errors.New("hbasecop.RunAll: at least one observer required")
+	}
+	d := &dispatcher{logger: logger}
+	for _, o := range observers {
+		matched := false
+		if obs, ok := o.(RegionObserver); ok {
+			d.observers = append(d.observers, obs)
+			matched = true
+		}
+		if obs, ok := o.(MasterObserver); ok {
+			d.masters = append(d.masters, obs)
+			matched = true
+		}
+		if obs, ok := o.(RegionServerObserver); ok {
+			d.regionServers = append(d.regionServers, obs)
+			matched = true
+		}
+		if obs, ok := o.(WALObserver); ok {
+			d.wals = append(d.wals, obs)
+			matched = true
+		}
+		if obs, ok := o.(BulkLoadObserver); ok {
+			d.bulkLoads = append(d.bulkLoads, obs)
+			matched = true
+		}
+		if !matched {
+			return nil, fmt.Errorf("hbasecop.RunAll: %T implements no Observer surface", o)
+		}
+	}
+	return d, nil
+}
+
+// RunMaster (T51) is the master-side counterpart of Run against a
+// MasterObserver. Pass several to chain them; to serve more than one surface
+// (e.g. master + region) in one process use RunAll.
 func RunMaster(masters ...MasterObserver) error {
 	if len(masters) == 0 {
 		return errors.New("hbasecop.RunMaster: at least one master observer required")
 	}
-	if len(masters) > 1 {
-		return errors.New("hbasecop.RunMaster: multiple observers not supported")
-	}
-	logger := newLogger()
-
-	cfg, err := loadShmemConfigFromEnv()
-	if err != nil {
-		return err
-	}
-
-	inCh, err := shmem.Open(shmem.Config{
-		Filename:      cfg.inPath,
-		Capacity:      cfg.capacity,
-		MaxObjectSize: cfg.maxObjectSize,
-		Role:          shmem.RoleConsumer,
-	})
-	if err != nil {
-		return fmt.Errorf("hbasecop.RunMaster: open inbound ring: %w", err)
-	}
-	defer func() { _ = inCh.Close() }()
-
-	outCh, err := shmem.Open(shmem.Config{
-		Filename:      cfg.outPath,
-		Capacity:      cfg.capacity,
-		MaxObjectSize: cfg.maxObjectSize,
-		Role:          shmem.RoleProducer,
-	})
-	if err != nil {
-		return fmt.Errorf("hbasecop.RunMaster: open outbound ring: %w", err)
-	}
-	defer func() { _ = outCh.Close() }()
-
-	d := newMasterDispatcher(masters[0], logger)
-	loop, err := cpruntime.New(cpruntime.Config{
-		InCh:            inCh,
-		OutCh:           outCh,
-		HeartbeatPeriod: cfg.heartbeat,
-		Logger:          logger,
-		Handler:         d.dispatch,
-	})
-	if err != nil {
-		return err
-	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
-	defer stop()
-
-	logger.Info("hbasecop: started (master)",
-		"pid", os.Getpid(),
-		"in_path", cfg.inPath,
-		"out_path", cfg.outPath,
-	)
-	if err := loop.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
-		return err
-	}
-	logger.Info("hbasecop: clean exit (master)")
-	return nil
+	return runDispatcher(&dispatcher{masters: masters, logger: newLogger()}, " (master)")
 }
 
-// RunRegionServer (T52) is the region-server counterpart: shared runtime
-// against a RegionServerObserver. One process serves one observer surface
-// (region, master or region-server), keeping coproc-jar packaging
-// symmetric across the three Coprocessor kinds on the Java side.
+// RunRegionServer (T52) is the region-server counterpart against a
+// RegionServerObserver. Pass several to chain them; use RunAll to serve
+// multiple surfaces in one process.
 func RunRegionServer(observers ...RegionServerObserver) error {
 	if len(observers) == 0 {
 		return errors.New("hbasecop.RunRegionServer: at least one region-server observer required")
 	}
-	if len(observers) > 1 {
-		return errors.New("hbasecop.RunRegionServer: multiple observers not supported")
-	}
-	logger := newLogger()
-
-	cfg, err := loadShmemConfigFromEnv()
-	if err != nil {
-		return err
-	}
-
-	inCh, err := shmem.Open(shmem.Config{
-		Filename:      cfg.inPath,
-		Capacity:      cfg.capacity,
-		MaxObjectSize: cfg.maxObjectSize,
-		Role:          shmem.RoleConsumer,
-	})
-	if err != nil {
-		return fmt.Errorf("hbasecop.RunRegionServer: open inbound ring: %w", err)
-	}
-	defer func() { _ = inCh.Close() }()
-
-	outCh, err := shmem.Open(shmem.Config{
-		Filename:      cfg.outPath,
-		Capacity:      cfg.capacity,
-		MaxObjectSize: cfg.maxObjectSize,
-		Role:          shmem.RoleProducer,
-	})
-	if err != nil {
-		return fmt.Errorf("hbasecop.RunRegionServer: open outbound ring: %w", err)
-	}
-	defer func() { _ = outCh.Close() }()
-
-	d := newRegionServerDispatcher(observers[0], logger)
-	loop, err := cpruntime.New(cpruntime.Config{
-		InCh:            inCh,
-		OutCh:           outCh,
-		HeartbeatPeriod: cfg.heartbeat,
-		Logger:          logger,
-		Handler:         d.dispatch,
-	})
-	if err != nil {
-		return err
-	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
-	defer stop()
-
-	logger.Info("hbasecop: started (region-server)",
-		"pid", os.Getpid(),
-		"in_path", cfg.inPath,
-		"out_path", cfg.outPath,
-	)
-	if err := loop.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
-		return err
-	}
-	logger.Info("hbasecop: clean exit (region-server)")
-	return nil
+	return runDispatcher(&dispatcher{regionServers: observers, logger: newLogger()}, " (region-server)")
 }
 
-// RunWAL (T53) is the WAL-side counterpart: shared runtime against a
-// WALObserver. One process serves one observer surface (region, master,
-// region-server or WAL), keeping coproc-jar packaging symmetric across
-// the Coprocessor kinds on the Java side.
+// RunWAL (T53) is the WAL-side counterpart against a WALObserver. Pass several
+// to chain them; use RunAll to serve multiple surfaces in one process.
 func RunWAL(observers ...WALObserver) error {
 	if len(observers) == 0 {
 		return errors.New("hbasecop.RunWAL: at least one WAL observer required")
 	}
-	if len(observers) > 1 {
-		return errors.New("hbasecop.RunWAL: multiple observers not supported")
-	}
-	logger := newLogger()
-
-	cfg, err := loadShmemConfigFromEnv()
-	if err != nil {
-		return err
-	}
-
-	inCh, err := shmem.Open(shmem.Config{
-		Filename:      cfg.inPath,
-		Capacity:      cfg.capacity,
-		MaxObjectSize: cfg.maxObjectSize,
-		Role:          shmem.RoleConsumer,
-	})
-	if err != nil {
-		return fmt.Errorf("hbasecop.RunWAL: open inbound ring: %w", err)
-	}
-	defer func() { _ = inCh.Close() }()
-
-	outCh, err := shmem.Open(shmem.Config{
-		Filename:      cfg.outPath,
-		Capacity:      cfg.capacity,
-		MaxObjectSize: cfg.maxObjectSize,
-		Role:          shmem.RoleProducer,
-	})
-	if err != nil {
-		return fmt.Errorf("hbasecop.RunWAL: open outbound ring: %w", err)
-	}
-	defer func() { _ = outCh.Close() }()
-
-	d := newWALDispatcher(observers[0], logger)
-	loop, err := cpruntime.New(cpruntime.Config{
-		InCh:            inCh,
-		OutCh:           outCh,
-		HeartbeatPeriod: cfg.heartbeat,
-		Logger:          logger,
-		Handler:         d.dispatch,
-	})
-	if err != nil {
-		return err
-	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
-	defer stop()
-
-	logger.Info("hbasecop: started (wal)",
-		"pid", os.Getpid(),
-		"in_path", cfg.inPath,
-		"out_path", cfg.outPath,
-	)
-	if err := loop.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
-		return err
-	}
-	logger.Info("hbasecop: clean exit (wal)")
-	return nil
+	return runDispatcher(&dispatcher{wals: observers, logger: newLogger()}, " (wal)")
 }
 
-// RunBulkLoad (T54) is the bulk-load counterpart: shared runtime against
-// a BulkLoadObserver. One process serves one observer surface (region,
-// master, region-server, WAL or bulk-load), keeping coproc-jar packaging
-// symmetric across the Coprocessor kinds on the Java side.
+// RunBulkLoad (T54) is the bulk-load counterpart against a BulkLoadObserver.
+// Pass several to chain them; use RunAll to serve multiple surfaces in one
+// process.
 func RunBulkLoad(observers ...BulkLoadObserver) error {
 	if len(observers) == 0 {
 		return errors.New("hbasecop.RunBulkLoad: at least one bulk-load observer required")
 	}
-	if len(observers) > 1 {
-		return errors.New("hbasecop.RunBulkLoad: multiple observers not supported")
-	}
-	logger := newLogger()
-
-	cfg, err := loadShmemConfigFromEnv()
-	if err != nil {
-		return err
-	}
-
-	inCh, err := shmem.Open(shmem.Config{
-		Filename:      cfg.inPath,
-		Capacity:      cfg.capacity,
-		MaxObjectSize: cfg.maxObjectSize,
-		Role:          shmem.RoleConsumer,
-	})
-	if err != nil {
-		return fmt.Errorf("hbasecop.RunBulkLoad: open inbound ring: %w", err)
-	}
-	defer func() { _ = inCh.Close() }()
-
-	outCh, err := shmem.Open(shmem.Config{
-		Filename:      cfg.outPath,
-		Capacity:      cfg.capacity,
-		MaxObjectSize: cfg.maxObjectSize,
-		Role:          shmem.RoleProducer,
-	})
-	if err != nil {
-		return fmt.Errorf("hbasecop.RunBulkLoad: open outbound ring: %w", err)
-	}
-	defer func() { _ = outCh.Close() }()
-
-	d := newBulkLoadDispatcher(observers[0], logger)
-	loop, err := cpruntime.New(cpruntime.Config{
-		InCh:            inCh,
-		OutCh:           outCh,
-		HeartbeatPeriod: cfg.heartbeat,
-		Logger:          logger,
-		Handler:         d.dispatch,
-	})
-	if err != nil {
-		return err
-	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
-	defer stop()
-
-	logger.Info("hbasecop: started (bulk-load)",
-		"pid", os.Getpid(),
-		"in_path", cfg.inPath,
-		"out_path", cfg.outPath,
-	)
-	if err := loop.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
-		return err
-	}
-	logger.Info("hbasecop: clean exit (bulk-load)")
-	return nil
+	return runDispatcher(&dispatcher{bulkLoads: observers, logger: newLogger()}, " (bulk-load)")
 }
 
 // newLogger builds the slog JSON logger shared by every Run* entrypoint.

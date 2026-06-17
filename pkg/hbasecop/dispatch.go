@@ -30,48 +30,73 @@ const (
 // appropriate RegionObserver method via the canonical hookTable (T41).
 // It is the only place where the SDK crosses between the wire encoding
 // and the user-facing API.
+// dispatcher holds one slice of observers per surface; multiple observers on a
+// surface are chained (see foldObservers), and several surfaces may be set so
+// one process serves Region+Master+... over a single shmem pair.
 type dispatcher struct {
-	observer     RegionObserver
-	master       MasterObserver
-	regionServer RegionServerObserver
-	wal          WALObserver
-	bulkLoad     BulkLoadObserver
-	logger       *slog.Logger
+	observers     []RegionObserver
+	masters       []MasterObserver
+	regionServers []RegionServerObserver
+	wals          []WALObserver
+	bulkLoads     []BulkLoadObserver
+	logger        *slog.Logger
 }
 
 func newDispatcher(observer RegionObserver, logger *slog.Logger) *dispatcher {
-	if logger == nil {
-		logger = slog.Default()
-	}
-	return &dispatcher{observer: observer, logger: logger}
+	return &dispatcher{observers: []RegionObserver{observer}, logger: orDefaultLogger(logger)}
 }
 
 func newMasterDispatcher(master MasterObserver, logger *slog.Logger) *dispatcher {
-	if logger == nil {
-		logger = slog.Default()
-	}
-	return &dispatcher{master: master, logger: logger}
+	return &dispatcher{masters: []MasterObserver{master}, logger: orDefaultLogger(logger)}
 }
 
 func newRegionServerDispatcher(rs RegionServerObserver, logger *slog.Logger) *dispatcher {
-	if logger == nil {
-		logger = slog.Default()
-	}
-	return &dispatcher{regionServer: rs, logger: logger}
+	return &dispatcher{regionServers: []RegionServerObserver{rs}, logger: orDefaultLogger(logger)}
 }
 
 func newWALDispatcher(wal WALObserver, logger *slog.Logger) *dispatcher {
-	if logger == nil {
-		logger = slog.Default()
-	}
-	return &dispatcher{wal: wal, logger: logger}
+	return &dispatcher{wals: []WALObserver{wal}, logger: orDefaultLogger(logger)}
 }
 
 func newBulkLoadDispatcher(bl BulkLoadObserver, logger *slog.Logger) *dispatcher {
+	return &dispatcher{bulkLoads: []BulkLoadObserver{bl}, logger: orDefaultLogger(logger)}
+}
+
+func orDefaultLogger(logger *slog.Logger) *slog.Logger {
 	if logger == nil {
-		logger = slog.Default()
+		return slog.Default()
 	}
-	return &dispatcher{bulkLoad: bl, logger: logger}
+	return logger
+}
+
+// foldObservers runs invoke for each observer in registration order, folding
+// their HookResults: Bypass is OR-ed, BlockedIndices concatenated (duplicates
+// are tolerated Java-side), and ResultCells follow last-non-empty-wins, so a
+// later observer's substitute Result overrides an earlier one's. The first
+// non-nil error (or recovered panic) short-circuits the chain; the erroring
+// observer's own result is still folded in before returning, so a single
+// observer (the common case) yields exactly the (result, err) pair the old
+// single-observer dispatch did.
+func foldObservers[O any](d *dispatcher, hookName string, reqID uint64, observers []O, invoke func(O) (HookResult, error)) (HookResult, error) {
+	var fold HookResult
+	for _, obs := range observers {
+		res, err := recoverInvoke(d.logger, hookName, reqID, func() (HookResult, error) {
+			return invoke(obs)
+		})
+		if res.Bypass {
+			fold.Bypass = true
+		}
+		if len(res.BlockedIndices) > 0 {
+			fold.BlockedIndices = append(fold.BlockedIndices, res.BlockedIndices...)
+		}
+		if len(res.ResultCells) > 0 {
+			fold.ResultCells = res.ResultCells
+		}
+		if err != nil {
+			return fold, err
+		}
+	}
+	return fold, nil
 }
 
 // dispatch decodes one Request frame, looks up the hook in the
@@ -90,27 +115,27 @@ func (d *dispatcher) dispatch(ctx context.Context, req *wire.Message) *wire.Mess
 	}
 
 	hookID := HookID(req.HookID)
-	if d.observer != nil {
+	if len(d.observers) > 0 {
 		if entry, ok := hooksByID[hookID]; ok {
 			return d.dispatchRegion(ctx, req, &wireReq, entry)
 		}
 	}
-	if d.master != nil {
+	if len(d.masters) > 0 {
 		if entry, ok := masterHooksByID[hookID]; ok {
 			return d.dispatchMaster(ctx, req, &wireReq, entry)
 		}
 	}
-	if d.regionServer != nil {
+	if len(d.regionServers) > 0 {
 		if entry, ok := regionServerHooksByID[hookID]; ok {
 			return d.dispatchRegionServer(ctx, req, &wireReq, entry)
 		}
 	}
-	if d.wal != nil {
+	if len(d.wals) > 0 {
 		if entry, ok := walHooksByID[hookID]; ok {
 			return d.dispatchWAL(ctx, req, &wireReq, entry)
 		}
 	}
-	if d.bulkLoad != nil {
+	if len(d.bulkLoads) > 0 {
 		if entry, ok := bulkLoadHooksByID[hookID]; ok {
 			return d.dispatchBulkLoad(ctx, req, &wireReq, entry)
 		}
@@ -146,9 +171,9 @@ func (d *dispatcher) dispatchRegion(ctx context.Context, req *wire.Message, wire
 		return d.errorFrame(req, errCodeInvalidWireRequest,
 			"invalid "+entry.name+"Request: "+err.Error())
 	}
-	env := envFromHookContext(req.RegionID, extractHookCtx(inner))
-	result, callErr := recoverInvoke(d.logger, entry.name, req.ReqID, func() (HookResult, error) {
-		return entry.invoke(d.observer, ctx, env, inner)
+	env := envFromHookContext(d.logger, entry.name, req.ReqID, req.RegionID, extractHookCtx(inner))
+	result, callErr := foldObservers(d, entry.name, req.ReqID, d.observers, func(o RegionObserver) (HookResult, error) {
+		return entry.invoke(o, ctx, env, inner)
 	})
 	return d.responseFrame(req, result, callErr)
 }
@@ -161,9 +186,9 @@ func (d *dispatcher) dispatchMaster(ctx context.Context, req *wire.Message, wire
 		return d.errorFrame(req, errCodeInvalidWireRequest,
 			"invalid "+entry.name+"Request: "+err.Error())
 	}
-	env := envFromHookContext(req.RegionID, extractHookCtx(inner))
-	result, callErr := recoverInvoke(d.logger, entry.name, req.ReqID, func() (HookResult, error) {
-		return entry.invoke(d.master, ctx, env, inner)
+	env := envFromHookContext(d.logger, entry.name, req.ReqID, req.RegionID, extractHookCtx(inner))
+	result, callErr := foldObservers(d, entry.name, req.ReqID, d.masters, func(o MasterObserver) (HookResult, error) {
+		return entry.invoke(o, ctx, env, inner)
 	})
 	return d.responseFrame(req, result, callErr)
 }
@@ -176,9 +201,9 @@ func (d *dispatcher) dispatchRegionServer(ctx context.Context, req *wire.Message
 		return d.errorFrame(req, errCodeInvalidWireRequest,
 			"invalid "+entry.name+"Request: "+err.Error())
 	}
-	env := envFromHookContext(req.RegionID, extractHookCtx(inner))
-	result, callErr := recoverInvoke(d.logger, entry.name, req.ReqID, func() (HookResult, error) {
-		return entry.invoke(d.regionServer, ctx, env, inner)
+	env := envFromHookContext(d.logger, entry.name, req.ReqID, req.RegionID, extractHookCtx(inner))
+	result, callErr := foldObservers(d, entry.name, req.ReqID, d.regionServers, func(o RegionServerObserver) (HookResult, error) {
+		return entry.invoke(o, ctx, env, inner)
 	})
 	return d.responseFrame(req, result, callErr)
 }
@@ -191,9 +216,9 @@ func (d *dispatcher) dispatchWAL(ctx context.Context, req *wire.Message, wireReq
 		return d.errorFrame(req, errCodeInvalidWireRequest,
 			"invalid "+entry.name+"Request: "+err.Error())
 	}
-	env := envFromHookContext(req.RegionID, extractHookCtx(inner))
-	result, callErr := recoverInvoke(d.logger, entry.name, req.ReqID, func() (HookResult, error) {
-		return entry.invoke(d.wal, ctx, env, inner)
+	env := envFromHookContext(d.logger, entry.name, req.ReqID, req.RegionID, extractHookCtx(inner))
+	result, callErr := foldObservers(d, entry.name, req.ReqID, d.wals, func(o WALObserver) (HookResult, error) {
+		return entry.invoke(o, ctx, env, inner)
 	})
 	return d.responseFrame(req, result, callErr)
 }
@@ -206,9 +231,9 @@ func (d *dispatcher) dispatchBulkLoad(ctx context.Context, req *wire.Message, wi
 		return d.errorFrame(req, errCodeInvalidWireRequest,
 			"invalid "+entry.name+"Request: "+err.Error())
 	}
-	env := envFromHookContext(req.RegionID, extractHookCtx(inner))
-	result, callErr := recoverInvoke(d.logger, entry.name, req.ReqID, func() (HookResult, error) {
-		return entry.invoke(d.bulkLoad, ctx, env, inner)
+	env := envFromHookContext(d.logger, entry.name, req.ReqID, req.RegionID, extractHookCtx(inner))
+	result, callErr := foldObservers(d, entry.name, req.ReqID, d.bulkLoads, func(o BulkLoadObserver) (HookResult, error) {
+		return entry.invoke(o, ctx, env, inner)
 	})
 	return d.responseFrame(req, result, callErr)
 }
@@ -229,25 +254,20 @@ func extractHookCtx(msg proto.Message) *hookpb.HookContext {
 	return nil
 }
 
-func envFromHookContext(regionID uint32, hc *hookpb.HookContext) ObserverEnv {
-	if hc == nil {
-		return ObserverEnv{RegionID: regionID}
-	}
-	var tn string
-	if t := hc.GetTableName(); t != nil {
-		ns := t.GetNamespace()
-		q := t.GetQualifier()
-		if len(ns) == 0 {
-			tn = string(q)
-		} else {
-			tn = string(ns) + ":" + string(q)
+func envFromHookContext(logger *slog.Logger, hookName string, reqID uint64, regionID uint32, hc *hookpb.HookContext) ObserverEnv {
+	env := ObserverEnv{RegionID: regionID, logger: logger, hook: hookName, reqID: reqID}
+	if hc != nil {
+		if t := hc.GetTableName(); t != nil {
+			ns, q := t.GetNamespace(), t.GetQualifier()
+			if len(ns) == 0 {
+				env.TableName = string(q)
+			} else {
+				env.TableName = string(ns) + ":" + string(q)
+			}
 		}
+		env.RegionName = string(hc.GetRegionName())
 	}
-	return ObserverEnv{
-		TableName:  tn,
-		RegionName: string(hc.GetRegionName()),
-		RegionID:   regionID,
-	}
+	return env
 }
 
 func (d *dispatcher) responseFrame(req *wire.Message, result HookResult, callErr error) *wire.Message {
