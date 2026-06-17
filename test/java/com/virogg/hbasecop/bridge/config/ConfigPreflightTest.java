@@ -52,6 +52,17 @@ final class ConfigPreflightTest {
   }
 
   @Test
+  void validatesEndpointTimeoutDuration() {
+    assertDoesNotThrow(
+        () -> ConfigPreflight.validate(conf("hbasecop.endpoint.timeout", "30s"), LOG));
+    IllegalArgumentException ex =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> ConfigPreflight.validate(conf("hbasecop.endpoint.timeout", "30"), LOG));
+    assertTrue(ex.getMessage().contains("hbasecop.endpoint.timeout"), ex.getMessage());
+  }
+
+  @Test
   void rejectsNonPositiveInt() {
     Configuration c = conf("hbasecop.ring.capacity", "0");
     assertThrows(IllegalArgumentException.class, () -> ConfigPreflight.validate(c, LOG));

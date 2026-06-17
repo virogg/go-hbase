@@ -293,7 +293,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
 
     final Message resp;
     try {
-      resp = fut.get(cfg.hookTimeout().toMillis(), TimeUnit.MILLISECONDS);
+      resp = fut.get(cfg.endpointTimeout().toMillis(), TimeUnit.MILLISECONDS);
     } catch (TimeoutException e) {
       fut.cancel(false);
       m.cancel(call.reqId);
@@ -916,6 +916,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
     private final int ringMaxObjectSize;
     private final long heartbeatPeriodMs;
     private final Duration hookTimeout;
+    private final Duration endpointTimeout;
     private final Duration gracefulShutdownTimeout;
     private final Configuration configuration;
     private final RestartConfig restartConfig;
@@ -937,6 +938,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
       this.ringMaxObjectSize = b.ringMaxObjectSize;
       this.heartbeatPeriodMs = b.heartbeatPeriodMs;
       this.hookTimeout = Objects.requireNonNull(b.hookTimeout, "hookTimeout");
+      this.endpointTimeout = Objects.requireNonNull(b.endpointTimeout, "endpointTimeout");
       this.gracefulShutdownTimeout =
           Objects.requireNonNull(b.gracefulShutdownTimeout, "gracefulShutdownTimeout");
       this.configuration = b.configuration;
@@ -982,6 +984,11 @@ public final class CoprocessorRuntime implements AutoCloseable {
 
     public Duration hookTimeout() {
       return hookTimeout;
+    }
+
+    /** Wall-clock bound on a Tier 2 endpoint call awaiting its EndpointResult. */
+    public Duration endpointTimeout() {
+      return endpointTimeout;
     }
 
     public Duration gracefulShutdownTimeout() {
@@ -1038,6 +1045,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
       private int ringMaxObjectSize = 1 << 20; // 1 MiB
       private long heartbeatPeriodMs = 0L;
       private Duration hookTimeout = Duration.ofSeconds(5);
+      private Duration endpointTimeout = Duration.ofSeconds(30);
       private Duration gracefulShutdownTimeout = Duration.ofSeconds(2);
       private Configuration configuration;
       private RestartConfig restartConfig;
@@ -1086,6 +1094,11 @@ public final class CoprocessorRuntime implements AutoCloseable {
 
       public Builder hookTimeout(Duration d) {
         this.hookTimeout = d;
+        return this;
+      }
+
+      public Builder endpointTimeout(Duration d) {
+        this.endpointTimeout = d;
         return this;
       }
 

@@ -36,10 +36,14 @@ final class GenericCoprocessor {
   static final String KEY_RING_CAPACITY = "hbasecop.ring.capacity";
   static final String KEY_RING_MAX_OBJECT_SIZE = "hbasecop.ring.max-object-size";
   static final String KEY_GRACEFUL_SHUTDOWN = "hbasecop.shutdown.graceful-timeout";
+  static final String KEY_ENDPOINT_TIMEOUT = "hbasecop.endpoint.timeout";
 
   static final int DEFAULT_RING_CAPACITY = 16;
   static final int DEFAULT_RING_MAX_OBJECT_SIZE = 1 << 20; // 1 MiB
   static final Duration DEFAULT_HOOK_TIMEOUT = Duration.ofSeconds(5);
+  // Endpoints are client-initiated RPCs that may run longer than a write-path
+  // hook (and, from E3, drive server-side scans), so they get a larger default.
+  static final Duration DEFAULT_ENDPOINT_TIMEOUT = Duration.ofSeconds(30);
   static final Duration DEFAULT_GRACEFUL_SHUTDOWN = Duration.ofSeconds(2);
 
   private static final String ELF_RESOURCE_PATH = "bin/linux-amd64/hbasecop-runtime";
@@ -92,6 +96,7 @@ final class GenericCoprocessor {
         .ringCapacity(capacity)
         .ringMaxObjectSize(maxObject)
         .hookTimeout(duration(conf, PolicyConfig.KEY_TIMEOUT_DEFAULT, DEFAULT_HOOK_TIMEOUT))
+        .endpointTimeout(duration(conf, KEY_ENDPOINT_TIMEOUT, DEFAULT_ENDPOINT_TIMEOUT))
         .gracefulShutdownTimeout(duration(conf, KEY_GRACEFUL_SHUTDOWN, DEFAULT_GRACEFUL_SHUTDOWN))
         .configuration(conf)
         .build();

@@ -551,7 +551,7 @@ test-integration-endpoint: endpoint-observer-jar ## TE22: full IT - bring up HBa
 	$(HBASE_COMPOSE_CMD) up -d --build
 	./test/integration/scripts/wait-master-status.sh
 	@set +e; \
-	  $(MVN) $(MVN_FLAGS) test -Dtest=EndpointRoundTripIT -DfailIfNoTests=false; \
+	  $(MVN) $(MVN_FLAGS) test -Dtest=EndpointRoundTripIT,EndpointFaultIT -DfailIfNoTests=false; \
 	  status=$$?; \
 	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-endpoint.log 2>&1 || true; \
 	  $(HBASE_COMPOSE_CMD) down; \

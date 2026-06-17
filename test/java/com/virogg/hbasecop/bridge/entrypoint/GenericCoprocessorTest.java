@@ -24,7 +24,20 @@ final class GenericCoprocessorTest {
     assertEquals(GenericCoprocessor.DEFAULT_RING_CAPACITY, cfg.ringCapacity());
     assertEquals(GenericCoprocessor.DEFAULT_RING_MAX_OBJECT_SIZE, cfg.ringMaxObjectSize());
     assertEquals(GenericCoprocessor.DEFAULT_HOOK_TIMEOUT, cfg.hookTimeout());
+    assertEquals(GenericCoprocessor.DEFAULT_ENDPOINT_TIMEOUT, cfg.endpointTimeout());
     assertEquals(GenericCoprocessor.DEFAULT_GRACEFUL_SHUTDOWN, cfg.gracefulShutdownTimeout());
+  }
+
+  @Test
+  void buildConfigHonoursEndpointTimeoutOverride(@TempDir Path tmp) {
+    Configuration conf = new Configuration(false);
+    conf.set(GenericCoprocessor.KEY_ENDPOINT_TIMEOUT, "12s");
+    // The endpoint timeout is independent of the hook timeout.
+    conf.set(PolicyConfig.KEY_TIMEOUT_DEFAULT, "2s");
+
+    CoprocessorRuntime.Config cfg = GenericCoprocessor.buildConfig(conf, tmp);
+    assertEquals(Duration.ofSeconds(12), cfg.endpointTimeout());
+    assertEquals(Duration.ofSeconds(2), cfg.hookTimeout());
   }
 
   @Test

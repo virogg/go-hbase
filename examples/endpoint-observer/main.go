@@ -25,9 +25,23 @@ import (
 
 type upperEndpoint struct{}
 
+// Call upper-cases its payload. Two method names inject faults for the TE24
+// fault matrix: "panic" panics inside the handler (the SDK must recover it into
+// a client error without killing the shared process), and "exit" crashes the
+// whole Go process mid-call (the Java supervisor must fail the in-flight client
+// call promptly and restart, rather than hang).
 func (upperEndpoint) Call(_ context.Context, method string, payload []byte) ([]byte, error) {
 	slog.Info("endpoint-observer: call", "method", method, "bytes", len(payload))
-	return bytes.ToUpper(payload), nil
+	switch method {
+	case "panic":
+		panic("endpoint-observer: injected panic")
+	case "exit":
+		slog.Warn("endpoint-observer: injected os.Exit(1)")
+		os.Exit(1)
+		return nil, nil // unreachable
+	default:
+		return bytes.ToUpper(payload), nil
+	}
 }
 
 func main() {

@@ -29,6 +29,7 @@ public final class ConfigPreflight {
           "hbasecop.restart.deadline",
           "hbasecop.restart.probe-interval",
           "hbasecop.shutdown.graceful-timeout",
+          "hbasecop.endpoint.timeout",
           PolicyConfig.KEY_TIMEOUT_DEFAULT);
 
   // Exact keys whose value must be a positive integer.

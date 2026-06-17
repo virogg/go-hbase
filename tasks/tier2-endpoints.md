@@ -247,8 +247,9 @@ IT → собрать логи → `compose down`). Новые ключи `hbase
 - [x] TE22 round-trip `EndpointInvoke`/`EndpointResult` — **live IT зелёный** (client→bridge→Go→`HELLO`,
       HBase 2.5.11 2026-06-17). Потребовало protobuf-реархитектуры (см. ниже).
 - [x] TE23 Go SDK `Endpoint` + `RunAll`-интеграция (диспетч + panic-recover; покрыто unit + endpoint IT)
-- [ ] TE24 выделенный `hbasecop.endpoint.timeout` + fault-IT (panic→error уже есть; crash/timeout — в этой задаче)
-- [ ] **CP-E2:** round-trip на живом кластере доказан; остаётся явная fault-matrix (TE24)
+- [x] TE24 выделенный `hbasecop.endpoint.timeout` (30s default, preflight-валидируется) + fault-IT:
+      panic→client error (процесс жив), crash mid-call→prompt error + восстановление. Зелёный на живом HBase.
+- [x] **CP-E2:** stateless endpoint на живом кластере; round-trip + panic + crash доказаны (EndpointRoundTripIT + EndpointFaultIT)
 
 > **Protobuf-реархитектура (TE22, потребовалась для endpoint-boundary):** внутренние wire/hooks/hbase
 > protobuf переведены с `com.google.protobuf` (3.25.5) на HBase shaded `org.apache.hbase.thirdparty.com.google.protobuf`
