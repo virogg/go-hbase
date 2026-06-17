@@ -29,9 +29,10 @@ class CheckAndBatchConverterTest {
   void preCheckAndPutFieldNumbersAreStable() throws IOException {
     PreCheckAndPutRequest msg =
         PreCheckAndPutRequest.newBuilder()
-            .setRow(com.google.protobuf.ByteString.copyFromUtf8("r"))
-            .setFamily(com.google.protobuf.ByteString.copyFromUtf8("f"))
-            .setQualifier(com.google.protobuf.ByteString.copyFromUtf8("q"))
+            .setRow(org.apache.hbase.thirdparty.com.google.protobuf.ByteString.copyFromUtf8("r"))
+            .setFamily(org.apache.hbase.thirdparty.com.google.protobuf.ByteString.copyFromUtf8("f"))
+            .setQualifier(
+                org.apache.hbase.thirdparty.com.google.protobuf.ByteString.copyFromUtf8("q"))
             .setCompareOp(2)
             .setComparator(
                 ClientProtos.Comparator.newBuilder()
@@ -53,15 +54,16 @@ class CheckAndBatchConverterTest {
   void checkAndMutateActionCarriesEitherValueOrFilter() throws IOException {
     CheckAndMutateAction columnBased =
         CheckAndMutateAction.newBuilder()
-            .setRow(com.google.protobuf.ByteString.copyFromUtf8("r"))
-            .setFamily(com.google.protobuf.ByteString.copyFromUtf8("f"))
-            .setQualifier(com.google.protobuf.ByteString.copyFromUtf8("q"))
+            .setRow(org.apache.hbase.thirdparty.com.google.protobuf.ByteString.copyFromUtf8("r"))
+            .setFamily(org.apache.hbase.thirdparty.com.google.protobuf.ByteString.copyFromUtf8("f"))
+            .setQualifier(
+                org.apache.hbase.thirdparty.com.google.protobuf.ByteString.copyFromUtf8("q"))
             .setCompareOp(2)
-            .setValue(com.google.protobuf.ByteString.copyFromUtf8("v"))
+            .setValue(org.apache.hbase.thirdparty.com.google.protobuf.ByteString.copyFromUtf8("v"))
             .build();
     CheckAndMutateAction filterBased =
         CheckAndMutateAction.newBuilder()
-            .setRow(com.google.protobuf.ByteString.copyFromUtf8("r"))
+            .setRow(org.apache.hbase.thirdparty.com.google.protobuf.ByteString.copyFromUtf8("r"))
             .setFilter(
                 ClientProtos.Filter.newBuilder()
                     .setName("org.apache.hadoop.hbase.filter.PrefixFilter")

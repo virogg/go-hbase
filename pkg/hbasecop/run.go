@@ -88,6 +88,7 @@ func runDispatcher(d *dispatcher, label string) error {
 		HeartbeatPeriod: cfg.heartbeat,
 		Logger:          d.logger,
 		Handler:         d.dispatch,
+		EndpointHandler: d.dispatchEndpoint,
 	})
 	if err != nil {
 		return err
@@ -152,8 +153,15 @@ func newMixedDispatcher(logger *slog.Logger, observers ...any) (*dispatcher, err
 			d.bulkLoads = append(d.bulkLoads, obs)
 			matched = true
 		}
+		if ep, ok := o.(Endpoint); ok {
+			if d.endpoint != nil {
+				return nil, errors.New("hbasecop.RunAll: more than one Endpoint registered")
+			}
+			d.endpoint = ep
+			matched = true
+		}
 		if !matched {
-			return nil, fmt.Errorf("hbasecop.RunAll: %T implements no Observer surface", o)
+			return nil, fmt.Errorf("hbasecop.RunAll: %T implements no Observer or Endpoint surface", o)
 		}
 	}
 	return d, nil

@@ -19,9 +19,12 @@ import java.util.Objects;
  * onto a wire {@link EndpointInvoke} and delegates to an {@link EndpointInvoker}, so authors expose
  * a Go endpoint without writing per-method Java.
  *
- * <p>Uses the UNSHADED {@code com.google.protobuf} types throughout, matching HBase's {@code
- * Coprocessor.getServices(): Iterable<com.google.protobuf.Service>} and {@code
- * Table.coprocessorService(Class<? extends com.google.protobuf.Service>, ...)}.
+ * <p>This class straddles two protobuf worlds: the endpoint Service boundary uses the UNSHADED
+ * {@code com.google.protobuf} 2.5.0 the RegionServer binds {@code Coprocessor.getServices()} to,
+ * while {@link EndpointInvoke} is an internal wire frame on HBase's shaded {@code
+ * org.apache.hbase.thirdparty.com.google.protobuf}. Only {@code String} and {@code byte[]} cross
+ * between them — never a {@code ByteString}/{@code Message}/descriptor — so the two type-identities
+ * never meet.
  */
 public final class GoEndpointServiceImpl extends GoEndpointService {
 
@@ -34,11 +37,15 @@ public final class GoEndpointServiceImpl extends GoEndpointService {
   @Override
   public void call(
       RpcController controller, GoEndpointRequest request, RpcCallback<GoEndpointResponse> done) {
+    // Cross the protobuf-world boundary via byte[] only: request.getPayload() is a 2.5.0
+    // com.google.protobuf.ByteString; EndpointInvoke.payload is a shaded thirdparty ByteString.
     EndpointInvoke invoke =
         EndpointInvoke.newBuilder()
             .setService(getDescriptorForType().getFullName())
             .setMethod(request.getMethod())
-            .setPayload(request.getPayload())
+            .setPayload(
+                org.apache.hbase.thirdparty.com.google.protobuf.ByteString.copyFrom(
+                    request.getPayload().toByteArray()))
             .build();
 
     GoEndpointResponse.Builder resp = GoEndpointResponse.newBuilder();

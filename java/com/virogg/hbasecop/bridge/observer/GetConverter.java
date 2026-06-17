@@ -3,12 +3,12 @@
 
 package com.virogg.hbasecop.bridge.observer;
 
-import com.google.protobuf.ByteString;
 import com.virogg.hbasecop.hbase.v1.ClientProtos;
 import com.virogg.hbasecop.hbase.v1.HBaseProtos;
 import java.io.IOException;
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.client.Get;
+import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
 
 /**
  * Converts an HBase {@link Get} into its vendored proto twin. Field selection mirrors upstream

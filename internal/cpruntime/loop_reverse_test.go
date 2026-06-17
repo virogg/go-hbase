@@ -5,6 +5,7 @@ package cpruntime_test
 
 import (
 	"context"
+	"runtime"
 	"testing"
 	"time"
 
@@ -51,6 +52,69 @@ func TestLoopRoutesRpcResponseToReverseHandler(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("ReverseResponseHandler was not invoked for an RpcResponse frame")
+	}
+
+	cancel()
+	<-done
+}
+
+// TE22: an inbound EndpointInvoke frame is routed to the EndpointHandler (not
+// the observer Handler), and the result the handler returns is sent back out
+// correlated by the same req_id.
+func TestLoopRoutesEndpointInvokeToEndpointHandler(t *testing.T) {
+	ch := openLoopChannels(t)
+
+	loop, err := cpruntime.New(cpruntime.Config{
+		InCh:            ch.loopIn,
+		OutCh:           ch.loopOut,
+		HeartbeatPeriod: -1,
+		Handler: func(_ context.Context, _ *wire.Message) *wire.Message {
+			t.Error("observer Handler must not see an EndpointInvoke frame")
+			return nil
+		},
+		EndpointHandler: func(_ context.Context, req *wire.Message) *wire.Message {
+			return &wire.Message{
+				Type:    wire.TypeEndpointResult,
+				ReqID:   req.ReqID,
+				Payload: append([]byte("R:"), req.Payload...),
+			}
+		},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() { _ = loop.Run(ctx); close(done) }()
+
+	if err := ch.mockOut.Send(encodeWireFrame(t, &wire.Message{
+		Type: wire.TypeEndpointInvoke, ReqID: 77, Payload: []byte("X"),
+	})); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+
+	deadline := time.After(2 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("no EndpointResult returned for an EndpointInvoke frame")
+		default:
+		}
+		raw, rerr := ch.mockIn.Recv()
+		if rerr != nil {
+			runtime.Gosched()
+			continue
+		}
+		got := decodeWireFrame(t, raw)
+		if got.Type != wire.TypeEndpointResult || got.ReqID != 77 {
+			t.Fatalf("got %+v, want EndpointResult req_id=77", got)
+		}
+		if string(got.Payload) != "R:X" {
+			t.Fatalf("payload=%q, want %q", got.Payload, "R:X")
+		}
+		break
 	}
 
 	cancel()

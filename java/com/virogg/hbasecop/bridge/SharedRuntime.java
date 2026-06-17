@@ -250,6 +250,18 @@ public final class SharedRuntime {
     }
 
     /**
+     * Forwards a Tier 2 endpoint invocation to the shared runtime and returns the result payload.
+     * Throws {@link java.io.IOException} if this handle has been released or the call fails.
+     */
+    public byte[] invokeEndpoint(com.virogg.hbasecop.bridge.wire.pb.EndpointInvoke invoke)
+        throws java.io.IOException {
+      if (released) {
+        throw new java.io.IOException("hbasecop: endpoint invoked on a released runtime handle");
+      }
+      return runtime.invokeEndpoint(invoke);
+    }
+
+    /**
      * Decrement the refcount on this handle's runtime. When the last handle for a key releases, the
      * runtime is stopped (SHUTDOWN frame + {@code process.waitFor}). Idempotent: subsequent calls
      * are no-ops.

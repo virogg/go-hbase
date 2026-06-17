@@ -7,13 +7,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
-import com.google.protobuf.ByteString;
-import com.google.protobuf.Descriptors;
-import com.google.protobuf.DynamicMessage;
-import com.google.protobuf.Message;
 import com.virogg.hbasecop.bridge.wire.pb.HooksProto;
 import java.util.ArrayList;
 import java.util.List;
+import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
+import org.apache.hbase.thirdparty.com.google.protobuf.Descriptors;
+import org.apache.hbase.thirdparty.com.google.protobuf.DynamicMessage;
+import org.apache.hbase.thirdparty.com.google.protobuf.Message;
 import org.junit.jupiter.api.Test;
 
 /**

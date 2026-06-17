@@ -44,6 +44,6 @@ public final class GenericMasterObserver implements MasterCoprocessor {
   /** Exposes the generic Go endpoint Service (Tier 2) alongside the master observer. */
   @Override
   public Iterable<Service> getServices() {
-    return GenericCoprocessor.endpointServices();
+    return GenericCoprocessor.endpointServices(() -> handle);
   }
 }

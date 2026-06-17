@@ -3,7 +3,6 @@
 
 package com.virogg.hbasecop.bridge.observer;
 
-import com.google.protobuf.ByteString;
 import com.virogg.hbasecop.hbase.v1.ClientProtos.MutationProto;
 import com.virogg.hbasecop.hbase.v1.HBaseProtos.NameBytesPair;
 import java.io.IOException;
@@ -19,6 +18,7 @@ import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
 
 /**
  * Converts an HBase {@link Mutation} (Put/Delete/Append/Increment) to {@link MutationProto}. The

@@ -35,8 +35,16 @@
     <hbase.version>2.5.10</hbase.version>
     <junit.version>5.10.2</junit.version>
     <mockito.version>5.11.0</mockito.version>
-    <!-- Keep protobuf-java in lockstep with protoc, see proto-gen.sh / CI. -->
+    <!-- Keep protobuf-java in lockstep with protoc, see proto-gen.sh / CI.
+         Used as the protoc version for the INTERNAL wire/hooks/hbase protos. -->
     <protobuf.version>3.25.5</protobuf.version>
+    <!-- The endpoint Service crosses HBase 2.5's coprocessor-endpoint API, which
+         is bound to unshaded com.google.protobuf 2.5.0; endpoint.proto is compiled
+         with the matching protoc 2.5.0 and binds against the server's 2.5.0. -->
+    <protobuf.endpoint.version>2.5.0</protobuf.endpoint.version>
+    <!-- HBase's shaded protobuf (org.apache.hbase.thirdparty.com.google.protobuf),
+         provided by the RegionServer; backs the bridge's internal gen-code. -->
+    <hbase.thirdparty.version>4.1.5</hbase.thirdparty.version>
     <!--
       java-go-shmem is not on Maven Central; carried as a git submodule
       under third_party/ and installed locally via `make deps-shmem`
@@ -58,6 +66,7 @@
     <plugin.spotless.version>2.43.0</plugin.spotless.version>
     <plugin.jacoco.version>0.8.12</plugin.jacoco.version>
     <plugin.protobuf.version>0.6.1</plugin.protobuf.version>
+    <plugin.antrun.version>3.1.0</plugin.antrun.version>
     <plugin.os.version>1.7.1</plugin.os.version>
     <google-java-format.version>1.22.0</google-java-format.version>
   </properties>
@@ -74,10 +83,29 @@
   -->
 
   <dependencies>
+    <!--
+      Two protobuf worlds, both provided by the RegionServer so NEITHER is shaded
+      into the coproc-jar (see Tier 2 endpoint design):
+        - com.google.protobuf 2.5.0: the unshaded legacy protobuf HBase 2.5 binds
+          its coprocessor-endpoint API to (Coprocessor.getServices() returns
+          com.google.protobuf.Service). Backs the 2.5.0-generated endpoint stub.
+        - org.apache.hbase.thirdparty shaded protobuf: backs the bridge's INTERNAL
+          wire/hooks/hbase gen-code, which the antrun step below re-targets off
+          com.google.protobuf onto this package. 3.25-compatible with our protoc.
+      Bundling either would re-introduce the classloader type-identity clash that
+      aborts the RegionServer at endpoint registration.
+    -->
     <dependency>
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
-      <version>${protobuf.version}</version>
+      <version>${protobuf.endpoint.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase.thirdparty</groupId>
+      <artifactId>hbase-shaded-protobuf</artifactId>
+      <version>${hbase.thirdparty.version}</version>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
@@ -208,15 +236,70 @@
         <groupId>org.xolstice.maven.plugins</groupId>
         <artifactId>protobuf-maven-plugin</artifactId>
         <version>${plugin.protobuf.version}</version>
-        <configuration>
-          <protocArtifact>com.google.protobuf:protoc:${protobuf.version}:exe:${os.detected.classifier}</protocArtifact>
-          <protoSourceRoot>${project.basedir}/proto</protoSourceRoot>
-        </configuration>
+        <executions>
+          <!--
+            Internal transport protos (wire/hooks/hbase) on protoc 3.25.5. The
+            generated code references com.google.protobuf.*; the antrun step
+            below re-targets it onto org.apache.hbase.thirdparty.com.google.protobuf
+            so it never collides with the endpoint's unshaded com.google.protobuf.
+            clearOutputDirectory (default true) wipes the shared output dir, so this
+            MUST run before the endpoint execution.
+          -->
+          <execution>
+            <id>compile-internal</id>
+            <phase>generate-sources</phase>
+            <goals><goal>compile</goal></goals>
+            <configuration>
+              <protocArtifact>com.google.protobuf:protoc:${protobuf.version}:exe:${os.detected.classifier}</protocArtifact>
+              <protoSourceRoot>${project.basedir}/proto</protoSourceRoot>
+            </configuration>
+          </execution>
+          <!--
+            Endpoint Service proto on protoc 2.5.0: produces a proto2,
+            com.google.protobuf.Service-based stub matching HBase 2.5's
+            coprocessor-endpoint API. clearOutputDirectory=false so it does not
+            wipe the internal output generated above.
+          -->
+          <execution>
+            <id>compile-endpoint</id>
+            <phase>generate-sources</phase>
+            <goals><goal>compile</goal></goals>
+            <configuration>
+              <protocArtifact>com.google.protobuf:protoc:${protobuf.endpoint.version}:exe:${os.detected.classifier}</protocArtifact>
+              <protoSourceRoot>${project.basedir}/proto-endpoint</protoSourceRoot>
+              <clearOutputDirectory>false</clearOutputDirectory>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!--
+        Re-target the INTERNAL generated protobuf off com.google.protobuf onto
+        HBase's shaded thirdparty package, so the coproc-jar carries no unshaded
+        com.google.protobuf for the wire path. Runs in generate-sources AFTER the
+        protobuf plugin (declaration order). Touches only the internal gen dirs
+        (wire/pb = wire+hooks, hbase/v1); the endpoint stub (endpoint/pb) is left
+        on com.google.protobuf to bind to the server's 2.5.0. Idempotent per build:
+        compile-internal regenerates fresh com.google.protobuf sources each run.
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-antrun-plugin</artifactId>
+        <version>${plugin.antrun.version}</version>
         <executions>
           <execution>
-            <goals>
-              <goal>compile</goal>
-            </goals>
+            <id>retarget-internal-protobuf</id>
+            <phase>generate-sources</phase>
+            <goals><goal>run</goal></goals>
+            <configuration>
+              <target>
+                <replace token="com.google.protobuf"
+                         value="org.apache.hbase.thirdparty.com.google.protobuf">
+                  <fileset dir="${project.build.directory}/generated-sources/protobuf/java/com/virogg/hbasecop/bridge/wire/pb" includes="**/*.java"/>
+                  <fileset dir="${project.build.directory}/generated-sources/protobuf/java/com/virogg/hbasecop/hbase/v1" includes="**/*.java"/>
+                </replace>
+              </target>
+            </configuration>
           </execution>
         </executions>
       </plugin>
@@ -275,6 +358,7 @@
           <excludes>
             <exclude>com/virogg/hbasecop/hbase/v1/**</exclude>
             <exclude>com/virogg/hbasecop/bridge/wire/pb/**</exclude>
+            <exclude>com/virogg/hbasecop/bridge/endpoint/pb/**</exclude>
           </excludes>
         </configuration>
         <executions>

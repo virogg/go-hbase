@@ -64,14 +64,25 @@ class CoprocessorRuntimeRouteFrameTest {
   }
 
   @Test
-  void endpointResultHasNoE1Route() {
-    // ENDPOINT_RESULT routing is wired in TE22; in E1 it reaches neither sink (default WARN path).
+  void routesEndpointResultToMultiplexer() throws Exception {
+    // TE22: an ENDPOINT_RESULT completes the pending endpoint-invoke future, like a hook RESPONSE,
+    // and never reaches the reverse-RPC sink.
+    ConcurrentLinkedQueue<Message> sent = new ConcurrentLinkedQueue<>();
+    Multiplexer mux = Multiplexer.builder(sent::add).build();
+
+    CompletableFuture<Message> pending =
+        mux.call(new Message(FrameType.ENDPOINT_INVOKE, 0, 0, (byte) 0, new byte[0]));
+    long assignedReqId = sent.poll().reqId();
+
     AtomicReference<Message> reverse = new AtomicReference<>();
     CoprocessorRuntime.routeFrame(
-        new Message(FrameType.ENDPOINT_RESULT, 11L, 0, (byte) 0, "result".getBytes()),
-        noopMux(),
+        new Message(FrameType.ENDPOINT_RESULT, assignedReqId, 0, (byte) 0, "result".getBytes()),
+        mux,
         null,
         reverse::set);
-    assertNull(reverse.get(), "ENDPOINT_RESULT must not reach the reverse-RPC sink in E1");
+
+    Message resp = pending.get(2, TimeUnit.SECONDS);
+    assertArrayEquals("result".getBytes(), resp.payload());
+    assertNull(reverse.get(), "ENDPOINT_RESULT must not reach the reverse-RPC sink");
   }
 }

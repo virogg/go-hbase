@@ -243,11 +243,19 @@ IT → собрать логи → `compose down`). Новые ключи `hbase
 - [x] **CP-E1:** endpoints OFF, существующие IT зелёные (counter + master на живом HBase 2026-06-17), нет регрессии
 
 ### Phase E2 — stateless endpoint end-to-end
-- [x] TE21 `GoEndpointService` через `getServices()` (unshaded protobuf) — core+unit; live IT отложен в TE22
-- [ ] TE22 round-trip `EndpointInvoke`/`EndpointResult` на существующей паре
-- [ ] TE23 Go SDK `Endpoint` + `RunEndpoint`/`RunAll`
-- [ ] TE24 таймаут / panic→error / crash→strict-fail
-- [ ] **CP-E2:** stateless endpoint на живом кластере; таймаут+panic+crash доказаны
+- [x] TE21 `GoEndpointService` через `getServices()` (unshaded protobuf) — core+unit; live IT в TE22
+- [x] TE22 round-trip `EndpointInvoke`/`EndpointResult` — **live IT зелёный** (client→bridge→Go→`HELLO`,
+      HBase 2.5.11 2026-06-17). Потребовало protobuf-реархитектуры (см. ниже).
+- [x] TE23 Go SDK `Endpoint` + `RunAll`-интеграция (диспетч + panic-recover; покрыто unit + endpoint IT)
+- [ ] TE24 выделенный `hbasecop.endpoint.timeout` + fault-IT (panic→error уже есть; crash/timeout — в этой задаче)
+- [ ] **CP-E2:** round-trip на живом кластере доказан; остаётся явная fault-matrix (TE24)
+
+> **Protobuf-реархитектура (TE22, потребовалась для endpoint-boundary):** внутренние wire/hooks/hbase
+> protobuf переведены с `com.google.protobuf` (3.25.5) на HBase shaded `org.apache.hbase.thirdparty.com.google.protobuf`
+> (server-provided, antrun-rewrite сгенерированного кода); endpoint Service генерится protoc 2.5.0 (proto2,
+> `proto-endpoint/`) против server-provided `com.google.protobuf` 2.5.0. Coproc-jar **не бандлит protobuf**.
+> Tier-1 регрессия (counter IT) зелёная. Корневая причина: HBase 2.5 CPEP-API жёстко привязан к unshaded
+> protobuf 2.5.0, а jar-first CoprocessorClassLoader не делегирует `com.google.protobuf` родителю.
 
 ### Phase E3 — реверс-чтения
 - [ ] TE31 2-е J→G кольцо + servicing-pool + shaded-конверсия *(РИСК; спайк)*

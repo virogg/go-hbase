@@ -3,10 +3,10 @@
 
 package com.virogg.hbasecop.bridge.observer;
 
-import com.google.protobuf.ByteString;
 import com.virogg.hbasecop.hbase.v1.ClientProtos;
 import java.util.Map;
 import java.util.NavigableSet;
+import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
 
 /**
  * Builds {@link ClientProtos.Column} entries from the family→qualifiers map exposed by HBase

@@ -50,7 +50,7 @@ final class GenericCoprocessorTest {
 
   @Test
   void endpointServicesExposesOneGoEndpointService() {
-    var services = GenericCoprocessor.endpointServices();
+    var services = GenericCoprocessor.endpointServices(() -> null);
     var it = services.iterator();
     assertTrue(it.hasNext(), "one endpoint service expected");
     assertTrue(it.next() instanceof GoEndpointServiceImpl);

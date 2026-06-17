@@ -3,8 +3,6 @@
 
 package com.virogg.hbasecop.bridge.observer;
 
-import com.google.protobuf.ByteString;
-import com.google.protobuf.InvalidProtocolBufferException;
 import com.virogg.hbasecop.bridge.config.HookPolicy;
 import com.virogg.hbasecop.bridge.config.Policy;
 import com.virogg.hbasecop.bridge.config.PolicyConfig;
@@ -24,6 +22,8 @@ import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.coprocessor.BulkLoadObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
+import org.apache.hbase.thirdparty.com.google.protobuf.InvalidProtocolBufferException;
 
 /**
  * T54 BulkLoadObserver bridge. Routes both bulk-load hooks ({@code prePrepareBulkLoad}, {@code

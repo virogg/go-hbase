@@ -71,6 +71,14 @@ type Config struct {
 	// Nil drops RpcResponse frames silently (endpoints disabled), matching how
 	// other unsolicited inbound types are ignored here.
 	ReverseResponseHandler func(*wire.Message)
+
+	// EndpointHandler dispatches inbound EndpointInvoke frames (Tier 2): a
+	// client-initiated server-side RPC. Like Handler, it runs on a fresh
+	// goroutine per invoke and returns the frame to send back (an
+	// EndpointResult, or an Error). Nil falls back to a handler that replies
+	// with an error frame, so a client invoking an endpoint on a process that
+	// registered none gets a clean failure rather than a hang.
+	EndpointHandler Handler
 }
 
 // Loop owns one in-process Go-runtime event loop: one reader goroutine
@@ -176,6 +184,10 @@ func (l *Loop) runReader(ctx context.Context, cancel context.CancelFunc) {
 		switch msg.Type {
 		case wire.TypeRequest:
 			go l.handle(ctx, msg)
+		case wire.TypeEndpointInvoke:
+			// Client-initiated server-side RPC (Tier 2). Dispatched on a fresh
+			// goroutine like a hook so a slow endpoint does not stall the reader.
+			go l.handleEndpoint(ctx, msg)
 		case wire.TypeRpcResponse:
 			// Reply to a Go-initiated reverse RPC (Tier 2). Route to the
 			// stub waiter keyed by req_id; no PB decode in the router.
@@ -205,6 +217,31 @@ func (l *Loop) handle(ctx context.Context, req *wire.Message) {
 		}
 	}()
 	resp := l.cfg.Handler(ctx, req)
+	if resp == nil {
+		return
+	}
+	select {
+	case l.out <- resp:
+	case <-ctx.Done():
+	}
+}
+
+func (l *Loop) handleEndpoint(ctx context.Context, req *wire.Message) {
+	defer func() {
+		if r := recover(); r != nil {
+			l.cfg.Logger.Error("cpruntime: endpoint handler panic recovered",
+				"req_id", req.ReqID, "panic", r)
+		}
+	}()
+	h := l.cfg.EndpointHandler
+	if h == nil {
+		// No endpoint dispatcher installed (bare cpruntime, e.g. tests). The SDK
+		// always sets one (it maps an unregistered endpoint to an error frame),
+		// so in production this branch is unreachable.
+		l.cfg.Logger.Warn("cpruntime: EndpointInvoke with no EndpointHandler", "req_id", req.ReqID)
+		return
+	}
+	resp := h(ctx, req)
 	if resp == nil {
 		return
 	}

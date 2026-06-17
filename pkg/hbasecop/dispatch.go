@@ -24,6 +24,7 @@ const (
 	errCodeInvalidWireRequest uint32 = 1
 	errCodeUnknownHook        uint32 = 2
 	errCodeMarshalResponse    uint32 = 3
+	errCodeEndpointFailed     uint32 = 4
 )
 
 // dispatcher routes inbound wire-level Request frames to the
@@ -39,6 +40,7 @@ type dispatcher struct {
 	regionServers []RegionServerObserver
 	wals          []WALObserver
 	bulkLoads     []BulkLoadObserver
+	endpoint      Endpoint
 	logger        *slog.Logger
 }
 

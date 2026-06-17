@@ -21,10 +21,11 @@ import java.util.concurrent.atomic.AtomicLong;
  * Correlates outbound Requests with inbound Responses over a single shared channel.
  *
  * <p>Each {@link #call} allocates a strictly monotonic {@code uint64} req_id, registers a pending
- * {@link CompletableFuture}, rewrites the supplied {@link Message} into a {@link FrameType#REQUEST}
- * carrying that id and hands it to the {@link Sender}. The future completes when {@link #deliver}
- * receives a Response with the same req_id, or fails with {@link ChannelClosedException} on {@link
- * #close}.
+ * {@link CompletableFuture}, stamps that id onto a copy of the supplied {@link Message} (preserving
+ * its frame type — {@link FrameType#REQUEST} for hooks, {@link FrameType#ENDPOINT_INVOKE} for Tier
+ * 2 endpoint calls) and hands it to the {@link Sender}. The future completes when {@link #deliver}
+ * receives a reply (Response/Error/EndpointResult) with the same req_id, or fails with {@link
+ * ChannelClosedException} on {@link #close}.
  *
  * <p>Crash-restart semantics (T35): {@link #pauseInflightFailing(Throwable)} fails every pending
  * future and parks subsequent {@link #call}s as <em>deferred</em>; {@link #resume()} adopts the
@@ -88,14 +89,14 @@ public final class Multiplexer implements AutoCloseable {
   }
 
   /**
-   * Allocate a fresh req_id, register a waiter, mark {@code request} as {@link FrameType#REQUEST}
-   * and dispatch via the {@link Sender}. The returned future completes when a matching Response is
-   * delivered, fails with {@link ChannelClosedException} on {@link #close}, with {@link
-   * GoSideCrashedException} when the mux is paused (or becomes paused while deferred), or with the
-   * sender's exception if dispatch throws.
+   * Allocate a fresh req_id, register a waiter, stamp it onto {@code request} and dispatch via the
+   * {@link Sender}. The returned future completes when a matching reply is delivered, fails with
+   * {@link ChannelClosedException} on {@link #close}, with {@link GoSideCrashedException} when the
+   * mux is paused (or becomes paused while deferred), or with the sender's exception if dispatch
+   * throws.
    *
    * <p>The supplied {@code request} is not mutated; a new {@link Message} carrying the allocated
-   * req_id and {@code REQUEST} type is forwarded to the sender.
+   * req_id and the caller's original frame type is forwarded to the sender.
    */
   public CompletableFuture<Message> call(Message request) {
     return callTracked(request).future;
@@ -112,8 +113,11 @@ public final class Multiplexer implements AutoCloseable {
 
     long id = nextId.incrementAndGet();
     CompletableFuture<Message> fut = new CompletableFuture<>();
+    // Preserve the caller's frame type: hooks send REQUEST, Tier 2 endpoint
+    // invocations send ENDPOINT_INVOKE. Hardcoding REQUEST here mis-routed
+    // endpoint calls to the Go hook dispatcher (surfacing as "unknown hook").
     Message outbound =
-        new Message(FrameType.REQUEST, id, request.regionId(), request.hookId(), request.payload());
+        new Message(request.type(), id, request.regionId(), request.hookId(), request.payload());
 
     synchronized (lock) {
       if (closed) {

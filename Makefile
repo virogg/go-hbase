@@ -26,6 +26,9 @@ GO_RUNTIME_OUT := src/main/resources/bin/linux-amd64/hbasecop-runtime
 COUNTER_OBSERVER_DIR := examples/counter-observer
 COUNTER_OBSERVER_OUT := $(COUNTER_OBSERVER_DIR)/src/main/resources/bin/linux-amd64/hbasecop-runtime
 
+ENDPOINT_OBSERVER_DIR := examples/endpoint-observer
+ENDPOINT_OBSERVER_OUT := $(ENDPOINT_OBSERVER_DIR)/src/main/resources/bin/linux-amd64/hbasecop-runtime
+
 FAULT_OBSERVER_DIR := examples/fault-observer
 FAULT_OBSERVER_OUT := $(FAULT_OBSERVER_DIR)/src/main/resources/bin/linux-amd64/hbasecop-runtime
 
@@ -289,6 +292,30 @@ counter-observer-jar: go-build-counter ## T25: build deployable coproc-jar (inst
 	@echo "OK: counter-observer.jar -- bridge shaded, Go ELF embedded"
 
 # ---------------------------------------------------------------------------
+# Examples (TE22): endpoint-observer coproc-jar (Tier 2 endpoint round-trip).
+# ---------------------------------------------------------------------------
+
+.PHONY: go-build-endpoint
+go-build-endpoint: ## TE22: build endpoint-observer Go ELF into example resources (Linux x86-64).
+	@mkdir -p $(dir $(ENDPOINT_OBSERVER_OUT))
+	GOOS=linux GOARCH=amd64 $(GO) build $(GO_BUILD_FLAGS) -o $(ENDPOINT_OBSERVER_OUT) ./$(ENDPOINT_OBSERVER_DIR)
+
+.PHONY: endpoint-observer-jar
+endpoint-observer-jar: go-build-endpoint ## TE22: build deployable endpoint coproc-jar (installs bridge into ~/.m2 first).
+	$(MVN) $(MVN_FLAGS) install -DskipTests
+	$(MVN) $(MVN_FLAGS) -f $(ENDPOINT_OBSERVER_DIR)/pom.xml package
+	@unzip -l $(ENDPOINT_OBSERVER_DIR)/target/endpoint-observer.jar | \
+	  grep -q 'bin/linux-amd64/hbasecop-runtime' || \
+	  { echo "ERROR: Go ELF missing from endpoint-observer.jar" >&2; exit 1; }
+	@unzip -l $(ENDPOINT_OBSERVER_DIR)/target/endpoint-observer.jar | \
+	  grep -q 'com/virogg/hbasecop/bridge/entrypoint/GenericRegionObserver.class' || \
+	  { echo "ERROR: GenericRegionObserver class missing from coproc-jar" >&2; exit 1; }
+	@unzip -l $(ENDPOINT_OBSERVER_DIR)/target/endpoint-observer.jar | \
+	  grep -q 'com/virogg/hbasecop/bridge/endpoint/GoEndpointServiceImpl.class' || \
+	  { echo "ERROR: GoEndpointServiceImpl class missing from coproc-jar" >&2; exit 1; }
+	@echo "OK: endpoint-observer.jar -- bridge shaded, Go ELF embedded"
+
+# ---------------------------------------------------------------------------
 # Examples (T36): fault-injection coproc-jar.
 # ---------------------------------------------------------------------------
 
@@ -493,6 +520,7 @@ hbase-status: ## T26: curl the master-status page (smoke check post-up).
 COPROC_JAR_STAGED := test/integration/coproc-jars/counter-observer.jar
 FAULT_COPROC_JAR_STAGED := test/integration/coproc-jars/fault-observer.jar
 FILTER_COPROC_JAR_STAGED := test/integration/coproc-jars/filter-observer.jar
+ENDPOINT_COPROC_JAR_STAGED := test/integration/coproc-jars/endpoint-observer.jar
 
 .PHONY: demo-counter
 demo-counter: ## CP-γ: public demo - Put on HBase triggers Go observer counter; leaves cluster up.
@@ -508,6 +536,24 @@ test-integration: counter-observer-jar ## T27: full IT - bring up HBase, run Pre
 	  $(MVN) $(MVN_FLAGS) test -Dtest=PrePutCounterIT -DfailIfNoTests=false; \
 	  status=$$?; \
 	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
+
+# ---------------------------------------------------------------------------
+# Integration (TE22): Tier 2 endpoint round-trip - client coprocessorService
+# call to the stock GenericRegionObserver round-trips to a Go Endpoint.
+# ---------------------------------------------------------------------------
+
+.PHONY: test-integration-endpoint
+test-integration-endpoint: endpoint-observer-jar ## TE22: full IT - bring up HBase, run EndpointRoundTripIT, tear down.
+	@mkdir -p test/integration/coproc-jars
+	cp $(ENDPOINT_OBSERVER_DIR)/target/endpoint-observer.jar $(ENDPOINT_COPROC_JAR_STAGED)
+	$(HBASE_COMPOSE_CMD) up -d --build
+	./test/integration/scripts/wait-master-status.sh
+	@set +e; \
+	  $(MVN) $(MVN_FLAGS) test -Dtest=EndpointRoundTripIT -DfailIfNoTests=false; \
+	  status=$$?; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-endpoint.log 2>&1 || true; \
 	  $(HBASE_COMPOSE_CMD) down; \
 	  exit $$status
 

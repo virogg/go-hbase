@@ -3,7 +3,6 @@
 
 package com.virogg.hbasecop.bridge.observer;
 
-import com.google.protobuf.InvalidProtocolBufferException;
 import com.virogg.hbasecop.bridge.config.HookPolicy;
 import com.virogg.hbasecop.bridge.config.Policy;
 import com.virogg.hbasecop.bridge.config.PolicyConfig;
@@ -29,6 +28,7 @@ import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionServerObserver;
+import org.apache.hbase.thirdparty.com.google.protobuf.InvalidProtocolBufferException;
 
 /**
  * T52 RegionServerObserver bridge. Routes every RegionServerObserver hook the SDK exposes (T52 Wave

@@ -7,8 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
-import com.google.protobuf.ByteString;
-import com.google.protobuf.Message;
 import com.virogg.hbasecop.bridge.wire.pb.HookContext;
 import com.virogg.hbasecop.bridge.wire.pb.HookError;
 import com.virogg.hbasecop.bridge.wire.pb.HookResponse;
@@ -17,6 +15,8 @@ import com.virogg.hbasecop.hbase.v1.CellProtos;
 import com.virogg.hbasecop.hbase.v1.ClientProtos;
 import com.virogg.hbasecop.hbase.v1.HBaseProtos;
 import java.util.stream.Stream;
+import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
+import org.apache.hbase.thirdparty.com.google.protobuf.Message;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;

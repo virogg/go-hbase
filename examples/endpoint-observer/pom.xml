@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Copyright 2026 The go-hbase Authors
+  SPDX-License-Identifier: Apache-2.0
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.virogg.hbasecop.examples</groupId>
+  <artifactId>endpoint-observer</artifactId>
+  <version>0.0.1-SNAPSHOT</version>
+  <packaging>jar</packaging>
+
+  <name>endpoint-observer (go-hbase example)</name>
+  <description>TE22 endpoint coproc-jar: shades the bridge and embeds a Go ELF that serves a GoEndpointService.</description>
+
+  <!--
+    Standalone example project (not in the bridge reactor). To produce the
+    deployable coproc-jar:
+      1. `mvn install -DskipTests` at repo root  (publishes hbasecop-bridge into ~/.m2)
+      2. `make go-build-endpoint`                 (builds the Go ELF into this module's resources)
+      3. `mvn -f examples/endpoint-observer/pom.xml package`
+    `make endpoint-observer-jar` runs all three. The deployed coprocessor class
+    is the stock com.virogg.hbasecop.bridge.entrypoint.GenericRegionObserver.
+  -->
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.source>11</maven.compiler.source>
+    <maven.compiler.target>11</maven.compiler.target>
+    <maven.compiler.release>11</maven.compiler.release>
+
+    <bridge.version>0.0.1-SNAPSHOT</bridge.version>
+    <hbase.version>2.5.10</hbase.version>
+    <protobuf.version>3.25.5</protobuf.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.virogg</groupId>
+      <artifactId>hbasecop-bridge</artifactId>
+      <version>${bridge.version}</version>
+    </dependency>
+
+    <!--
+      HBase is provided at runtime by the RegionServer; never shaded into
+      the coproc-jar (would cause classloader conflicts + bloat).
+    -->
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-server</artifactId>
+      <version>${hbase.version}</version>
+      <scope>provided</scope>
+    </dependency>
+
+    <!--
+      protobuf is PROVIDED by the RegionServer and must NOT be shaded into the
+      coproc-jar: the endpoint Service binds to the server's unshaded
+      com.google.protobuf 2.5.0, and the bridge's internal wire code binds to the
+      server's org.apache.hbase.thirdparty shaded protobuf. Bundling either
+      re-introduces the classloader type-identity clash that aborts the
+      RegionServer at endpoint registration.
+    -->
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java</artifactId>
+      <version>2.5.0</version>
+      <scope>provided</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <finalName>endpoint-observer</finalName>
+
+    <!--
+      The embedded Go ELF is staged into src/main/resources/bin/linux-amd64/
+      by `make go-build-endpoint` before `mvn package` runs.
+    -->
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+      </resource>
+    </resources>
+
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.13.0</version>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-resources-plugin</artifactId>
+        <version>3.3.1</version>
+      </plugin>
+
+      <!-- Pin surefire (cached) so `mvn package` does not resolve Maven's ancient default. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.2.5</version>
+        <configuration>
+          <useModulePath>false</useModulePath>
+        </configuration>
+      </plugin>
+
+      <!--
+        Shade everything that's not `provided` into a single coproc-jar:
+        bridge classes, protobuf-java, java-go-shmem. HBase stays out (provided).
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>3.5.3</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals><goal>shade</goal></goals>
+            <configuration>
+              <createDependencyReducedPom>false</createDependencyReducedPom>
+              <shadedArtifactAttached>false</shadedArtifactAttached>
+              <minimizeJar>false</minimizeJar>
+              <filters>
+                <filter>
+                  <artifact>*:*</artifact>
+                  <excludes>
+                    <exclude>META-INF/*.SF</exclude>
+                    <exclude>META-INF/*.DSA</exclude>
+                    <exclude>META-INF/*.RSA</exclude>
+                    <exclude>module-info.class</exclude>
+                  </excludes>
+                </filter>
+                <!--
+                  The bridge artifact carries its own generic Go runtime ELF;
+                  drop it so this example's endpoint-observer ELF wins.
+                -->
+                <filter>
+                  <artifact>com.virogg:hbasecop-bridge</artifact>
+                  <excludes>
+                    <exclude>bin/**</exclude>
+                  </excludes>
+                </filter>
+              </filters>
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+              </transformers>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

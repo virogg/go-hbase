@@ -1,0 +1,52 @@
+// Copyright 2026 The go-hbase Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// Tier 2 endpoint-coprocessor service.
+//
+// One generic HBase coprocessor endpoint Service forwards every client
+// invocation to a Go Endpoint handler, so authors deploy an endpoint
+// without writing per-method Java. The bridge maps a Call request onto the
+// wire EndpointInvoke frame (see proto/wire.proto); the Go SDK dispatches it.
+//
+// COMPILED WITH protoc 2.5.0 (proto2), NOT the 3.25.5 used for the internal
+// wire protos. HBase 2.5's coprocessor-endpoint API is bound to the unshaded
+// com.google.protobuf 2.5.0 on the RegionServer: Coprocessor.getServices()
+// returns Iterable<com.google.protobuf.Service>, and the server runs
+// protobuf-java 2.5.0. The generated GoEndpointService must therefore be a
+// 2.5.0 (GeneratedMessage, not GeneratedMessageV3) Service. This proto lives
+// in its own source root (proto-endpoint/) so the Maven build compiles it with
+// protoc 2.5.0 while the rest stay on 3.25.5. Go does not generate this proto
+// (it uses the wire EndpointInvoke/EndpointResult frames directly), so it is
+// omitted from tools/proto-gen.sh.
+//
+// Mirrors the hbase-examples endpoint shape (proto2 + java_generic_services).
+
+syntax = "proto2";
+
+package virogg.hbasecop.v1;
+
+option java_package = "com.virogg.hbasecop.bridge.endpoint.pb";
+option java_multiple_files = true;
+option java_outer_classname = "EndpointProto";
+option java_generic_services = true;
+option optimize_for = SPEED;
+
+// GoEndpointRequest is one client-initiated endpoint call. method names the
+// user-defined endpoint method; payload is its opaque request body.
+message GoEndpointRequest {
+  optional string method = 1;
+  optional bytes payload = 2;
+}
+
+// GoEndpointResponse carries the endpoint result. On success payload holds the
+// opaque response body and error is empty; on failure error is set.
+message GoEndpointResponse {
+  optional bytes payload = 1;
+  optional string error = 2;
+}
+
+// GoEndpointService is the single generic endpoint surface registered by the
+// stock Generic* coprocessor entrypoints via getServices().
+service GoEndpointService {
+  rpc Call (GoEndpointRequest) returns (GoEndpointResponse);
+}

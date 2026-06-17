@@ -3,8 +3,6 @@
 
 package com.virogg.hbasecop.bridge.observer;
 
-import com.google.protobuf.ByteString;
-import com.google.protobuf.InvalidProtocolBufferException;
 import com.virogg.hbasecop.bridge.config.HookPolicy;
 import com.virogg.hbasecop.bridge.config.Policy;
 import com.virogg.hbasecop.bridge.config.PolicyConfig;
@@ -48,6 +46,8 @@ import org.apache.hadoop.hbase.coprocessor.MasterCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.MasterObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.master.RegionPlan;
+import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
+import org.apache.hbase.thirdparty.com.google.protobuf.InvalidProtocolBufferException;
 
 /**
  * T51 MasterObserver bridge. Routes every MasterObserver hook the SDK exposes (T51 Wave A - 20

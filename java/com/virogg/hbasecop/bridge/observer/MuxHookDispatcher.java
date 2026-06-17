@@ -3,8 +3,6 @@
 
 package com.virogg.hbasecop.bridge.observer;
 
-import com.google.protobuf.ByteString;
-import com.google.protobuf.InvalidProtocolBufferException;
 import com.virogg.hbasecop.bridge.wire.FrameType;
 import com.virogg.hbasecop.bridge.wire.Message;
 import com.virogg.hbasecop.bridge.wire.pb.Request;
@@ -18,6 +16,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
+import org.apache.hbase.thirdparty.com.google.protobuf.InvalidProtocolBufferException;
 
 /**
  * {@link HookDispatcher} backed by a {@link Multiplexer}: every hook invocation becomes one {@code

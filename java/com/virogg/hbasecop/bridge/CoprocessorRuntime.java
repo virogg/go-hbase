@@ -23,8 +23,12 @@ import com.virogg.hbasecop.bridge.supervisor.RestartConfig;
 import com.virogg.hbasecop.bridge.supervisor.RestartController;
 import com.virogg.hbasecop.bridge.wire.Decoder;
 import com.virogg.hbasecop.bridge.wire.Encoder;
+import com.virogg.hbasecop.bridge.wire.FrameType;
 import com.virogg.hbasecop.bridge.wire.Message;
 import com.virogg.hbasecop.bridge.wire.WireException;
+import com.virogg.hbasecop.bridge.wire.pb.EndpointInvoke;
+import com.virogg.hbasecop.bridge.wire.pb.EndpointResult;
+import com.virogg.hbasecop.multiplex.ChannelClosedException;
 import com.virogg.hbasecop.multiplex.GoSideCrashedException;
 import com.virogg.hbasecop.multiplex.Multiplexer;
 import java.io.IOException;
@@ -41,14 +45,18 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.jar.Manifest;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
+import org.apache.hbase.thirdparty.com.google.protobuf.InvalidProtocolBufferException;
 
 /**
  * In-RegionServer bridge runtime: ties together the {@link GoProcess} supervisor, the shmem {@link
@@ -264,6 +272,66 @@ public final class CoprocessorRuntime implements AutoCloseable {
   /** The BulkLoadObserver to expose to HBase (T54); null until {@link #start()} succeeds. */
   public org.apache.hadoop.hbase.coprocessor.BulkLoadObserver getBulkLoadObserver() {
     return bulkLoadObserver;
+  }
+
+  /**
+   * Forwards a Tier 2 endpoint invocation to the Go side and returns the result payload. Sends an
+   * {@code ENDPOINT_INVOKE} frame through the same multiplexer + send lock as hooks, blocks for the
+   * matching {@code ENDPOINT_RESULT} (or an {@code ERROR}) up to the configured hook timeout, and
+   * unwraps the result. Throws {@link IOException} on timeout, a Go-side error, channel close, or a
+   * malformed reply, which {@code GoEndpointServiceImpl} surfaces to the client as an endpoint
+   * error.
+   */
+  public byte[] invokeEndpoint(EndpointInvoke invoke) throws IOException {
+    Multiplexer m = mux;
+    if (m == null) {
+      throw new IOException("hbasecop: endpoint invoked before runtime start");
+    }
+    Message req = new Message(FrameType.ENDPOINT_INVOKE, 0L, 0, (byte) 0, invoke.toByteArray());
+    Multiplexer.Call call = m.callTracked(req);
+    CompletableFuture<Message> fut = call.future;
+
+    final Message resp;
+    try {
+      resp = fut.get(cfg.hookTimeout().toMillis(), TimeUnit.MILLISECONDS);
+    } catch (TimeoutException e) {
+      fut.cancel(false);
+      m.cancel(call.reqId);
+      throw new IOException("hbasecop: endpoint " + invoke.getMethod() + " timed out", e);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new IOException("hbasecop: endpoint " + invoke.getMethod() + " interrupted", e);
+    } catch (ExecutionException e) {
+      Throwable cause = e.getCause();
+      if (cause instanceof ChannelClosedException) {
+        throw new IOException("hbasecop: channel closed during endpoint call", cause);
+      }
+      if (cause instanceof IOException) {
+        throw (IOException) cause;
+      }
+      throw new IOException("hbasecop: endpoint " + invoke.getMethod() + " dispatch failed", cause);
+    }
+
+    if (resp.type() == FrameType.ERROR) {
+      try {
+        com.virogg.hbasecop.bridge.wire.pb.Error err =
+            com.virogg.hbasecop.bridge.wire.pb.Error.parseFrom(resp.payload());
+        throw new IOException(
+            "hbasecop: endpoint "
+                + invoke.getMethod()
+                + " returned error (code="
+                + err.getCode()
+                + "): "
+                + err.getMessage());
+      } catch (InvalidProtocolBufferException e) {
+        throw new IOException("hbasecop: malformed endpoint Error payload", e);
+      }
+    }
+    try {
+      return EndpointResult.parseFrom(resp.payload()).getPayload().toByteArray();
+    } catch (InvalidProtocolBufferException e) {
+      throw new IOException("hbasecop: malformed EndpointResult payload", e);
+    }
   }
 
   /**
@@ -757,9 +825,11 @@ public final class CoprocessorRuntime implements AutoCloseable {
     switch (m.type()) {
       case RESPONSE:
       case ERROR:
-        // Both carry the same req_id; the Go side picks ERROR when a hook
-        // call fails (e.g. unknown hook, malformed payload, marshal fail).
-        // MuxHookDispatcher inspects FrameType and surfaces an IOException.
+      case ENDPOINT_RESULT:
+        // All carry the req_id of a pending mux call: a hook RESPONSE, an
+        // ENDPOINT_RESULT for an endpoint invoke, or an ERROR for either. The
+        // Go side picks ERROR when the call fails; the waiting caller
+        // (MuxHookDispatcher / invokeEndpoint) inspects FrameType.
         if (!mux.deliver(m)) {
           LOG.log(Level.DEBUG, "CoprocessorRuntime: unmatched {0} req_id={1}", m.type(), m.reqId());
         }

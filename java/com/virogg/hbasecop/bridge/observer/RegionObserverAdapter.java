@@ -3,10 +3,6 @@
 
 package com.virogg.hbasecop.bridge.observer;
 
-import com.google.protobuf.ByteString;
-import com.google.protobuf.Descriptors;
-import com.google.protobuf.InvalidProtocolBufferException;
-import com.google.protobuf.Message;
 import com.virogg.hbasecop.bridge.config.HookPolicy;
 import com.virogg.hbasecop.bridge.config.Policy;
 import com.virogg.hbasecop.bridge.config.PolicyConfig;
@@ -131,6 +127,10 @@ import org.apache.hadoop.hbase.regionserver.querymatcher.DeleteTracker;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.wal.WALEdit;
 import org.apache.hadoop.hbase.wal.WALKey;
+import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
+import org.apache.hbase.thirdparty.com.google.protobuf.Descriptors;
+import org.apache.hbase.thirdparty.com.google.protobuf.InvalidProtocolBufferException;
+import org.apache.hbase.thirdparty.com.google.protobuf.Message;
 
 /**
  * RegionServer-side bridge that intercepts every {@link RegionObserver} method and relays the call
@@ -1220,8 +1220,8 @@ public final class RegionObserverAdapter implements RegionObserver {
             .setCtx(hookCtx)
             .setColumnFamily(
                 store == null
-                    ? com.google.protobuf.ByteString.EMPTY
-                    : com.google.protobuf.ByteString.copyFrom(
+                    ? org.apache.hbase.thirdparty.com.google.protobuf.ByteString.EMPTY
+                    : org.apache.hbase.thirdparty.com.google.protobuf.ByteString.copyFrom(
                         store.getColumnFamilyDescriptor().getName()))
             .build()
             .toByteArray();

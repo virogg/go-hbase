@@ -45,6 +45,6 @@ public final class GenericRegionObserver implements RegionCoprocessor {
   /** Exposes the generic Go endpoint Service (Tier 2) alongside the region observer. */
   @Override
   public Iterable<Service> getServices() {
-    return GenericCoprocessor.endpointServices();
+    return GenericCoprocessor.endpointServices(() -> handle);
   }
 }

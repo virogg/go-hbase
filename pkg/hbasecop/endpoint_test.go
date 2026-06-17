@@ -1,0 +1,99 @@
+// Copyright 2026 The go-hbase Authors
+// SPDX-License-Identifier: Apache-2.0
+
+package hbasecop
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"testing"
+
+	"google.golang.org/protobuf/proto"
+
+	"github.com/virogg/go-hbase/internal/wire"
+	"github.com/virogg/go-hbase/internal/wire/wirepb"
+)
+
+type funcEndpoint func(ctx context.Context, method string, payload []byte) ([]byte, error)
+
+func (f funcEndpoint) Call(ctx context.Context, method string, payload []byte) ([]byte, error) {
+	return f(ctx, method, payload)
+}
+
+func endpointInvokeFrame(t *testing.T, reqID uint64, method string, payload []byte) *wire.Message {
+	t.Helper()
+	b, err := proto.Marshal(&wirepb.EndpointInvoke{Method: method, Payload: payload})
+	if err != nil {
+		t.Fatalf("marshal EndpointInvoke: %v", err)
+	}
+	return &wire.Message{Type: wire.TypeEndpointInvoke, ReqID: reqID, Payload: b}
+}
+
+func TestDispatchEndpointReturnsResult(t *testing.T) {
+	var gotMethod string
+	d := &dispatcher{
+		logger: slog.Default(),
+		endpoint: funcEndpoint(func(_ context.Context, method string, payload []byte) ([]byte, error) {
+			gotMethod = method
+			return append([]byte("ok:"), payload...), nil
+		}),
+	}
+
+	resp := d.dispatchEndpoint(context.Background(), endpointInvokeFrame(t, 5, "sum", []byte("xy")))
+
+	if resp.Type != wire.TypeEndpointResult || resp.ReqID != 5 {
+		t.Fatalf("got %+v, want EndpointResult req_id=5", resp)
+	}
+	if gotMethod != "sum" {
+		t.Errorf("method = %q, want sum", gotMethod)
+	}
+	var result wirepb.EndpointResult
+	if err := proto.Unmarshal(resp.Payload, &result); err != nil {
+		t.Fatalf("unmarshal EndpointResult: %v", err)
+	}
+	if string(result.GetPayload()) != "ok:xy" {
+		t.Errorf("payload = %q, want ok:xy", result.GetPayload())
+	}
+}
+
+func TestDispatchEndpointErrorBecomesErrorFrame(t *testing.T) {
+	d := &dispatcher{
+		logger: slog.Default(),
+		endpoint: funcEndpoint(func(_ context.Context, _ string, _ []byte) ([]byte, error) {
+			return nil, errors.New("boom")
+		}),
+	}
+	resp := d.dispatchEndpoint(context.Background(), endpointInvokeFrame(t, 1, "m", nil))
+	if resp.Type != wire.TypeError {
+		t.Fatalf("type = %v, want Error", resp.Type)
+	}
+	var werr wirepb.Error
+	if err := proto.Unmarshal(resp.Payload, &werr); err != nil {
+		t.Fatalf("unmarshal Error: %v", err)
+	}
+	if werr.GetCode() != errCodeEndpointFailed {
+		t.Errorf("code = %d, want %d", werr.GetCode(), errCodeEndpointFailed)
+	}
+}
+
+func TestDispatchEndpointPanicBecomesError(t *testing.T) {
+	d := &dispatcher{
+		logger: slog.Default(),
+		endpoint: funcEndpoint(func(_ context.Context, _ string, _ []byte) ([]byte, error) {
+			panic("kaboom")
+		}),
+	}
+	resp := d.dispatchEndpoint(context.Background(), endpointInvokeFrame(t, 2, "m", nil))
+	if resp.Type != wire.TypeError {
+		t.Fatalf("a panicking endpoint must yield an Error frame, got %v", resp.Type)
+	}
+}
+
+func TestDispatchEndpointNilEndpointIsError(t *testing.T) {
+	d := &dispatcher{logger: slog.Default()}
+	resp := d.dispatchEndpoint(context.Background(), endpointInvokeFrame(t, 3, "m", nil))
+	if resp.Type != wire.TypeError {
+		t.Fatalf("type = %v, want Error when no endpoint registered", resp.Type)
+	}
+}
