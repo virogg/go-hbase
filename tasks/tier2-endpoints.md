@@ -326,7 +326,13 @@ IT → собрать логи → `compose down`). Новые ключи `hbase
       **live IT зелёный** (EndpointRoundTripIT 9/9 + per-table-gate две таблицы/один runtime,
       EndpointFaultIT 3/3, HBase 2.5.11, 2026-06-18). Deferred → TE54 fault-matrix: confirmatory
       live ITs для admission-stress / idle-lease-recovery / crash-vs-register (логика unit-доказана).
-- [ ] TE43 master-endpoint'ы (без региона)
+- [x] TE43 master-endpoint'ы (без региона) — `GenericMasterObserver.getServices()` отдаёт generic
+      `GoEndpointService` (region_id 0); клиент зовёт через `Admin.coprocessorService()` поверх
+      master `CoprocessorRpcChannel` (unshaded). endpoint-observer регистрирует ещё и
+      `UnimplementedMasterObserver` → бинарь деплоится как master-coproc без abort'а master-init.
+      Scope (A-12): чтение master/meta-стейта, region-реверс недоступен (region_id 0). **live IT
+      зелёный** (MasterEndpointIT 1/1 → "MASTER-HELLO", HBase 2.5.11, 2026-06-18); make
+      `test-integration-master-endpoint`.
 - [ ] **CP-E4:** ограниченные/безопасные endpoint'ы; ACL-bypass задокументирован
 
 ### Phase E5 — клиент, упаковка, доки
