@@ -265,7 +265,12 @@ IT → собрать логи → `compose down`). Новые ключи `hbase
 - [x] TE32 `RpcRequest{GET}` round-trip (data-dependent A→B) — `EndpointEnv.Get` (планируемая форма
       `Call(ctx, env, method, payload)`); **live IT зелёный** (EndpointRoundTripIT "follow" A→B,
       HBase 2.5.11, 2026-06-18); env.Get/CellValue + data-dependent unit-доказаны
-- [ ] TE33 pull-scan SCAN_OPEN/NEXT/CLOSE + реестр + leak-reaping
+- [x] TE33 pull-scan SCAN_OPEN/NEXT/CLOSE + реестр + leak-reaping — wire scanner_id/has_more;
+      `ScannerRegistry`(call_id,scanner_id) + bytes-primary resumable батчинг (ScannerContext
+      BETWEEN_ROWS) + oversized-row чистая ошибка; reaping на крах-пути (`pauseInflightFailing`).
+      **live IT зелёный** (scan 5 rows; crash-mid-scan → "reaped 1 orphaned scanner" → recovery,
+      HBase 2.5.11, 2026-06-18). NB: leak-proof via unit-reap + наблюдаемый reap-лог (проект
+      log-only, без JMX — отклонение от плана "JMX/метрики")
 - [ ] TE34 Go SDK `EndpointEnv.OpenScanner/Get`
 - [ ] **CP-E3:** серверная агрегация по данным региона + leak-safety сканеров
 

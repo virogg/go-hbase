@@ -21,11 +21,13 @@ import (
 // row A and then, using a value from A, read row B (data-dependent access) —
 // because each [EndpointEnv.Get] is an independent correlated round-trip.
 //
-// Get lands in TE32; OpenScanner in TE34. When the reverse path is disabled
-// (the supervisor did not provision the bulk ring), Get returns an error.
+// Get lands in TE32, OpenScanner in TE33 (ergonomic iteration + the canonical
+// aggregation in TE34). When the reverse path is disabled (the supervisor did
+// not provision the bulk ring), the reverse methods return an error.
 type EndpointEnv struct {
 	rc       *cpruntime.ReverseClient
 	regionID uint32
+	callID   uint64 // groups this call's scanners for lifecycle/reaping
 }
 
 // Get reads the cells of row from the invoking region and blocks until the
@@ -63,4 +65,58 @@ func CellValue(r *Result, family, qualifier []byte) ([]byte, bool) {
 		}
 	}
 	return nil, false
+}
+
+// Scanner is a server-side pull scanner over region-local data (Tier 2, TE33),
+// opened by [EndpointEnv.OpenScanner]. Drive it by calling Next until hasMore is
+// false, then Close. Always Close (defer) so the bridge releases the underlying
+// RegionScanner promptly; a Go-process crash also reaps it bridge-side.
+type Scanner struct {
+	env       *EndpointEnv
+	scannerID uint64
+	closed    bool
+}
+
+// OpenScanner opens a scanner for scan against the invoking region. scan is a
+// vendored HBase Scan (build it with the re-exported [Scan] type).
+func (e *EndpointEnv) OpenScanner(ctx context.Context, scan *Scan) (*Scanner, error) {
+	if e == nil || e.rc == nil {
+		return nil, errors.New("hbasecop: reverse reads unavailable (reverse path disabled)")
+	}
+	scanProto, err := proto.Marshal(scan)
+	if err != nil {
+		return nil, fmt.Errorf("hbasecop: marshal Scan: %w", err)
+	}
+	id, err := e.rc.OpenScanner(ctx, e.regionID, e.callID, scanProto)
+	if err != nil {
+		return nil, err
+	}
+	return &Scanner{env: e, scannerID: id}, nil
+}
+
+// Next pulls the next batch of cells (flat across rows; each cell carries its
+// row) and reports whether more rows remain. When hasMore is false the batch is
+// the last one (it may still hold cells); a subsequent Next is not required.
+func (s *Scanner) Next(ctx context.Context) (cells []*Cell, hasMore bool, err error) {
+	if s.closed {
+		return nil, false, errors.New("hbasecop: Next on a closed scanner")
+	}
+	resp, err := s.env.rc.ScanNext(ctx, s.env.regionID, s.env.callID, s.scannerID)
+	if err != nil {
+		return nil, false, err
+	}
+	var batch Result
+	if err := proto.Unmarshal(resp.GetPayload(), &batch); err != nil {
+		return nil, false, fmt.Errorf("hbasecop: unmarshal scan batch: %w", err)
+	}
+	return batch.GetCell(), resp.GetHasMore(), nil
+}
+
+// Close releases the scanner. Idempotent; safe to defer.
+func (s *Scanner) Close(ctx context.Context) error {
+	if s.closed {
+		return nil
+	}
+	s.closed = true
+	return s.env.rc.ScanClose(ctx, s.env.regionID, s.env.callID, s.scannerID)
 }

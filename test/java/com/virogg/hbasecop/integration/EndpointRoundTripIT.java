@@ -149,6 +149,42 @@ final class EndpointRoundTripIT {
     }
   }
 
+  /**
+   * TE33: a client invokes "scan", whose Go handler opens a server-side scanner over the region and
+   * counts the cells across SCAN_NEXT batches. Seeds N rows, scans, asserts the count — proving the
+   * pull-scan SCAN_OPEN/NEXT/CLOSE round-trip end to end.
+   */
+  @Test
+  void clientReverseScanCountsRows() throws Throwable {
+    requireStagedJar();
+    TableName tn = TableName.valueOf("hbasecop_endpoint_scan_it");
+    byte[] qualifier = "q".getBytes(StandardCharsets.UTF_8);
+    int rows = 5;
+
+    try (Connection conn = ConnectionFactory.createConnection(clientConfig());
+        Admin admin = conn.getAdmin()) {
+
+      waitForClusterReady(admin, Duration.ofSeconds(300));
+      dropTable(admin, tn);
+      createTableWithCoproc(admin, tn);
+      try (Table table = conn.getTable(tn)) {
+        for (int i = 0; i < rows; i++) {
+          byte[] row = ("row-" + i).getBytes(StandardCharsets.UTF_8);
+          table.put(
+              new Put(row).addColumn(CF, qualifier, ("v" + i).getBytes(StandardCharsets.UTF_8)));
+        }
+
+        byte[] result = callEndpoint(table, "scan", ByteString.EMPTY);
+        assertEquals(
+            Integer.toString(rows),
+            new String(result, StandardCharsets.UTF_8),
+            "scan endpoint must count one cell per seeded row");
+      } finally {
+        dropTable(admin, tn);
+      }
+    }
+  }
+
   private static void requireStagedJar() {
     Path jarOnHost = resolveJarOnHost();
     assertTrue(

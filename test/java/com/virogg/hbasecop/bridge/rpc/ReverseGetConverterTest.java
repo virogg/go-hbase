@@ -11,6 +11,7 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
 import org.junit.jupiter.api.DisplayName;
@@ -34,6 +35,21 @@ class ReverseGetConverterTest {
     Get get = ReverseGetConverter.toNativeGet(wire);
 
     assertArrayEquals(row, get.getRow());
+  }
+
+  @Test
+  @DisplayName("vendored Scan bytes parse into a native Scan with the same start row (TE33)")
+  void toNativeScanParsesVendoredScanBytes() throws Exception {
+    byte[] startRow = Bytes.toBytes("aaa");
+    byte[] wire =
+        ClientProtos.Scan.newBuilder()
+            .setStartRow(ByteString.copyFrom(startRow))
+            .build()
+            .toByteArray();
+
+    Scan scan = ReverseGetConverter.toNativeScan(wire);
+
+    assertArrayEquals(startRow, scan.getStartRow());
   }
 
   @Test

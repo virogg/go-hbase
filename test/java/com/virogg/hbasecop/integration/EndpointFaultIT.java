@@ -4,6 +4,7 @@
 package com.virogg.hbasecop.integration;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -29,6 +30,7 @@ import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.CoprocessorDescriptorBuilder;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
@@ -97,6 +99,44 @@ final class EndpointFaultIT {
             }
           }
           throw new AssertionError("endpoint did not recover after a crash", last);
+        });
+  }
+
+  @Test
+  void scanCrashReapsScannerAndRecovers() throws Throwable {
+    withEndpointTable(
+        (table, tn) -> {
+          int rows = 3;
+          for (int i = 0; i < rows; i++) {
+            table.put(
+                new Put(("r-" + i).getBytes(StandardCharsets.UTF_8))
+                    .addColumn(
+                        CF,
+                        "q".getBytes(StandardCharsets.UTF_8),
+                        ("v" + i).getBytes(StandardCharsets.UTF_8)));
+          }
+
+          // scan-leak opens a server-side scanner, pulls one batch, then crashes WITHOUT closing
+          // it.
+          assertThrows(
+              Exception.class, () -> callMethod(table, "scan-leak", ""), "crash must error");
+
+          // The bridge reaps the orphaned RegionScanner on the crash path (so no read point leaks
+          // to block compaction). After restart a full scan must work — proving the region is not
+          // wedged by a leaked scanner.
+          Instant deadline = Instant.now().plus(Duration.ofSeconds(40));
+          Throwable last = null;
+          while (Instant.now().isBefore(deadline)) {
+            try {
+              byte[] out = callMethod(table, "scan", "");
+              assertEquals(Integer.toString(rows), new String(out, StandardCharsets.UTF_8));
+              return;
+            } catch (Throwable t) {
+              last = t;
+              Thread.sleep(1_000);
+            }
+          }
+          throw new AssertionError("scan did not recover after a crash mid-scan", last);
         });
   }
 

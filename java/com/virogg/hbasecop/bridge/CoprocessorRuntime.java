@@ -121,6 +121,9 @@ public final class CoprocessorRuntime implements AutoCloseable {
       new com.virogg.hbasecop.multiplex.RegionIdAllocator();
   private final com.virogg.hbasecop.bridge.rpc.RegionRegistry regionRegistry =
       new com.virogg.hbasecop.bridge.rpc.RegionRegistry();
+  // TE33: open server-side scanners, reaped on Go-process crash so no RegionScanner leaks.
+  private final com.virogg.hbasecop.bridge.rpc.ScannerRegistry scannerRegistry =
+      new com.virogg.hbasecop.bridge.rpc.ScannerRegistry();
 
   private Channel javaToGo;
   private Channel goToJava;
@@ -243,7 +246,9 @@ public final class CoprocessorRuntime implements AutoCloseable {
       reverseRpcServicer =
           new com.virogg.hbasecop.bridge.rpc.ReverseRpcServicer(
               regionRegistry,
+              scannerRegistry,
               bulkReplySink,
+              cfg.bulkRingMaxObjectSize(),
               cfg.servicingPoolSize(),
               cfg.servicingQueueDepth(),
               cfg.servicingTimeout());
@@ -481,6 +486,8 @@ public final class CoprocessorRuntime implements AutoCloseable {
     if (reverseRpcServicer != null) {
       reverseRpcServicer.close();
     }
+    // TE33: close any scanners still open at teardown (clean stop, not a crash) so none leak.
+    reapScanners("runtime teardown");
     if (mux != null) {
       mux.close();
     }
@@ -513,6 +520,19 @@ public final class CoprocessorRuntime implements AutoCloseable {
     bulkLoadObserver = null;
     watchdog = null;
     restartController = null;
+  }
+
+  /**
+   * TE33: close every open server-side scanner when the Go process dies, so no {@link
+   * org.apache.hadoop.hbase.regionserver.RegionScanner} — and the MVCC read point it pins — leaks.
+   * Invoked alongside {@code pauseInflightFailing} on the crash path; logs the count so a leak
+   * regression is observable in the RegionServer log.
+   */
+  private void reapScanners(String reason) {
+    int n = scannerRegistry.closeAll();
+    if (n > 0) {
+      LOG.log(Level.INFO, "CoprocessorRuntime: reaped {0} orphaned scanner(s) ({1})", n, reason);
+    }
   }
 
   private static void closeChannelQuietly(Channel ch) {
@@ -565,6 +585,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
         m.pauseInflightFailing(
             new GoSideCrashedException("Go process pid=" + pid + " exited unexpectedly"));
       }
+      reapScanners("exited pid=" + pid);
       if (c != null) {
         c.notifyDead();
       }
@@ -596,6 +617,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
           new GoSideCrashedException(
               "Go process pid=" + pid + " hung for " + elapsedMs + "ms, SIGKILLed"));
     }
+    reapScanners("hung pid=" + pid);
     RestartController c = restartController;
     if (c != null) {
       c.notifyDead();

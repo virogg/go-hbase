@@ -689,10 +689,14 @@ func (x *EndpointResult) GetPayload() []byte {
 // EndpointInvoke (e.g. for scanner lifecycle). op_payload carries the vendored
 // HBase Scan/Get/Mutation protobuf for the op.
 type RpcRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CallId        uint64                 `protobuf:"varint,1,opt,name=call_id,json=callId,proto3" json:"call_id,omitempty"`
-	Op            RpcRequest_Op          `protobuf:"varint,2,opt,name=op,proto3,enum=virogg.hbasecop.v1.RpcRequest_Op" json:"op,omitempty"`
-	OpPayload     []byte                 `protobuf:"bytes,3,opt,name=op_payload,json=opPayload,proto3" json:"op_payload,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	CallId    uint64                 `protobuf:"varint,1,opt,name=call_id,json=callId,proto3" json:"call_id,omitempty"`
+	Op        RpcRequest_Op          `protobuf:"varint,2,opt,name=op,proto3,enum=virogg.hbasecop.v1.RpcRequest_Op" json:"op,omitempty"`
+	OpPayload []byte                 `protobuf:"bytes,3,opt,name=op_payload,json=opPayload,proto3" json:"op_payload,omitempty"`
+	// scanner_id (Tier 2, TE33) targets an open server-side scanner for SCAN_NEXT
+	// and SCAN_CLOSE. Unset (0) for SCAN_OPEN/GET/MUTATE. The (call_id, scanner_id)
+	// pair is the scanner's lifecycle key in the bridge's registry.
+	ScannerId     uint64 `protobuf:"varint,4,opt,name=scanner_id,json=scannerId,proto3" json:"scanner_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -748,13 +752,26 @@ func (x *RpcRequest) GetOpPayload() []byte {
 	return nil
 }
 
+func (x *RpcRequest) GetScannerId() uint64 {
+	if x != nil {
+		return x.ScannerId
+	}
+	return 0
+}
+
 // RpcResponse is the Java-side reply to an RpcRequest. payload carries the
 // vendored HBase Result / scan batch (chunked via the wire header when large);
 // status distinguishes success from a servicing error.
 type RpcResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Status        RpcResponse_Status     `protobuf:"varint,1,opt,name=status,proto3,enum=virogg.hbasecop.v1.RpcResponse_Status" json:"status,omitempty"`
-	Payload       []byte                 `protobuf:"bytes,2,opt,name=payload,proto3" json:"payload,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Status  RpcResponse_Status     `protobuf:"varint,1,opt,name=status,proto3,enum=virogg.hbasecop.v1.RpcResponse_Status" json:"status,omitempty"`
+	Payload []byte                 `protobuf:"bytes,2,opt,name=payload,proto3" json:"payload,omitempty"`
+	// scanner_id (Tier 2, TE33) is the id the bridge assigns on SCAN_OPEN, echoed
+	// by the Go side on subsequent SCAN_NEXT/SCAN_CLOSE.
+	ScannerId uint64 `protobuf:"varint,3,opt,name=scanner_id,json=scannerId,proto3" json:"scanner_id,omitempty"`
+	// has_more (Tier 2, TE33) reports whether a SCAN_NEXT batch left more rows in
+	// the scanner (resumable): true => issue another SCAN_NEXT; false => exhausted.
+	HasMore       bool `protobuf:"varint,4,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -801,6 +818,20 @@ func (x *RpcResponse) GetPayload() []byte {
 		return x.Payload
 	}
 	return nil
+}
+
+func (x *RpcResponse) GetScannerId() uint64 {
+	if x != nil {
+		return x.ScannerId
+	}
+	return 0
+}
+
+func (x *RpcResponse) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
 }
 
 // Frame is the wire envelope. Every frame on the ring carries a header
@@ -1061,13 +1092,15 @@ const file_wire_proto_rawDesc = "" +
 	"\x06method\x18\x02 \x01(\tR\x06method\x12\x18\n" +
 	"\apayload\x18\x03 \x01(\fR\apayload\"*\n" +
 	"\x0eEndpointResult\x12\x18\n" +
-	"\apayload\x18\x01 \x01(\fR\apayload\"\xd4\x01\n" +
+	"\apayload\x18\x01 \x01(\fR\apayload\"\xf3\x01\n" +
 	"\n" +
 	"RpcRequest\x12\x17\n" +
 	"\acall_id\x18\x01 \x01(\x04R\x06callId\x121\n" +
 	"\x02op\x18\x02 \x01(\x0e2!.virogg.hbasecop.v1.RpcRequest.OpR\x02op\x12\x1d\n" +
 	"\n" +
-	"op_payload\x18\x03 \x01(\fR\topPayload\"[\n" +
+	"op_payload\x18\x03 \x01(\fR\topPayload\x12\x1d\n" +
+	"\n" +
+	"scanner_id\x18\x04 \x01(\x04R\tscannerId\"[\n" +
 	"\x02Op\x12\x12\n" +
 	"\x0eOP_UNSPECIFIED\x10\x00\x12\r\n" +
 	"\tSCAN_OPEN\x10\x01\x12\r\n" +
@@ -1076,10 +1109,13 @@ const file_wire_proto_rawDesc = "" +
 	"SCAN_CLOSE\x10\x03\x12\a\n" +
 	"\x03GET\x10\x04\x12\n" +
 	"\n" +
-	"\x06MUTATE\x10\x05\"\x9c\x01\n" +
+	"\x06MUTATE\x10\x05\"\xd6\x01\n" +
 	"\vRpcResponse\x12>\n" +
 	"\x06status\x18\x01 \x01(\x0e2&.virogg.hbasecop.v1.RpcResponse.StatusR\x06status\x12\x18\n" +
-	"\apayload\x18\x02 \x01(\fR\apayload\"3\n" +
+	"\apayload\x18\x02 \x01(\fR\apayload\x12\x1d\n" +
+	"\n" +
+	"scanner_id\x18\x03 \x01(\x04R\tscannerId\x12\x19\n" +
+	"\bhas_more\x18\x04 \x01(\bR\ahasMore\"3\n" +
 	"\x06Status\x12\x16\n" +
 	"\x12STATUS_UNSPECIFIED\x10\x00\x12\x06\n" +
 	"\x02OK\x10\x01\x12\t\n" +

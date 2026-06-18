@@ -46,9 +46,10 @@ func (d *dispatcher) dispatchEndpoint(ctx context.Context, req *wire.Message) *w
 			"req_id", req.ReqID, "method", invoke.GetMethod())
 		return d.errorFrame(req, errCodeUnknownHook, "no endpoint registered")
 	}
-	// TE32: hand the handler an EndpointEnv bound to the invoking region so it can
-	// read region-local data (env.Get), including data-dependent reads.
-	env := &EndpointEnv{rc: d.reverse, regionID: req.RegionID}
+	// TE32/TE33: hand the handler an EndpointEnv bound to the invoking region so it
+	// can read region-local data (env.Get / env.OpenScanner). callID = the invoke's
+	// req_id groups this call's scanners for lifecycle/reaping.
+	env := &EndpointEnv{rc: d.reverse, regionID: req.RegionID, callID: req.ReqID}
 	out, callErr := d.callEndpoint(ctx, env, invoke.GetMethod(), invoke.GetPayload())
 	if callErr != nil {
 		return d.errorFrame(req, errCodeEndpointFailed, callErr.Error())

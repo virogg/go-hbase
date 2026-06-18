@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 
 	"github.com/virogg/go-hbase/pkg/hbasecop"
 )
@@ -48,6 +49,10 @@ func (upperEndpoint) Call(ctx context.Context, env *hbasecop.EndpointEnv, method
 		return getValue(ctx, env, payload)
 	case "follow":
 		return follow(ctx, env, payload)
+	case "scan":
+		return scanCount(ctx, env)
+	case "scan-leak":
+		return scanLeak(ctx, env)
 	default:
 		return bytes.ToUpper(payload), nil
 	}
@@ -89,6 +94,47 @@ func follow(ctx context.Context, env *hbasecop.EndpointEnv, rowA []byte) ([]byte
 	}
 	slog.Info("endpoint-observer: follow ok", "from", string(rowA), "to", string(next))
 	return val, nil
+}
+
+// scanCount opens a server-side scanner over the whole region, counts the cells
+// across all batches, closes it, and returns the count. Exercises the TE33
+// pull-scan SCAN_OPEN/NEXT/CLOSE round-trip.
+func scanCount(ctx context.Context, env *hbasecop.EndpointEnv) ([]byte, error) {
+	sc, err := env.OpenScanner(ctx, &hbasecop.Scan{})
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = sc.Close(ctx) }()
+
+	count := 0
+	for {
+		cells, hasMore, err := sc.Next(ctx)
+		if err != nil {
+			return nil, err
+		}
+		count += len(cells)
+		if !hasMore {
+			break
+		}
+	}
+	slog.Info("endpoint-observer: scan ok", "cells", count)
+	return []byte(strconv.Itoa(count)), nil
+}
+
+// scanLeak opens a scanner, pulls one batch, and crashes WITHOUT closing it —
+// the TE33 fault probe. The bridge must reap the orphaned RegionScanner on the
+// crash path so no read point leaks; a later scan must still work.
+func scanLeak(ctx context.Context, env *hbasecop.EndpointEnv) ([]byte, error) {
+	sc, err := env.OpenScanner(ctx, &hbasecop.Scan{})
+	if err != nil {
+		return nil, err
+	}
+	if _, _, err := sc.Next(ctx); err != nil {
+		return nil, err
+	}
+	slog.Warn("endpoint-observer: leaking scanner then os.Exit(1)")
+	os.Exit(1) // crash without sc.Close → bridge reaps the scanner
+	return nil, nil
 }
 
 func main() {

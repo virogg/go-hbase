@@ -69,23 +69,21 @@ func (c *ReverseClient) Deliver(m *wire.Message) {
 	ch <- m // cap-1 buffered, single delivery: never blocks
 }
 
-// Get issues a reverse GET against region regionID and blocks until the Java
-// servicer replies or ctx is done. getProto is a marshalled vendored HBase Get;
-// on success the returned RpcResponse payload carries a marshalled vendored
-// HBase Result. A servicing error (RpcResponse_ERROR) is returned as an error
-// with the response carrying the failure detail in its payload.
-func (c *ReverseClient) Get(ctx context.Context, regionID uint32, getProto []byte) (*wirepb.RpcResponse, error) {
+// call sends one reverse RPC and blocks until the Java servicer replies or ctx
+// is done. It allocates and registers the waiter before sending, so a fast reply
+// can never race ahead of registration. A servicing error (RpcResponse_ERROR) is
+// returned as an error with the response carrying the failure detail in its
+// payload; the response is still returned for callers that want it.
+func (c *ReverseClient) call(ctx context.Context, regionID uint32, req *wirepb.RpcRequest) (*wirepb.RpcResponse, error) {
 	if c.out == nil {
 		return nil, fmt.Errorf("cpruntime: ReverseClient not bound to an outbound writer")
 	}
-	payload, err := proto.Marshal(&wirepb.RpcRequest{Op: wirepb.RpcRequest_GET, OpPayload: getProto})
+	payload, err := proto.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("cpruntime: marshal RpcRequest: %w", err)
 	}
 
-	// Allocate and register the waiter before sending, so a fast reply can never
-	// race ahead of registration. First id is 1; req_id 0 is reserved.
-	id := c.nextID.Add(1)
+	id := c.nextID.Add(1) // first id == 1; req_id 0 is reserved
 	ch := make(chan *wire.Message, 1)
 	c.mu.Lock()
 	c.pending[id] = ch
@@ -110,10 +108,53 @@ func (c *ReverseClient) Get(ctx context.Context, regionID uint32, getProto []byt
 			return nil, fmt.Errorf("cpruntime: unmarshal RpcResponse: %w", err)
 		}
 		if resp.GetStatus() == wirepb.RpcResponse_ERROR {
-			return &resp, fmt.Errorf("cpruntime: reverse GET failed: %s", string(resp.GetPayload()))
+			return &resp, fmt.Errorf("cpruntime: reverse %s failed: %s", req.GetOp(), string(resp.GetPayload()))
 		}
 		return &resp, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+}
+
+// Get issues a reverse GET against region regionID. getProto is a marshalled
+// vendored HBase Get; on success the returned RpcResponse payload carries a
+// marshalled vendored HBase Result.
+func (c *ReverseClient) Get(ctx context.Context, regionID uint32, getProto []byte) (*wirepb.RpcResponse, error) {
+	return c.call(ctx, regionID, &wirepb.RpcRequest{Op: wirepb.RpcRequest_GET, OpPayload: getProto})
+}
+
+// OpenScanner opens a server-side scanner (Tier 2, TE33). scanProto is a
+// marshalled vendored HBase Scan; callID groups the scanner with its endpoint
+// call for lifecycle/reaping. Returns the bridge-assigned scanner id.
+func (c *ReverseClient) OpenScanner(ctx context.Context, regionID uint32, callID uint64, scanProto []byte) (uint64, error) {
+	resp, err := c.call(ctx, regionID, &wirepb.RpcRequest{
+		Op:        wirepb.RpcRequest_SCAN_OPEN,
+		CallId:    callID,
+		OpPayload: scanProto,
+	})
+	if err != nil {
+		return 0, err
+	}
+	return resp.GetScannerId(), nil
+}
+
+// ScanNext pulls the next batch from scanner scannerID. The returned RpcResponse
+// payload carries a marshalled vendored HBase Result (flat cells across rows);
+// RpcResponse.has_more reports whether more rows remain (resumable).
+func (c *ReverseClient) ScanNext(ctx context.Context, regionID uint32, callID, scannerID uint64) (*wirepb.RpcResponse, error) {
+	return c.call(ctx, regionID, &wirepb.RpcRequest{
+		Op:        wirepb.RpcRequest_SCAN_NEXT,
+		CallId:    callID,
+		ScannerId: scannerID,
+	})
+}
+
+// ScanClose closes and deregisters scanner scannerID.
+func (c *ReverseClient) ScanClose(ctx context.Context, regionID uint32, callID, scannerID uint64) error {
+	_, err := c.call(ctx, regionID, &wirepb.RpcRequest{
+		Op:        wirepb.RpcRequest_SCAN_CLOSE,
+		CallId:    callID,
+		ScannerId: scannerID,
+	})
+	return err
 }

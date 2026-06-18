@@ -115,6 +115,10 @@ message RpcRequest {
   uint64 call_id = 1;
   Op op = 2;
   bytes op_payload = 3;
+  // scanner_id (Tier 2, TE33) targets an open server-side scanner for SCAN_NEXT
+  // and SCAN_CLOSE. Unset (0) for SCAN_OPEN/GET/MUTATE. The (call_id, scanner_id)
+  // pair is the scanner's lifecycle key in the bridge's registry.
+  uint64 scanner_id = 4;
 }
 
 // RpcResponse is the Java-side reply to an RpcRequest. payload carries the
@@ -128,6 +132,12 @@ message RpcResponse {
   }
   Status status = 1;
   bytes payload = 2;
+  // scanner_id (Tier 2, TE33) is the id the bridge assigns on SCAN_OPEN, echoed
+  // by the Go side on subsequent SCAN_NEXT/SCAN_CLOSE.
+  uint64 scanner_id = 3;
+  // has_more (Tier 2, TE33) reports whether a SCAN_NEXT batch left more rows in
+  // the scanner (resumable): true => issue another SCAN_NEXT; false => exhausted.
+  bool has_more = 4;
 }
 
 // Frame is the wire envelope. Every frame on the ring carries a header

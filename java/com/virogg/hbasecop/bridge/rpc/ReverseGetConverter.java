@@ -6,6 +6,7 @@ package com.virogg.hbasecop.bridge.rpc;
 import java.io.IOException;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.shaded.protobuf.ProtobufUtil;
 import org.apache.hadoop.hbase.shaded.protobuf.generated.ClientProtos;
 
@@ -29,6 +30,11 @@ final class ReverseGetConverter {
   /** Parse a vendored {@code hbase.Get} wire payload into a native {@link Get}. */
   static Get toNativeGet(byte[] opPayload) throws IOException {
     return ProtobufUtil.toGet(ClientProtos.Get.parseFrom(opPayload));
+  }
+
+  /** Parse a vendored {@code hbase.Scan} wire payload into a native {@link Scan} (TE33). */
+  static Scan toNativeScan(byte[] opPayload) throws IOException {
+    return ProtobufUtil.toScan(ClientProtos.Scan.parseFrom(opPayload));
   }
 
   /**
