@@ -58,6 +58,9 @@ public final class ReverseRpcServicer {
   // Result payload, so a batch that fits our threshold also fits the slot once encoded.
   private static final int SLOT_HEADROOM = 64 * 1024;
 
+  // TE42: per-table reverse-MUTATE gate, set as a coprocessor property on the table descriptor.
+  private static final String ALLOW_MUTATE_PROPERTY = "hbasecop.endpoint.allow-mutate";
+
   private final RegionRegistry regionRegistry;
   private final ScannerRegistry scannerRegistry;
   private final Consumer<Message> replySink;
@@ -370,14 +373,14 @@ public final class ReverseRpcServicer {
   }
 
   private void serviceMutate(Message request, RpcRequest req) throws IOException {
-    if (!allowMutate) {
+    Region region = region(request);
+    if (region == null) {
+      return; // region() already replied ERROR
+    }
+    if (!allowMutateFor(region)) {
       // Fail closed: reverse writes are opt-in — they bypass the client RPC stack (ACL/quota), so
       // exposing them by default would be a DoS / authorization-bypass surface.
       replyError(request, "reverse MUTATE disabled (set hbasecop.endpoint.allow-mutate=true)");
-      return;
-    }
-    Region region = region(request);
-    if (region == null) {
       return;
     }
     // region.put/delete go through the region's observer pipeline (Pre/Post-Put/Delete fire) but
@@ -391,6 +394,29 @@ public final class ReverseRpcServicer {
       region.delete((Delete) m); // toNativeMutation only ever returns Put or Delete
     }
     sendReply(request, RpcResponse.newBuilder().setStatus(RpcResponse.Status.OK).build());
+  }
+
+  /**
+   * TE42 per-table gate: the effective allow-mutate for the invoking region. The table opts in via
+   * the coprocessor property {@code hbasecop.endpoint.allow-mutate} (authoritative per table);
+   * absent that, the cluster-wide value baked at runtime start applies. Read from the server-side
+   * {@link Region#getTableDescriptor()} — never a Go wire field — so the privilege-escalation
+   * surface is exactly the table's own descriptor.
+   */
+  private boolean allowMutateFor(Region region) {
+    try {
+      for (org.apache.hadoop.hbase.client.CoprocessorDescriptor cd :
+          region.getTableDescriptor().getCoprocessorDescriptors()) {
+        String v = cd.getProperties().get(ALLOW_MUTATE_PROPERTY);
+        if (v != null) {
+          return Boolean.parseBoolean(v);
+        }
+      }
+    } catch (RuntimeException e) {
+      // A missing/odd descriptor must not crash the mutate path; fall back to the baked default.
+      LOG.log(Level.WARNING, "hbasecop: reading per-table allow-mutate failed; using default", e);
+    }
+    return allowMutate;
   }
 
   /**

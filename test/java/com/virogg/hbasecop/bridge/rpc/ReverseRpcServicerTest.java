@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -19,17 +20,20 @@ import com.virogg.hbasecop.bridge.wire.pb.RpcResponse;
 import com.virogg.hbasecop.hbase.v1.ClientProtos;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.client.CoprocessorDescriptor;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -478,6 +482,59 @@ class ReverseRpcServicerTest {
     RpcResponse resp = poll();
     assertEquals(RpcResponse.Status.ERROR, resp.getStatus());
     assertTrue(resp.getPayload().toStringUtf8().contains("no region"));
+  }
+
+  // Stub the invoking region's table descriptor with the per-table allow-mutate coproc property.
+  private void stubTableAllowMutate(String value) {
+    CoprocessorDescriptor cd = mock(CoprocessorDescriptor.class);
+    when(cd.getProperties())
+        .thenReturn(value == null ? Map.of() : Map.of("hbasecop.endpoint.allow-mutate", value));
+    TableDescriptor td = mock(TableDescriptor.class);
+    when(td.getCoprocessorDescriptors()).thenReturn(List.of(cd));
+    when(region.getTableDescriptor()).thenReturn(td);
+  }
+
+  // TE42 per-table gate: a table opting in (property=true) is allowed even when the cluster-wide
+  // baked default is off.
+  @Test
+  void mutateAllowedWhenTablePropertyOnEvenIfClusterOff() throws Exception {
+    RegionRegistry registry = new RegionRegistry();
+    registry.register(7, region);
+    stubTableAllowMutate("true");
+    // 7-arg ctor: baked allowMutate=false (cluster default off).
+    servicer =
+        new ReverseRpcServicer(
+            registry, new ScannerRegistry(), replies::add, SLOT, 4, 16, Duration.ofSeconds(5));
+    servicer.accept(mutateReq(1, 7, ClientProtos.MutationProto.MutationType.PUT, "row-1"));
+
+    assertEquals(RpcResponse.Status.OK, poll().getStatus());
+    verify(region).put(any(Put.class));
+  }
+
+  // TE42 per-table gate: a table opting out (property=false) is denied even when the cluster-wide
+  // baked default is on.
+  @Test
+  void mutateDeniedWhenTablePropertyOffEvenIfClusterOn() throws Exception {
+    RegionRegistry registry = new RegionRegistry();
+    registry.register(7, region);
+    stubTableAllowMutate("false");
+    // 8-arg ctor: baked allowMutate=true (cluster default on).
+    servicer =
+        new ReverseRpcServicer(
+            registry,
+            new ScannerRegistry(),
+            replies::add,
+            SLOT,
+            4,
+            16,
+            Duration.ofSeconds(5),
+            true);
+    servicer.accept(mutateReq(1, 7, ClientProtos.MutationProto.MutationType.PUT, "row-1"));
+
+    RpcResponse resp = poll();
+    assertEquals(RpcResponse.Status.ERROR, resp.getStatus());
+    assertTrue(resp.getPayload().toStringUtf8().contains("allow-mutate"));
+    verify(region, never()).put(any(Put.class));
   }
 
   @Test
