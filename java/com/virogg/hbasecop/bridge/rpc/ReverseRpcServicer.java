@@ -250,6 +250,11 @@ public final class ReverseRpcServicer {
           request, "scanner registry reaping call " + req.getCallId() + "; SCAN_OPEN rejected");
       return;
     }
+    if (scannerId == ScannerRegistry.AT_CAPACITY) {
+      // TE42: per-call scanner cap reached — the registry already closed the scanner.
+      replyError(request, "max scanners per call exceeded for call " + req.getCallId());
+      return;
+    }
     sendReply(
         request,
         RpcResponse.newBuilder().setStatus(RpcResponse.Status.OK).setScannerId(scannerId).build());

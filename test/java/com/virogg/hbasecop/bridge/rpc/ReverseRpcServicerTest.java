@@ -248,6 +248,26 @@ class ReverseRpcServicerTest {
   }
 
   @Test
+  void scanOpenBeyondPerCallCapRepliesError() throws Exception {
+    RegionRegistry regions = new RegionRegistry();
+    regions.register(7, region);
+    ScannerRegistry scanners = new ScannerRegistry(1, Long.MAX_VALUE, System::currentTimeMillis);
+    when(region.getScanner(any(Scan.class))).thenReturn(scanner);
+
+    servicer =
+        new ReverseRpcServicer(regions, scanners, replies::add, SLOT, 4, 16, Duration.ofSeconds(5));
+    servicer.accept(scanReq(1, 7, RpcRequest.Op.SCAN_OPEN, 100, 0)); // 1st: ok (cap 1)
+    assertEquals(RpcResponse.Status.OK, poll().getStatus());
+
+    servicer.accept(scanReq(2, 7, RpcRequest.Op.SCAN_OPEN, 100, 0)); // 2nd on same call: over cap
+    RpcResponse resp = poll();
+    assertEquals(RpcResponse.Status.ERROR, resp.getStatus());
+    assertTrue(
+        resp.getPayload().toStringUtf8().contains("max scanners per call"),
+        () -> "error detail: " + resp.getPayload().toStringUtf8());
+  }
+
+  @Test
   void scanNextReturnsBatchAndHasMore() throws Exception {
     RegionRegistry regions = new RegionRegistry();
     regions.register(7, region);

@@ -18,6 +18,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -148,6 +149,34 @@ class ScannerRegistryTest {
     for (RegionScanner s : all) {
       verify(s, Mockito.atLeastOnce()).close();
     }
+  }
+
+  // TE42 max-scanners-per-call: opening past the cap is rejected and the scanner closed.
+  @Test
+  void registerRejectsBeyondMaxPerCall() throws Exception {
+    ScannerRegistry reg = new ScannerRegistry(2, Long.MAX_VALUE, System::currentTimeMillis);
+    assertNotEquals(ScannerRegistry.AT_CAPACITY, reg.register(1, s1));
+    assertNotEquals(ScannerRegistry.AT_CAPACITY, reg.register(1, s2));
+    RegionScanner s3 = Mockito.mock(RegionScanner.class);
+    assertEquals(ScannerRegistry.AT_CAPACITY, reg.register(1, s3));
+    verify(s3).close();
+    assertEquals(2, reg.size());
+  }
+
+  // TE42 scanner-idle-lease: evictIdle reaps only scanners untouched past the lease.
+  @Test
+  void evictIdleClosesOnlyStaleScanners() throws Exception {
+    AtomicLong now = new AtomicLong(0);
+    ScannerRegistry reg = new ScannerRegistry(Integer.MAX_VALUE, 1000, now::get);
+    reg.register(1, s1); // touched at t=0
+    now.set(2000); // advance past the 1000ms lease
+    long id2 = reg.register(1, s2); // touched at t=2000
+
+    int reaped = reg.evictIdle(); // now=2000: s1 idle 2000>1000 -> reaped; s2 is fresh
+    assertEquals(1, reaped);
+    verify(s1).close();
+    assertEquals(1, reg.size());
+    assertSame(s2, reg.lookup(1, id2), "a freshly-touched scanner survives the sweep");
   }
 
   private static void awaitQuietly(CountDownLatch latch) {

@@ -122,8 +122,8 @@ public final class CoprocessorRuntime implements AutoCloseable {
   private final com.virogg.hbasecop.bridge.rpc.RegionRegistry regionRegistry =
       new com.virogg.hbasecop.bridge.rpc.RegionRegistry();
   // TE33: open server-side scanners, reaped on Go-process crash so no RegionScanner leaks.
-  private final com.virogg.hbasecop.bridge.rpc.ScannerRegistry scannerRegistry =
-      new com.virogg.hbasecop.bridge.rpc.ScannerRegistry();
+  // TE42: bounded per call + idle-lease evicted (constructed from cfg).
+  private final com.virogg.hbasecop.bridge.rpc.ScannerRegistry scannerRegistry;
 
   private Channel javaToGo;
   private Channel goToJava;
@@ -147,6 +147,9 @@ public final class CoprocessorRuntime implements AutoCloseable {
 
   public CoprocessorRuntime(Config cfg) {
     this.cfg = Objects.requireNonNull(cfg, "cfg");
+    this.scannerRegistry =
+        new com.virogg.hbasecop.bridge.rpc.ScannerRegistry(
+            cfg.maxScannersPerCall(), cfg.scannerIdleLease().toMillis(), System::currentTimeMillis);
   }
 
   /**
@@ -581,6 +584,16 @@ public final class CoprocessorRuntime implements AutoCloseable {
       } catch (RuntimeException e) {
         LOG.log(Level.WARNING, "CoprocessorRuntime: restart controller tick threw", e);
       }
+    }
+    // TE42: reap scanners idle past their lease (an endpoint that opened a scanner and never
+    // closed it, or a reaping-race straggler).
+    try {
+      int evicted = scannerRegistry.evictIdle();
+      if (evicted > 0) {
+        LOG.log(Level.INFO, "CoprocessorRuntime: evicted {0} idle scanner(s)", evicted);
+      }
+    } catch (RuntimeException e) {
+      LOG.log(Level.WARNING, "CoprocessorRuntime: scanner idle-evict threw", e);
     }
   }
 
