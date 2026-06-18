@@ -190,15 +190,31 @@ final class EndpointFaultIT {
         (table, tn) -> {
           ExecutorService pool = Executors.newFixedThreadPool(4);
           try {
-            // Hold both admission permits with two slow calls.
-            Future<byte[]> h1 = pool.submit(() -> callQuietly(table, "slow", "6s"));
-            Future<byte[]> h2 = pool.submit(() -> callQuietly(table, "slow", "6s"));
-            Thread.sleep(1_500); // let both acquire permits and be in-flight
+            // Hold both admission permits with two long slow calls (10s gives an ample window).
+            Future<byte[]> h1 = pool.submit(() -> callQuietly(table, "slow", "10s"));
+            Future<byte[]> h2 = pool.submit(() -> callQuietly(table, "slow", "10s"));
 
-            // A third concurrent call must be rejected fast by admission, not queued/hung.
-            IOException err =
-                assertThrows(IOException.class, () -> callMethod(table, "upper", "x"));
-            assertTrue(err.getMessage().contains("max-concurrent-calls"), err.getMessage());
+            // Poll a 3rd call until admission rejects it: once both permits are held a surplus call
+            // fails fast with "max-concurrent-calls". Retrying (rather than one fixed sleep) makes
+            // this deterministic regardless of how long the two holders take to acquire permits.
+            Throwable rejection = null;
+            Instant deadline = Instant.now().plus(Duration.ofSeconds(8));
+            while (Instant.now().isBefore(deadline)) {
+              try {
+                callMethod(table, "upper", "x"); // a permit is still free — retry
+                Thread.sleep(250);
+              } catch (Throwable t) {
+                if (t.getMessage() != null && t.getMessage().contains("max-concurrent-calls")) {
+                  rejection = t;
+                  break;
+                }
+                throw t; // an unexpected failure
+              }
+            }
+            assertTrue(
+                rejection != null,
+                "a surplus concurrent call must be rejected with max-concurrent-calls while both"
+                    + " permits are held");
 
             // The two held calls still complete successfully.
             assertArrayEquals("ok".getBytes(StandardCharsets.UTF_8), h1.get(30, TimeUnit.SECONDS));
@@ -245,11 +261,17 @@ final class EndpointFaultIT {
                         "q".getBytes(StandardCharsets.UTF_8),
                         ("v" + i).getBytes(StandardCharsets.UTF_8)));
           }
-          // A 2-row-per-NEXT cap + small byte ceiling must BATCH the scan across multiple
-          // SCAN_NEXT (has_more) and still count every row — caps batch, they do not truncate.
+          // scanstats returns "cells,batches" (batches = SCAN_NEXT round-trips). A 2-row-per-NEXT
+          // cap must BATCH 7 rows across multiple SCAN_NEXT (batches > 1) while still returning
+          // every row — proving the cap batched (not truncated, not silently ignored, which would
+          // return all 7 in a single batch under the defaults).
+          String[] stats =
+              new String(callMethod(table, "scanstats", ""), StandardCharsets.UTF_8).split(",");
           assertEquals(
-              Integer.toString(rows),
-              new String(callMethod(table, "scan", ""), StandardCharsets.UTF_8));
+              rows, Integer.parseInt(stats[0]), "scan must return every row, not truncate");
+          assertTrue(
+              Integer.parseInt(stats[1]) > 1,
+              () -> "max-rows-per-next=2 over 7 rows must force >1 SCAN_NEXT, got " + stats[1]);
         });
   }
 
@@ -291,8 +313,16 @@ final class EndpointFaultIT {
 
   /**
    * Boots a single-region endpoint table whose coprocessor carries {@code coprocProps} (e.g.
-   * per-test endpoint caps), runs the test, and drops the table. Each test owns its table, so its
-   * caps drive a fresh shared runtime.
+   * per-test endpoint caps), runs the test, and drops the table.
+   *
+   * <p>Endpoint caps (max-concurrent-calls, max-scanners-per-call, max-rows-per-next, ...) are
+   * baked once when the shared Go runtime is first acquired for a coproc-id — they are NOT re-read
+   * per table (unlike allow-mutate). Each test still gets its own caps because {@link #dropTable}
+   * closes the region, drops the runtime refcount to 0, and stops the runtime, so the next test
+   * re-bakes its caps. This relies on these IT methods running SEQUENTIALLY on one region (surefire
+   * here is not forked/parallel); do not parallelize them or a prior test's caps would leak into a
+   * later one. The cap tests assert the cap actually took effect (e.g. a surplus call is rejected),
+   * so a leaked default would fail loudly rather than pass silently.
    */
   private static void withEndpointTable(Map<String, String> coprocProps, TableTest test)
       throws Throwable {

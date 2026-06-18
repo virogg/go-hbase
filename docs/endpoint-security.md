@@ -74,21 +74,25 @@ bounded **servicing-pool** thread, never the RegionServer handler thread that is
 blocked awaiting the endpoint's `EndpointResult`. On the Go side each call is a
 fresh goroutine, and the servicing pool is **fail-closed** — saturation surfaces
 as an error, not an unbounded block. The reentry-stress IT
-(`EndpointRoundTripIT.clientReverseMutateReentryStress`: 20 concurrent
-read-then-write calls on one region) confirms it.
+(`EndpointRoundTripIT.clientReverseMutateReentryStress`: 20 read-then-write calls,
+8 concurrent, on one region) confirms it.
 
-Because the RegionObserver pipeline fires on reverse `MUTATE`, an endpoint whose
-own `postPut` issues another reverse `MUTATE` can recurse. go-hbase adds **no
-guard** against this — it is the endpoint author's responsibility, exactly as for
-hand-written HBase coprocessors. Keep reverse mutations free of unbounded
-self-recursion.
+Because the RegionObserver pipeline fires on reverse `MUTATE`, recursion is
+possible — and go-hbase adds **no guard** against it: an endpoint's `Call` may
+recursively invoke another mutating endpoint, and in a mixed deployment a stock
+Java coprocessor's `prePut`/`postPut` may itself issue mutations on the reverse
+write. (A go-hbase *observer* cannot recurse this way: its `ObserverEnv` exposes no
+reverse-mutate API — only an endpoint's `EndpointEnv` can write.) Keeping reverse
+mutations free of unbounded self-recursion is the author's responsibility, exactly
+as for hand-written HBase coprocessors.
 
 ## Handler-pinning & the heartbeat watchdog (long endpoints)
 
 A long-running endpoint does **not** trip the supervisor's heartbeat watchdog into
 a false restart. The Go heartbeat is emitted from a **dedicated goroutine**,
-independent of the per-invoke handler goroutine, and the single out-writer funnel
-is non-blocking; on the Java side the watchdog records liveness from the reader
+independent of the per-invoke handler goroutine, and its enqueue onto the
+out-writer funnel is **non-blocking** — it drops a beat rather than block when the
+queue is full; on the Java side the watchdog records liveness from the reader
 thread and ticks on its own scheduler, while a long endpoint blocks only the RS
 handler thread it pinned (on `future.get`). So an endpoint may run for as long as
 `hbasecop.endpoint.timeout` permits (default 30s) without being mistaken for a

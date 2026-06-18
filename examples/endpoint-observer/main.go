@@ -64,6 +64,8 @@ func (upperEndpoint) Call(ctx context.Context, env *hbasecop.EndpointEnv, method
 		return slowSleep(ctx, payload)
 	case "manyscan":
 		return manyScan(ctx, env, payload)
+	case "scanstats":
+		return scanStats(ctx, env)
 	default:
 		return bytes.ToUpper(payload), nil
 	}
@@ -251,6 +253,33 @@ func manyScan(ctx context.Context, env *hbasecop.EndpointEnv, payload []byte) ([
 	}
 	slog.Info("endpoint-observer: manyscan opened", "count", opened)
 	return []byte(strconv.Itoa(opened)), nil
+}
+
+// scanStats scans the whole region and returns "cells,batches" where batches is
+// the number of SCAN_NEXT round-trips. A small max-rows-per-next / max-bytes-per-resp
+// forces several batches (batches > 1) while the cell count stays complete — so a
+// test can prove the cap BATCHED the scan rather than truncated it or was ignored.
+func scanStats(ctx context.Context, env *hbasecop.EndpointEnv) ([]byte, error) {
+	sc, err := env.OpenScanner(ctx, &hbasecop.Scan{})
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = sc.Close(ctx) }()
+
+	cells, batches := 0, 0
+	for {
+		cs, hasMore, err := sc.Next(ctx)
+		if err != nil {
+			return nil, err
+		}
+		batches++
+		cells += len(cs)
+		if !hasMore {
+			break
+		}
+	}
+	slog.Info("endpoint-observer: scanstats ok", "cells", cells, "batches", batches)
+	return fmt.Appendf(nil, "%d,%d", cells, batches), nil
 }
 
 func main() {
