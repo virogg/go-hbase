@@ -226,6 +226,10 @@ func slowSleep(ctx context.Context, payload []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("endpoint-observer: slow wants a duration payload, got %q: %w", payload, err)
 	}
+	// Logged as the handler begins — i.e. after the Java side acquired the admission
+	// permit and dispatched here. Tests poll the container log for this line to know a
+	// permit is held before probing the admission cap deterministically.
+	slog.Info("endpoint-observer: slow start", "dur", d.String())
 	select {
 	case <-time.After(d):
 		slog.Info("endpoint-observer: slow ok", "slept", d.String())

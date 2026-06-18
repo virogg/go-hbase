@@ -186,39 +186,32 @@ final class EndpointFaultIT {
   @Test
   void admissionCapRejectsSurplusConcurrentCalls() throws Throwable {
     withEndpointTable(
-        Map.of("hbasecop.endpoint.max-concurrent-calls", "2"),
+        // endpoint.timeout raised to 60s so the 20s holder never hits the default 30s timeout while
+        // it deliberately holds the single permit.
+        Map.of(
+            "hbasecop.endpoint.max-concurrent-calls", "1",
+            "hbasecop.endpoint.timeout", "60s"),
         (table, tn) -> {
-          ExecutorService pool = Executors.newFixedThreadPool(4);
+          long startsBefore = slowStartCount();
+          ExecutorService pool = Executors.newSingleThreadExecutor();
           try {
-            // Hold both admission permits with two long slow calls (10s gives an ample window).
-            Future<byte[]> h1 = pool.submit(() -> callQuietly(table, "slow", "10s"));
-            Future<byte[]> h2 = pool.submit(() -> callQuietly(table, "slow", "10s"));
+            // One holder takes the single admission permit. The permit is acquired on the Java side
+            // BEFORE the Go handler runs, so once the handler logs "slow start" the permit is
+            // provably held — gating on that log makes the surplus rejection deterministic (the
+            // holder acquires uncontested before we probe; no concurrency-timing guess). 20s is
+            // well
+            // over the few-second gate yet under the 60s endpoint timeout.
+            Future<byte[]> holder = pool.submit(() -> callQuietly(table, "slow", "20s"));
+            waitForSlowStarts(startsBefore, 1, Duration.ofSeconds(30));
 
-            // Poll a 3rd call until admission rejects it: once both permits are held a surplus call
-            // fails fast with "max-concurrent-calls". Retrying (rather than one fixed sleep) makes
-            // this deterministic regardless of how long the two holders take to acquire permits.
-            Throwable rejection = null;
-            Instant deadline = Instant.now().plus(Duration.ofSeconds(8));
-            while (Instant.now().isBefore(deadline)) {
-              try {
-                callMethod(table, "upper", "x"); // a permit is still free — retry
-                Thread.sleep(250);
-              } catch (Throwable t) {
-                if (t.getMessage() != null && t.getMessage().contains("max-concurrent-calls")) {
-                  rejection = t;
-                  break;
-                }
-                throw t; // an unexpected failure
-              }
-            }
-            assertTrue(
-                rejection != null,
-                "a surplus concurrent call must be rejected with max-concurrent-calls while both"
-                    + " permits are held");
+            // With the only permit held, a surplus call must fail fast with the cap error.
+            IOException err =
+                assertThrows(IOException.class, () -> callMethod(table, "upper", "x"));
+            assertTrue(err.getMessage().contains("max-concurrent-calls"), err.getMessage());
 
-            // The two held calls still complete successfully.
-            assertArrayEquals("ok".getBytes(StandardCharsets.UTF_8), h1.get(30, TimeUnit.SECONDS));
-            assertArrayEquals("ok".getBytes(StandardCharsets.UTF_8), h2.get(30, TimeUnit.SECONDS));
+            // The holder still completes successfully.
+            assertArrayEquals(
+                "ok".getBytes(StandardCharsets.UTF_8), holder.get(60, TimeUnit.SECONDS));
           } finally {
             pool.shutdownNow();
           }
@@ -371,9 +364,36 @@ final class EndpointFaultIT {
    * runtime. An unchanged count across a call window proves no restart occurred.
    */
   private static long goProcessStartCount() throws IOException, InterruptedException {
+    return dockerLogCount("GoProcess started:");
+  }
+
+  /**
+   * Counts {@code endpoint-observer: slow start} lines — one per "slow" endpoint handler that has
+   * begun (i.e. whose admission permit is already held, since the permit is acquired before the Go
+   * handler runs). Lets the admission test gate on a held permit deterministically.
+   */
+  private static long slowStartCount() throws IOException, InterruptedException {
+    return dockerLogCount("endpoint-observer: slow start");
+  }
+
+  /** Waits until {@code slowStartCount()} has risen by {@code delta} over {@code baseline}. */
+  private static void waitForSlowStarts(long baseline, int delta, Duration timeout)
+      throws Exception {
+    Instant cutoff = Instant.now().plus(timeout);
+    while (Instant.now().isBefore(cutoff)) {
+      if (slowStartCount() - baseline >= delta) {
+        return;
+      }
+      Thread.sleep(250);
+    }
+    throw new AssertionError(
+        "timed out waiting for " + delta + " 'slow start' log line(s) (the holder never acquired)");
+  }
+
+  /** grep -c {@code needle} over the dev container's whole log history. */
+  private static long dockerLogCount(String needle) throws IOException, InterruptedException {
     ProcessBuilder pb =
-        new ProcessBuilder(
-            "sh", "-c", "docker logs go-hbase-dev 2>&1 | grep -c 'GoProcess started:'");
+        new ProcessBuilder("sh", "-c", "docker logs go-hbase-dev 2>&1 | grep -c '" + needle + "'");
     pb.redirectErrorStream(true);
     Process proc = pb.start();
     String out;
