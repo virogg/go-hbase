@@ -71,6 +71,56 @@ func TestReverseClientGetRoutesResponseByReqID(t *testing.T) {
 	}
 }
 
+// TE41: ReverseClient.Mutate marshals an RpcRequest(MUTATE) carrying the
+// vendored MutationProto, sends it on the bound writer, and returns OK.
+func TestReverseClientMutate(t *testing.T) {
+	out := make(chan *wire.Message, 4)
+	rc := cpruntime.NewReverseClient(nil)
+	rc.Bind(out)
+
+	mutProto, err := proto.Marshal(&hbasepb.MutationProto{
+		Row:        []byte("row-1"),
+		MutateType: hbasepb.MutationProto_PUT.Enum(),
+	})
+	if err != nil {
+		t.Fatalf("marshal MutationProto: %v", err)
+	}
+
+	gotReq := make(chan *wire.Message, 1)
+	go func() {
+		req := <-out
+		gotReq <- req
+		respPayload, _ := proto.Marshal(&wirepb.RpcResponse{Status: wirepb.RpcResponse_OK})
+		rc.Deliver(&wire.Message{Type: wire.TypeRpcResponse, ReqID: req.ReqID, Payload: respPayload})
+	}()
+
+	resp, err := rc.Mutate(context.Background(), 9, mutProto)
+	if err != nil {
+		t.Fatalf("Mutate: %v", err)
+	}
+	if resp.GetStatus() != wirepb.RpcResponse_OK {
+		t.Fatalf("status = %v, want OK", resp.GetStatus())
+	}
+
+	req := <-gotReq
+	if req.Type != wire.TypeRpcRequest {
+		t.Fatalf("outbound type = %v, want RpcRequest", req.Type)
+	}
+	if req.RegionID != 9 {
+		t.Fatalf("outbound region_id = %d, want 9", req.RegionID)
+	}
+	var rr wirepb.RpcRequest
+	if err := proto.Unmarshal(req.Payload, &rr); err != nil {
+		t.Fatalf("unmarshal RpcRequest: %v", err)
+	}
+	if rr.GetOp() != wirepb.RpcRequest_MUTATE {
+		t.Fatalf("op = %v, want MUTATE", rr.GetOp())
+	}
+	if string(rr.GetOpPayload()) != string(mutProto) {
+		t.Fatalf("op_payload mismatch")
+	}
+}
+
 // An ERROR status surfaces as an error carrying the servicer's detail.
 func TestReverseClientGetErrorStatus(t *testing.T) {
 	out := make(chan *wire.Message, 4)

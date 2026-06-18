@@ -164,8 +164,17 @@ IT → собрать логи → `compose down`). Новые ключи `hbase
 
 ### Phase E4 — запись + лимиты + master
 - **TE41: реверс `MUTATE` (gated off) + решение по re-entry** *(E4)* — Deps: TE33. AC: реверс-мутация
-  через `Region`-уровень в **обход** observer-pipeline (A-2), off без
-  `hbasecop.endpoint.allow-mutate=true`; нет self-deadlock'а, когда endpoint мутирует свой же регион.
+  (PUT/DELETE) через `Region`-уровень — `region.put`/`region.delete`, как штатный
+  `MultiRowMutationEndpoint`. Обходит клиентский RPC-стек (RSRpcServices/ACL/quota/throttling), но
+  **не** observer-pipeline: `Pre/PostPut`, `Pre/PostDelete`, `Pre/PostBatchMutate` стреляют штатно —
+  в HBase 2.5 публичного API записи в обход обсерверов нет (подтверждено байткодом 2.5.10:
+  `Region.put|delete|batchMutate|mutateRow|mutateRowsWithLocks` → `HRegion.doMiniBatchMutate` →
+  `MutationBatchOperation` вызывает хуки; `MultiRowMutationEndpoint` пишет так же). Off без
+  `hbasecop.endpoint.allow-mutate=true` (per-table coproc-property или cluster-wide hbase-site).
+  **Re-entry-решение (Option 1):** deadlock-safe by construction — servicing-pool-поток ≠
+  заблокированный на `EndpointResult` handler-поток, Go goroutine-per-request обслуживает форвард
+  prePut на отдельной горутине, fail-closed пул конвертит насыщение в ошибку; рекурсия
+  `postPut→reverse-mutate→postPut` — ответственность автора endpoint'а (как в ванильном HBase, guard'а нет).
   Verify: IT оба состояния флага + reentry-стресс-IT.
 - **TE42: лимиты + admission control** *(E4)* — Deps: TE33. AC:
   `hbasecop.endpoint.{max-concurrent-calls, max-scanners-per-call, max-bytes-per-resp,

@@ -238,3 +238,64 @@ func TestEndpointEnvOpenScannerUnavailable(t *testing.T) {
 		t.Fatal("want error when reverse path is disabled")
 	}
 }
+
+// serveMutate fakes the bridge's MUTATE servicing: it records each applied
+// MutationProto on applied and replies OK. Asserts the op is MUTATE.
+func serveMutate(t *testing.T, rc *cpruntime.ReverseClient, out <-chan *wire.Message, applied chan<- *hbasepb.MutationProto) func() {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			case req := <-out:
+				var rr wirepb.RpcRequest
+				if err := proto.Unmarshal(req.Payload, &rr); err != nil {
+					t.Errorf("unmarshal RpcRequest: %v", err)
+					continue
+				}
+				if rr.GetOp() != wirepb.RpcRequest_MUTATE {
+					t.Errorf("op = %v, want MUTATE", rr.GetOp())
+				}
+				var m hbasepb.MutationProto
+				if err := proto.Unmarshal(rr.GetOpPayload(), &m); err != nil {
+					t.Errorf("unmarshal MutationProto: %v", err)
+				}
+				applied <- &m
+				payload, _ := proto.Marshal(&wirepb.RpcResponse{Status: wirepb.RpcResponse_OK})
+				rc.Deliver(&wire.Message{Type: wire.TypeRpcResponse, ReqID: req.ReqID, Payload: payload})
+			}
+		}
+	}()
+	return func() { close(done) }
+}
+
+// TE41: env.Mutate sends a reverse PUT to the invoking region; the bridge
+// receives the marshalled MutationProto and replies OK.
+func TestEndpointEnvMutatePut(t *testing.T) {
+	out := make(chan *wire.Message, 8)
+	rc := cpruntime.NewReverseClient(nil)
+	rc.Bind(out)
+	applied := make(chan *hbasepb.MutationProto, 1)
+	stop := serveMutate(t, rc, out, applied)
+	defer stop()
+
+	env := &EndpointEnv{rc: rc, regionID: 1}
+	m := &MutationProto{Row: []byte("row-1"), MutateType: hbasepb.MutationProto_PUT.Enum()}
+	if err := env.Mutate(context.Background(), m); err != nil {
+		t.Fatalf("Mutate: %v", err)
+	}
+	got := <-applied
+	if string(got.GetRow()) != "row-1" || got.GetMutateType() != hbasepb.MutationProto_PUT {
+		t.Fatalf("applied = row %q type %v; want row-1 PUT", got.GetRow(), got.GetMutateType())
+	}
+}
+
+// With the reverse path disabled (nil client), Mutate fails cleanly.
+func TestEndpointEnvMutateUnavailable(t *testing.T) {
+	var env EndpointEnv // rc == nil
+	if err := env.Mutate(context.Background(), &MutationProto{}); err == nil {
+		t.Fatal("want error when reverse path is disabled")
+	}
+}

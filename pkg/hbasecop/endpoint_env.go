@@ -67,6 +67,31 @@ func CellValue(r *Result, family, qualifier []byte) ([]byte, bool) {
 	return nil, false
 }
 
+// Mutate applies a write — a Put or a Delete — to the invoking region from
+// inside the endpoint call (Tier 2, TE41). m is a vendored HBase MutationProto;
+// set its MutateType to [MutationProto_PUT] or [MutationProto_DELETE] (other
+// types are rejected by the bridge). The write goes through the region's
+// observer pipeline (Pre/Post-Put/Delete hooks fire, exactly as HBase's own
+// MultiRowMutationEndpoint), but bypasses the client RPC stack (no
+// RSRpcServices/ACL/quota). It is gated off server-side unless
+// hbasecop.endpoint.allow-mutate=true; when disabled — or when the reverse path
+// is unavailable — Mutate returns an error. Writing the region the endpoint was
+// invoked on is safe (no self-deadlock); avoid an observer that re-mutates in a
+// loop (the bridge has no recursion guard, as in vanilla HBase).
+func (e *EndpointEnv) Mutate(ctx context.Context, m *MutationProto) error {
+	if e == nil || e.rc == nil {
+		return errors.New("hbasecop: reverse writes unavailable (reverse path disabled)")
+	}
+	mutProto, err := proto.Marshal(m)
+	if err != nil {
+		return fmt.Errorf("hbasecop: marshal MutationProto: %w", err)
+	}
+	if _, err := e.rc.Mutate(ctx, e.regionID, mutProto); err != nil {
+		return err
+	}
+	return nil
+}
+
 // Scanner is a server-side pull scanner over region-local data (Tier 2, TE33),
 // opened by [EndpointEnv.OpenScanner]. Drive it by calling Next until hasMore is
 // false, then Close. Always Close (defer) so the bridge releases the underlying
