@@ -210,7 +210,7 @@ func (l *Loop) runReader(ctx context.Context, cancel context.CancelFunc) {
 			// Client-initiated server-side RPC (Tier 2). Dispatched on a fresh
 			// goroutine like a hook so a slow endpoint does not stall the reader.
 			go l.handleEndpoint(ctx, msg)
-		case wire.TypeRpcResponse:
+		case wire.TypeRPCResponse:
 			// Reply to a Go-initiated reverse RPC (Tier 2). Route to the
 			// stub waiter keyed by req_id; no PB decode in the router.
 			if h := l.cfg.ReverseResponseHandler; h != nil {
@@ -253,7 +253,7 @@ func (l *Loop) runBulkReader(ctx context.Context, cancel context.CancelFunc) {
 			continue
 		}
 
-		if msg.Type == wire.TypeRpcResponse {
+		if msg.Type == wire.TypeRPCResponse {
 			if h := l.cfg.ReverseResponseHandler; h != nil {
 				h(msg)
 			}

@@ -36,7 +36,7 @@ func TestReverseClientGetRoutesResponseByReqID(t *testing.T) {
 			Status:  wirepb.RpcResponse_OK,
 			Payload: []byte("RESULT-BYTES"),
 		})
-		rc.Deliver(&wire.Message{Type: wire.TypeRpcResponse, ReqID: req.ReqID, Payload: respPayload})
+		rc.Deliver(&wire.Message{Type: wire.TypeRPCResponse, ReqID: req.ReqID, Payload: respPayload})
 	}()
 
 	resp, err := rc.Get(context.Background(), 7, getProto)
@@ -53,7 +53,7 @@ func TestReverseClientGetRoutesResponseByReqID(t *testing.T) {
 	// The frame that went out must be a GET RpcRequest carrying the Get proto
 	// and the target region id in the wire header.
 	req := <-gotReq
-	if req.Type != wire.TypeRpcRequest {
+	if req.Type != wire.TypeRPCRequest {
 		t.Fatalf("outbound type = %v, want RpcRequest", req.Type)
 	}
 	if req.RegionID != 7 {
@@ -91,7 +91,7 @@ func TestReverseClientMutate(t *testing.T) {
 		req := <-out
 		gotReq <- req
 		respPayload, _ := proto.Marshal(&wirepb.RpcResponse{Status: wirepb.RpcResponse_OK})
-		rc.Deliver(&wire.Message{Type: wire.TypeRpcResponse, ReqID: req.ReqID, Payload: respPayload})
+		rc.Deliver(&wire.Message{Type: wire.TypeRPCResponse, ReqID: req.ReqID, Payload: respPayload})
 	}()
 
 	if err := rc.Mutate(context.Background(), 9, mutProto); err != nil {
@@ -99,7 +99,7 @@ func TestReverseClientMutate(t *testing.T) {
 	}
 
 	req := <-gotReq
-	if req.Type != wire.TypeRpcRequest {
+	if req.Type != wire.TypeRPCRequest {
 		t.Fatalf("outbound type = %v, want RpcRequest", req.Type)
 	}
 	if req.RegionID != 9 {
@@ -129,7 +129,7 @@ func TestReverseClientGetErrorStatus(t *testing.T) {
 			Status:  wirepb.RpcResponse_ERROR,
 			Payload: []byte("no region for id"),
 		})
-		rc.Deliver(&wire.Message{Type: wire.TypeRpcResponse, ReqID: req.ReqID, Payload: respPayload})
+		rc.Deliver(&wire.Message{Type: wire.TypeRPCResponse, ReqID: req.ReqID, Payload: respPayload})
 	}()
 
 	_, err := rc.Get(context.Background(), 1, nil)
@@ -147,7 +147,7 @@ func TestReverseClientGetBlocksUntilCtxDone(t *testing.T) {
 
 	go func() {
 		<-out // drain the request, then deliver a mismatched req_id
-		rc.Deliver(&wire.Message{Type: wire.TypeRpcResponse, ReqID: 999999})
+		rc.Deliver(&wire.Message{Type: wire.TypeRPCResponse, ReqID: 999999})
 	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
@@ -173,7 +173,7 @@ func TestReverseClientReqIDStartsAtOneMonotonic(t *testing.T) {
 		if req.ReqID != want {
 			t.Fatalf("req_id = %d, want %d", req.ReqID, want)
 		}
-		rc.Deliver(&wire.Message{Type: wire.TypeRpcResponse, ReqID: req.ReqID, Payload: okPayload})
+		rc.Deliver(&wire.Message{Type: wire.TypeRPCResponse, ReqID: req.ReqID, Payload: okPayload})
 		<-done
 	}
 }

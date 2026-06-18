@@ -120,7 +120,7 @@ func (c *ReverseClient) call(ctx context.Context, regionID uint32, req *wirepb.R
 		c.mu.Unlock()
 	}()
 
-	msg := &wire.Message{Type: wire.TypeRpcRequest, ReqID: id, RegionID: regionID, Payload: payload}
+	msg := &wire.Message{Type: wire.TypeRPCRequest, ReqID: id, RegionID: regionID, Payload: payload}
 	select {
 	case c.out <- msg:
 	case <-ctx.Done():

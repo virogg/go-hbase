@@ -62,14 +62,14 @@ func TestLoopBulkReaderDeliversRpcResponse(t *testing.T) {
 	done := make(chan struct{})
 	go func() { _ = loop.Run(ctx); close(done) }()
 
-	want := &wire.Message{Type: wire.TypeRpcResponse, ReqID: 1234, Payload: []byte{0xAA, 0xBB}}
+	want := &wire.Message{Type: wire.TypeRPCResponse, ReqID: 1234, Payload: []byte{0xAA, 0xBB}}
 	if err := bulkMockOut.Send(encodeWireFrame(t, want)); err != nil {
 		t.Fatalf("Send: %v", err)
 	}
 
 	select {
 	case m := <-got:
-		if m.Type != wire.TypeRpcResponse || m.ReqID != 1234 {
+		if m.Type != wire.TypeRPCResponse || m.ReqID != 1234 {
 			t.Fatalf("handler got %+v, want RpcResponse req_id=1234", m)
 		}
 		if string(m.Payload) != string(want.Payload) {

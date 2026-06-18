@@ -53,7 +53,7 @@ func serveReverse(
 					Payload: resultBytes,
 				})
 				rc.Deliver(&wire.Message{
-					Type:    wire.TypeRpcResponse,
+					Type:    wire.TypeRPCResponse,
 					ReqID:   req.ReqID,
 					Payload: payload,
 				})
@@ -177,7 +177,7 @@ func serveScan(t *testing.T, rc *cpruntime.ReverseClient, out <-chan *wire.Messa
 					t.Errorf("unexpected op %v", rr.GetOp())
 				}
 				payload, _ := proto.Marshal(resp)
-				rc.Deliver(&wire.Message{Type: wire.TypeRpcResponse, ReqID: req.ReqID, Payload: payload})
+				rc.Deliver(&wire.Message{Type: wire.TypeRPCResponse, ReqID: req.ReqID, Payload: payload})
 			}
 		}
 	}()
@@ -264,7 +264,7 @@ func serveMutate(t *testing.T, rc *cpruntime.ReverseClient, out <-chan *wire.Mes
 				}
 				applied <- &m
 				payload, _ := proto.Marshal(&wirepb.RpcResponse{Status: wirepb.RpcResponse_OK})
-				rc.Deliver(&wire.Message{Type: wire.TypeRpcResponse, ReqID: req.ReqID, Payload: payload})
+				rc.Deliver(&wire.Message{Type: wire.TypeRPCResponse, ReqID: req.ReqID, Payload: payload})
 			}
 		}
 	}()

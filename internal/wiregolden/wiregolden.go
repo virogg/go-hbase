@@ -113,9 +113,9 @@ func parseType(s string) (wire.Type, error) {
 	case "ENDPOINT_RESULT":
 		return wire.TypeEndpointResult, nil
 	case "RPC_REQUEST":
-		return wire.TypeRpcRequest, nil
+		return wire.TypeRPCRequest, nil
 	case "RPC_RESPONSE":
-		return wire.TypeRpcResponse, nil
+		return wire.TypeRPCResponse, nil
 	default:
 		return wire.TypeUnknown, fmt.Errorf("unknown type %q", s)
 	}

@@ -37,14 +37,14 @@ func TestLoopRoutesRpcResponseToReverseHandler(t *testing.T) {
 	done := make(chan struct{})
 	go func() { _ = loop.Run(ctx); close(done) }()
 
-	want := &wire.Message{Type: wire.TypeRpcResponse, ReqID: 4242, Payload: []byte{0x01, 0x02}}
+	want := &wire.Message{Type: wire.TypeRPCResponse, ReqID: 4242, Payload: []byte{0x01, 0x02}}
 	if err := ch.mockOut.Send(encodeWireFrame(t, want)); err != nil {
 		t.Fatalf("Send: %v", err)
 	}
 
 	select {
 	case m := <-got:
-		if m.Type != wire.TypeRpcResponse || m.ReqID != 4242 {
+		if m.Type != wire.TypeRPCResponse || m.ReqID != 4242 {
 			t.Fatalf("handler got %+v, want RpcResponse req_id=4242", m)
 		}
 		if string(m.Payload) != string(want.Payload) {

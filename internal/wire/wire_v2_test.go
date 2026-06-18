@@ -32,17 +32,17 @@ func TestRoundTripEndpointFrameTypes(t *testing.T) {
 		{
 			name: "rpc_request",
 			msg: wire.Message{
-				Type: wire.TypeRpcRequest, ReqID: 12, RegionID: 4, Payload: []byte("scan-open"),
+				Type: wire.TypeRPCRequest, ReqID: 12, RegionID: 4, Payload: []byte("scan-open"),
 			},
 		},
 		{
 			name: "rpc_response",
-			msg:  wire.Message{Type: wire.TypeRpcResponse, ReqID: 12, Payload: []byte{0x01, 0x02, 0x03}},
+			msg:  wire.Message{Type: wire.TypeRPCResponse, ReqID: 12, Payload: []byte{0x01, 0x02, 0x03}},
 		},
 		{
 			name: "rpc_response_multichunk",
 			msg: wire.Message{
-				Type: wire.TypeRpcResponse, ReqID: 13,
+				Type: wire.TypeRPCResponse, ReqID: 13,
 				Payload: makePayload(wire.MaxPayloadBytes*2 + 7),
 			},
 		},
@@ -68,7 +68,7 @@ func TestRoundTripEndpointFrameTypes(t *testing.T) {
 func TestNewFrameTypesValidAndNotControl(t *testing.T) {
 	for _, typ := range []wire.Type{
 		wire.TypeEndpointInvoke, wire.TypeEndpointResult,
-		wire.TypeRpcRequest, wire.TypeRpcResponse,
+		wire.TypeRPCRequest, wire.TypeRPCResponse,
 	} {
 		if !typ.Valid() {
 			t.Errorf("type %d: Valid()=false, want true", typ)
