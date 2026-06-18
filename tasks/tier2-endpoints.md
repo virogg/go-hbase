@@ -274,7 +274,12 @@ IT → собрать логи → `compose down`). Новые ключи `hbase
 - [x] TE34 Go SDK `EndpointEnv.OpenScanner/Get` — эргономичный API (Get TE32 + OpenScanner/Scanner
       TE33); канонический server-side SUM endpoint (агрегация в контексте региона). **live IT
       зелёный** (EndpointRoundTripIT server-side SUM = 15, HBase 2.5.11, 2026-06-18)
-- [ ] **CP-E3:** серверная агрегация по данным региона + leak-safety сканеров
+- [x] **CP-E3:** серверная агрегация по данным региона + leak-safety сканеров — достигнут
+      2026-06-18. GET/data-dependent A→B/pull-scan/server-side SUM на живом HBase 2.5.11;
+      crash-mid-scan → reaped scanner → recovery доказан. Adversarial review (11 confirmed findings,
+      2 HIGH) → must-fix исправлены (non-blocking reject off reader-thread, Go reverse-call deadline)
+      + hardening (per-call scanner reaping, closeQuietly). Deferred → TE42: 3 narrow crash-window
+      races (getScanner-before-register, closeAll-vs-register, scanner-before-OPEN-reply)
 
 ### Phase E4 — запись + лимиты + master
 - [ ] TE41 реверс `MUTATE` (gated off) + решение по re-entry
