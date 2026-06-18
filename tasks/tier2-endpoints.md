@@ -364,12 +364,22 @@ IT → собрать логи → `compose down`). Новые ключи `hbase
       2026-06-18); make `test-integration-master-endpoint`. Unit: request-mapping/null-payload/
       go-error/controller-failure(+precedence)/missing-response (Mockito channel). Opus-review
       (5 confirmed, 0 blocking): доки/nits исправлены; packaging-граница → NB в TE53.
-- [ ] TE53 упаковка (getServices в Generic*, hbasecop-build, preflight) — **NB (review)**: решить
-      судьбу `com.virogg.hbasecop.client.*` (EndpointClient/AdminEndpointClient/EndpointCalls) в
-      uber-shade coproc-jar — сейчас попадают в server-jar по wildcard (`bin/**` — единственный
-      class-exclude). Исключить из shade (клиентские хелперы → тонкий main-артефакт / отдельный
-      client-модуль) ИЛИ осознанно шипать и задокументировать. Inert (HBase client = provided), но
-      dead client-code в server-jar.
+- [x] TE53 упаковка (getServices в Generic*, hbasecop-build, preflight) — Java-стороны AC были уже
+      выполнены ранее (getServices() вшит в стоковые `Generic{Region,Master}Observer` через
+      `GenericCoprocessor.endpointServices`; Java `ConfigPreflight` знает+валидирует все 12
+      `hbasecop.endpoint.*`; `package`/`deploy` регистрируют Service неявно через делегат, ноль ручной
+      Java). Закрыты gap'ы: **(1)** Go-CLI `hbasecop-build config` теперь знает `hbasecop.endpoint.*`
+      (`--list` печатает 12 ключей, `--check` валидирует duration/posint/**bool** — паритет с Java
+      ConfigPreflight); **(2)** `hbasecop-build init --surface endpoint` скаффолдит endpoint
+      (top-level `Endpoint` + `RunAll`, gofmt-clean); **(3)** review-NB: `com/virogg/hbasecop/client/**`
+      исключён из uber-shade — coproc-jar несёт только server-bridge, клиентские хелперы остаются в
+      тонком main-артефакте. **Verify зелёный:** `make endpoint-package-smoke` (`hbasecop-build
+      package` → deployable jar: ELF + GoEndpointServiceImpl + GenericRegionObserver, без client/) +
+      `make test-integration-endpoint-packaged` (packaged jar round-trips на живом HBase 2.5.11,
+      EndpointRoundTripIT 1/1). Go unit: config endpoint-keys + init endpoint-surface.
+      **NB (limitation):** `hbasecop-build admin deploy` — table-scoped (DeployTool: disable/modify/
+      enable); master-endpoint регистрируется через `hbase.coprocessor.master.classes` в hbase-site
+      (как MasterEndpointIT), не через `deploy` — отдельная affordance отложена.
 - [ ] TE54 IT + fault-matrix + доки
 - [ ] **CP-E5 (GO/NO-GO релиз):** агрегация по multi-region таблице, zero-Java деплой, fault-matrix зелёный
 

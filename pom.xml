@@ -432,6 +432,11 @@
                   <artifact>com.virogg:hbasecop-bridge</artifact>
                   <excludes>
                     <exclude>bin/**</exclude>
+                    <!-- Client-side helpers (EndpointClient/AdminEndpointClient) belong to the
+                         thin main artifact consumers depend on, not the server coproc-jar this
+                         uber shade produces; keep them out so the deployed jar carries only the
+                         server bridge. -->
+                    <exclude>com/virogg/hbasecop/client/**</exclude>
                   </excludes>
                 </filter>
               </filters>

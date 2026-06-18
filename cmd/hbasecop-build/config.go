@@ -17,8 +17,9 @@ import (
 )
 
 // configKey documents one hbasecop.* setting for `config --list` and drives
-// `config --check`. kind is one of: duration, posint, policy, prefix-duration,
-// prefix-policy. The validation rules mirror the Java ConfigPreflight.
+// `config --check`. kind is one of: duration, posint, bool, policy,
+// prefix-duration, prefix-policy. The validation rules mirror the Java
+// ConfigPreflight.
 type configKey struct {
 	name     string
 	kind     string
@@ -40,6 +41,22 @@ var configKeys = []configKey{
 	{"hbasecop.ring.capacity", "posint", "16", "positive integer"},
 	{"hbasecop.ring.max-object-size", "posint", "1048576", "positive integer (bytes)"},
 	{"hbasecop.shutdown.graceful-timeout", "duration", "2s", "duration with unit"},
+	// Tier 2 endpoint coprocessor tunables. Canonical source of truth is the Java
+	// ConfigPreflight (DURATION_KEYS/POSITIVE_INT_KEYS/BOOLEAN_KEYS) + GenericCoprocessor KEY_*
+	// defaults; keep these three lists in sync — a key added there but missing here degrades to an
+	// unvalidated "unknown key" notice in `config --check` (runtime preflight still fails fast).
+	{"hbasecop.endpoint.timeout", "duration", "30s", "duration with unit"},
+	{"hbasecop.endpoint.servicing-pool-size", "posint", "8", "positive integer"},
+	{"hbasecop.endpoint.servicing-queue-depth", "posint", "64", "positive integer"},
+	{"hbasecop.endpoint.servicing-timeout", "duration", "30s", "duration with unit"},
+	{"hbasecop.endpoint.bulk-ring.capacity", "posint", "(falls back to ring.capacity)", "positive integer"},
+	{"hbasecop.endpoint.bulk-ring.max-object-size", "posint", "(falls back to ring.max-object-size)", "positive integer (bytes)"},
+	{"hbasecop.endpoint.allow-mutate", "bool", "false", "true | false"},
+	{"hbasecop.endpoint.max-concurrent-calls", "posint", "8", "positive integer"},
+	{"hbasecop.endpoint.max-scanners-per-call", "posint", "16", "positive integer"},
+	{"hbasecop.endpoint.max-bytes-per-resp", "posint", "1048576", "positive integer (bytes)"},
+	{"hbasecop.endpoint.max-rows-per-next", "posint", "1000", "positive integer"},
+	{"hbasecop.endpoint.scanner-idle-lease", "duration", "2m", "duration with unit"},
 }
 
 var durationRe = regexp.MustCompile(`^\d+\s*(ns|us|ms|s|m|h|d)$`)
@@ -164,6 +181,10 @@ func validateKey(name, value string) string {
 			case "posint":
 				if n, err := strconv.Atoi(strings.TrimSpace(value)); err != nil || n <= 0 {
 					return name + "=" + value + " (want a positive integer)"
+				}
+			case "bool":
+				if v := strings.TrimSpace(value); !strings.EqualFold(v, "true") && !strings.EqualFold(v, "false") {
+					return name + "=" + value + " (want true|false)"
 				}
 			}
 		}

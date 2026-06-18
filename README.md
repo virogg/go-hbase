@@ -94,7 +94,8 @@ Master / RegionServer / WAL / BulkLoad используют `RunMaster` / `RunRe
 `RunWAL` / `RunBulkLoad`.
 
 Не хотите писать с нуля — `go run ./cmd/hbasecop-build init my-observer`
-генерирует готовый к сборке скелет (`--surface region|master|regionserver|wal|bulkload`).
+генерирует готовый к сборке скелет (`--surface region|master|regionserver|wal|bulkload|endpoint`;
+`endpoint` скаффолдит серверный endpoint-копроцессор и пакуется как `--surface region`).
 
 **3. Упакуйте coproc-jar — одна команда.** `package` кросс-компилирует ELF,
 встраивает стоковый Java-делегат (Java писать не нужно) и шейдит мост:

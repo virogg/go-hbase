@@ -315,6 +315,20 @@ endpoint-observer-jar: go-build-endpoint ## TE22: build deployable endpoint copr
 	  { echo "ERROR: GoEndpointServiceImpl class missing from coproc-jar" >&2; exit 1; }
 	@echo "OK: endpoint-observer.jar -- bridge shaded, Go ELF embedded"
 
+.PHONY: endpoint-package-smoke
+endpoint-package-smoke: ## TE53: smoke - `hbasecop-build package` builds a deployable endpoint coproc-jar (ELF + Service + delegate; no client helpers).
+	$(MVN) $(MVN_FLAGS) install -DskipTests
+	$(GO) run ./cmd/hbasecop-build package --src ./$(ENDPOINT_OBSERVER_DIR) --surface region --out target/endpoint-packaged.jar
+	@unzip -l target/endpoint-packaged.jar | grep -q 'bin/linux-amd64/hbasecop-runtime' || \
+	  { echo "ERROR: Go ELF missing from packaged jar" >&2; exit 1; }
+	@unzip -l target/endpoint-packaged.jar | grep -q 'com/virogg/hbasecop/bridge/endpoint/GoEndpointServiceImpl.class' || \
+	  { echo "ERROR: GoEndpointServiceImpl (endpoint Service) missing from packaged jar" >&2; exit 1; }
+	@unzip -l target/endpoint-packaged.jar | grep -q 'com/virogg/hbasecop/bridge/entrypoint/GenericRegionObserver.class' || \
+	  { echo "ERROR: GenericRegionObserver delegate missing from packaged jar" >&2; exit 1; }
+	@if unzip -l target/endpoint-packaged.jar | grep -q 'com/virogg/hbasecop/client/'; then \
+	  echo "ERROR: client helpers leaked into the coproc-jar (shade exclude failed)" >&2; exit 1; fi
+	@echo "OK: hbasecop-build package -> deployable endpoint coproc-jar (Service + delegate, no client helpers)"
+
 # ---------------------------------------------------------------------------
 # Examples (T36): fault-injection coproc-jar.
 # ---------------------------------------------------------------------------
@@ -572,6 +586,24 @@ test-integration-endpoint-multiregion: endpoint-observer-jar ## TE51: full IT - 
 	  $(MVN) $(MVN_FLAGS) test -Dtest=EndpointMultiRegionIT -DfailIfNoTests=false; \
 	  status=$$?; \
 	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-endpoint-multiregion.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
+
+# ---------------------------------------------------------------------------
+# Integration (TE53): deploy-IT - the coproc-jar produced by `hbasecop-build
+# package` (not the example pom) deploys and an endpoint round-trips on live HBase.
+# ---------------------------------------------------------------------------
+
+.PHONY: test-integration-endpoint-packaged
+test-integration-endpoint-packaged: endpoint-package-smoke ## TE53: deploy-IT - stage the hbasecop-build-packaged endpoint jar, round-trip an endpoint call, tear down.
+	@mkdir -p test/integration/coproc-jars
+	cp target/endpoint-packaged.jar $(ENDPOINT_COPROC_JAR_STAGED)
+	$(HBASE_COMPOSE_CMD) up -d --build
+	./test/integration/scripts/wait-master-status.sh
+	@set +e; \
+	  $(MVN) $(MVN_FLAGS) test -Dtest='EndpointRoundTripIT#clientEndpointCallRoundTripsToGo' -DfailIfNoTests=false; \
+	  status=$$?; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-endpoint-packaged.log 2>&1 || true; \
 	  $(HBASE_COMPOSE_CMD) down; \
 	  exit $$status
 

@@ -13,7 +13,7 @@ import (
 )
 
 func TestRunInitScaffolds(t *testing.T) {
-	for _, surface := range []string{"region", "master", "wal"} {
+	for _, surface := range []string{"region", "master", "wal", "endpoint"} {
 		t.Run(surface, func(t *testing.T) {
 			dir := filepath.Join(t.TempDir(), "obs")
 			if err := runInit([]string{"--surface", surface, "--dir", dir, "myobs"}); err != nil {

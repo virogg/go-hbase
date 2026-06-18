@@ -65,6 +65,11 @@ func Build(opts BuildOptions) error {
 	}
 	defer func() { _ = bridge.Close() }()
 
+	if dir := filepath.Dir(opts.OutJarPath); dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return fmt.Errorf("out: create dir %s: %w", dir, err)
+		}
+	}
 	outFile, err := os.Create(opts.OutJarPath)
 	if err != nil {
 		return fmt.Errorf("out: create %s: %w", opts.OutJarPath, err)

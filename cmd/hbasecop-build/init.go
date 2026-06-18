@@ -8,13 +8,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 )
 
-// surfaceScaffold maps a --surface to the observer construction snippet, the
-// Run* entrypoint, and whether the body uses context (drives the import set).
+// surfaceScaffold maps a --surface to the scaffold pieces: an optional top-level
+// declaration (decl), the in-main construction snippet (body), the Run*
+// entrypoint (run), whether the body/decl uses context, and any extra stdlib
+// imports beyond log/slog + os.
 var surfaceScaffold = map[string]struct {
-	body, run string
-	ctx       bool
+	decl, body, run string
+	ctx             bool
+	extraImports    []string
 }{
 	"region": {
 		body: `obs := hbasecop.NewRegion().
@@ -29,6 +34,23 @@ var surfaceScaffold = map[string]struct {
 	"regionserver": {body: embedded("RegionServer"), run: "hbasecop.RunRegionServer(obs)"},
 	"wal":          {body: embedded("WAL"), run: "hbasecop.RunWAL(obs)"},
 	"bulkload":     {body: embedded("BulkLoad"), run: "hbasecop.RunBulkLoad(obs)"},
+	// An endpoint is a client-initiated server RPC, not an event observer; it is
+	// hosted by the stock GenericRegionObserver, so RunAll registers it alongside
+	// a no-op region observer (a region coprocessor needs an observer to attach).
+	"endpoint": {
+		decl: `// endpoint is a server-side endpoint coprocessor: a client invokes it via the
+// generic GoEndpointService and the bridge dispatches the call here. Replace the
+// body with your logic; use env to read/scan/mutate the invoking region.
+type endpoint struct{}
+
+func (endpoint) Call(_ context.Context, env *hbasecop.EndpointEnv, method string, payload []byte) ([]byte, error) {
+	slog.Info("endpoint call", "method", method, "bytes", len(payload))
+	return bytes.ToUpper(payload), nil
+}`,
+		run:          "hbasecop.RunAll(hbasecop.UnimplementedRegionObserver{}, endpoint{})",
+		ctx:          true,
+		extraImports: []string{"bytes"},
+	},
 }
 
 // embedded returns a skeleton that embeds the no-op observer for surfaces
@@ -39,10 +61,10 @@ func embedded(surface string) string {
 	}`, surface)
 }
 
-// runInit scaffolds a buildable Go observer (main.go + README) for the surface.
+// runInit scaffolds a buildable Go observer/endpoint (main.go + README) for the surface.
 func runInit(args []string) error {
 	fs := flag.NewFlagSet("hbasecop-build init", flag.ContinueOnError)
-	surface := fs.String("surface", "region", "observer surface: region|master|regionserver|wal|bulkload")
+	surface := fs.String("surface", "region", "surface: region|master|regionserver|wal|bulkload|endpoint")
 	dir := fs.String("dir", "", "output dir (default: ./<name>)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -53,7 +75,7 @@ func runInit(args []string) error {
 	name := fs.Arg(0)
 	sc, ok := surfaceScaffold[*surface]
 	if !ok {
-		return fmt.Errorf("--surface %q invalid; want region|master|regionserver|wal|bulkload", *surface)
+		return fmt.Errorf("--surface %q invalid; want region|master|regionserver|wal|bulkload|endpoint", *surface)
 	}
 	out := *dir
 	if out == "" {
@@ -63,30 +85,49 @@ func runInit(args []string) error {
 		return err
 	}
 
-	ctxImport := ""
+	// Assemble the import set: log/slog + os always, context if used, plus any extras, sorted.
+	std := []string{"log/slog", "os"}
 	if sc.ctx {
-		ctxImport = "\t\"context\"\n"
+		std = append(std, "context")
 	}
-	main := fmt.Sprintf(`// Command %s is a hbasecop observer scaffold.
+	std = append(std, sc.extraImports...)
+	sort.Strings(std)
+	var imports strings.Builder
+	for _, s := range std {
+		fmt.Fprintf(&imports, "\t%q\n", s)
+	}
+
+	declBlock := ""
+	if sc.decl != "" {
+		declBlock = "\n" + sc.decl + "\n"
+	}
+	bodyLine := ""
+	if sc.body != "" {
+		bodyLine = "\t" + sc.body + "\n"
+	}
+
+	main := fmt.Sprintf(`// Command %s is a hbasecop %s scaffold.
 package main
 
 import (
-%s	"log/slog"
-	"os"
-
+%s
 	"github.com/virogg/go-hbase/pkg/hbasecop"
 )
-
+%s
 func main() {
-	%s
-	if err := %s; err != nil {
+%s	if err := %s; err != nil {
 		slog.Error("fatal", "err", err)
 		os.Exit(1)
 	}
 }
-`, name, ctxImport, sc.body, sc.run)
+`, name, surfaceLabel(*surface), imports.String(), declBlock, bodyLine, sc.run)
 
-	readme := fmt.Sprintf("# %s\n\nhbasecop %s observer.\n\n"+
+	// An endpoint is hosted by GenericRegionObserver, so it packages with --surface region.
+	pkgSurface := *surface
+	if pkgSurface == "endpoint" {
+		pkgSurface = "region"
+	}
+	readme := fmt.Sprintf("# %s\n\nhbasecop %s.\n\n"+
 		"```bash\n"+
 		"# build + package (cross-compiles, embeds the stock %s delegate)\n"+
 		"hbasecop-build package --src . --surface %s --out %s.jar\n\n"+
@@ -94,7 +135,7 @@ func main() {
 		"hbasecop-build admin deploy --table T \\\n"+
 		"  --jar file:///coproc-jars/%s.jar \\\n"+
 		"  --class %s\n"+
-		"```\n", name, *surface, *surface, *surface, name, name, delegateFor(*surface))
+		"```\n", name, surfaceLabel(*surface), pkgSurface, pkgSurface, name, name, delegateFor(pkgSurface))
 
 	if err := writeNew(filepath.Join(out, "main.go"), main); err != nil {
 		return err
@@ -102,8 +143,16 @@ func main() {
 	if err := writeNew(filepath.Join(out, "README.md"), readme); err != nil {
 		return err
 	}
-	fmt.Printf("hbasecop-build: scaffolded %s observer in %s/\n", *surface, out)
+	fmt.Printf("hbasecop-build: scaffolded %s in %s/\n", surfaceLabel(*surface), out)
 	return nil
+}
+
+// surfaceLabel is the human description used in the scaffold comment and README.
+func surfaceLabel(surface string) string {
+	if surface == "endpoint" {
+		return "endpoint coprocessor"
+	}
+	return surface + " observer"
 }
 
 func delegateFor(surface string) string {

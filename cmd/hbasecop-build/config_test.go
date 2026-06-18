@@ -23,6 +23,15 @@ func TestValidateKey(t *testing.T) {
 		{"hbasecop.ring.capacity", "0", true},
 		{"hbasecop.ring.capacity", "x", true},
 		{"hbasecop.heartbeat.period", "500ms", false},
+		{"hbasecop.endpoint.timeout", "30s", false},
+		{"hbasecop.endpoint.timeout", "30", true}, // duration needs a unit
+		{"hbasecop.endpoint.scanner-idle-lease", "2m", false},
+		{"hbasecop.endpoint.allow-mutate", "true", false},
+		{"hbasecop.endpoint.allow-mutate", "FALSE", false}, // case-insensitive
+		{"hbasecop.endpoint.allow-mutate", "yes", true},    // not a bool
+		{"hbasecop.endpoint.max-concurrent-calls", "8", false},
+		{"hbasecop.endpoint.max-concurrent-calls", "-5", true},
+		{"hbasecop.endpoint.bulk-ring.capacity", "16", false},
 		{"hbasecop.bogus.key", "whatever", false}, // unknown -> not malformed
 	}
 	for _, tc := range tests {
@@ -73,6 +82,25 @@ func TestCheckSiteFile(t *testing.T) {
 	t.Run("missing file errors", func(t *testing.T) {
 		if err := checkSiteFile(filepath.Join(t.TempDir(), "none.xml")); err == nil {
 			t.Fatal("missing file should error")
+		}
+	})
+
+	t.Run("endpoint keys are validated, not ignored", func(t *testing.T) {
+		bad := writeSite(t, map[string]string{
+			"hbasecop.endpoint.allow-mutate":         "notabool",
+			"hbasecop.endpoint.max-concurrent-calls": "-5",
+		})
+		if err := checkSiteFile(bad); err == nil {
+			t.Fatal("malformed endpoint values should fail (not pass as ignored notices)")
+		}
+		good := writeSite(t, map[string]string{
+			"hbasecop.endpoint.allow-mutate":       "true",
+			"hbasecop.endpoint.timeout":            "30s",
+			"hbasecop.endpoint.max-rows-per-next":  "1000",
+			"hbasecop.endpoint.scanner-idle-lease": "2m",
+		})
+		if err := checkSiteFile(good); err != nil {
+			t.Fatalf("valid endpoint values should pass, got %v", err)
 		}
 	})
 }
