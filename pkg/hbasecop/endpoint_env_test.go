@@ -271,9 +271,9 @@ func serveMutate(t *testing.T, rc *cpruntime.ReverseClient, out <-chan *wire.Mes
 	return func() { close(done) }
 }
 
-// TE41: env.Mutate sends a reverse PUT to the invoking region; the bridge
-// receives the marshalled MutationProto and replies OK.
-func TestEndpointEnvMutatePut(t *testing.T) {
+// TE41: env.Put sends a reverse MUTATE to the invoking region, stamping
+// MutateType=PUT; the bridge receives the marshalled MutationProto and replies OK.
+func TestEndpointEnvPut(t *testing.T) {
 	out := make(chan *wire.Message, 8)
 	rc := cpruntime.NewReverseClient(nil)
 	rc.Bind(out)
@@ -282,9 +282,8 @@ func TestEndpointEnvMutatePut(t *testing.T) {
 	defer stop()
 
 	env := &EndpointEnv{rc: rc, regionID: 1}
-	m := &MutationProto{Row: []byte("row-1"), MutateType: hbasepb.MutationProto_PUT.Enum()}
-	if err := env.Mutate(context.Background(), m); err != nil {
-		t.Fatalf("Mutate: %v", err)
+	if err := env.Put(context.Background(), &MutationProto{Row: []byte("row-1")}); err != nil {
+		t.Fatalf("Put: %v", err)
 	}
 	got := <-applied
 	if string(got.GetRow()) != "row-1" || got.GetMutateType() != hbasepb.MutationProto_PUT {
@@ -292,10 +291,29 @@ func TestEndpointEnvMutatePut(t *testing.T) {
 	}
 }
 
-// With the reverse path disabled (nil client), Mutate fails cleanly.
-func TestEndpointEnvMutateUnavailable(t *testing.T) {
+// TE41: env.Delete stamps MutateType=DELETE.
+func TestEndpointEnvDelete(t *testing.T) {
+	out := make(chan *wire.Message, 8)
+	rc := cpruntime.NewReverseClient(nil)
+	rc.Bind(out)
+	applied := make(chan *hbasepb.MutationProto, 1)
+	stop := serveMutate(t, rc, out, applied)
+	defer stop()
+
+	env := &EndpointEnv{rc: rc, regionID: 1}
+	if err := env.Delete(context.Background(), &MutationProto{Row: []byte("row-2")}); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	got := <-applied
+	if got.GetMutateType() != hbasepb.MutationProto_DELETE {
+		t.Fatalf("applied type = %v; want DELETE", got.GetMutateType())
+	}
+}
+
+// With the reverse path disabled (nil client), Put fails cleanly.
+func TestEndpointEnvPutUnavailable(t *testing.T) {
 	var env EndpointEnv // rc == nil
-	if err := env.Mutate(context.Background(), &MutationProto{}); err == nil {
+	if err := env.Put(context.Background(), &MutationProto{}); err == nil {
 		t.Fatal("want error when reverse path is disabled")
 	}
 }

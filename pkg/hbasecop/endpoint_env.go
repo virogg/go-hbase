@@ -67,18 +67,31 @@ func CellValue(r *Result, family, qualifier []byte) ([]byte, bool) {
 	return nil, false
 }
 
-// Mutate applies a write — a Put or a Delete — to the invoking region from
-// inside the endpoint call (Tier 2, TE41). m is a vendored HBase MutationProto;
-// set its MutateType to [MutationProto_PUT] or [MutationProto_DELETE] (other
-// types are rejected by the bridge). The write goes through the region's
-// observer pipeline (Pre/Post-Put/Delete hooks fire, exactly as HBase's own
-// MultiRowMutationEndpoint), but bypasses the client RPC stack (no
-// RSRpcServices/ACL/quota). It is gated off server-side unless
-// hbasecop.endpoint.allow-mutate=true; when disabled — or when the reverse path
-// is unavailable — Mutate returns an error. Writing the region the endpoint was
-// invoked on is safe (no self-deadlock); avoid an observer that re-mutates in a
-// loop (the bridge has no recursion guard, as in vanilla HBase).
-func (e *EndpointEnv) Mutate(ctx context.Context, m *MutationProto) error {
+// Put writes the cells of m to the invoking region from inside the endpoint call
+// (Tier 2, TE41); it sets m's MutateType to PUT. Delete is the tombstone
+// counterpart. Build m with the re-exported [MutationProto] (and its
+// [MutationProto_ColumnValue] cells).
+//
+// The write goes through the region's observer pipeline — Pre/Post-Put/Delete
+// hooks fire, exactly as HBase's own MultiRowMutationEndpoint — but bypasses the
+// client RPC stack (no RSRpcServices/ACL/quota). It is gated off server-side
+// unless hbasecop.endpoint.allow-mutate=true; when disabled, or when the reverse
+// path is unavailable, the call returns an error. Writing the region the
+// endpoint was invoked on is safe (no self-deadlock); just avoid an observer
+// that re-mutates in a loop (the bridge has no recursion guard, as in HBase).
+func (e *EndpointEnv) Put(ctx context.Context, m *MutationProto) error {
+	m.MutateType = hbasepb.MutationProto_PUT.Enum()
+	return e.mutate(ctx, m)
+}
+
+// Delete applies m as a Delete to the invoking region; it sets m's MutateType to
+// DELETE. Same gating and observer-pipeline semantics as [EndpointEnv.Put].
+func (e *EndpointEnv) Delete(ctx context.Context, m *MutationProto) error {
+	m.MutateType = hbasepb.MutationProto_DELETE.Enum()
+	return e.mutate(ctx, m)
+}
+
+func (e *EndpointEnv) mutate(ctx context.Context, m *MutationProto) error {
 	if e == nil || e.rc == nil {
 		return errors.New("hbasecop: reverse writes unavailable (reverse path disabled)")
 	}

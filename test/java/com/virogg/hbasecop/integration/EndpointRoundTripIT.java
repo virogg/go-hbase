@@ -4,6 +4,7 @@
 package com.virogg.hbasecop.integration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.protobuf.ByteString;
@@ -18,7 +19,13 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
@@ -28,7 +35,9 @@ import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.CoprocessorDescriptorBuilder;
+import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
@@ -223,6 +232,135 @@ final class EndpointRoundTripIT {
     }
   }
 
+  /**
+   * TE41: reverse MUTATE is gated off by default. With no allow-mutate property the "put"
+   * endpoint's env.Mutate is rejected by the bridge; the error surfaces to the client and the row
+   * stays unwritten.
+   */
+  @Test
+  void clientReverseMutateRejectedWhenDisabled() throws Throwable {
+    requireStagedJar();
+    TableName tn = TableName.valueOf("hbasecop_endpoint_mutate_off_it");
+    byte[] row = "row-1".getBytes(StandardCharsets.UTF_8);
+
+    try (Connection conn = ConnectionFactory.createConnection(clientConfig());
+        Admin admin = conn.getAdmin()) {
+
+      waitForClusterReady(admin, Duration.ofSeconds(300));
+      dropTable(admin, tn);
+      createTableWithCoproc(admin, tn); // allow-mutate defaults off
+      try (Table table = conn.getTable(tn)) {
+        Throwable err =
+            assertThrows(
+                Throwable.class,
+                () -> callEndpoint(table, "put", ByteString.copyFromUtf8("row-1=nope")));
+        assertTrue(
+            chainContains(err, "allow-mutate"),
+            () -> "expected an allow-mutate rejection, got: " + err);
+
+        assertTrue(
+            table.get(new Get(row)).isEmpty(), "row must stay unwritten when MUTATE is gated off");
+      } finally {
+        dropTable(admin, tn);
+      }
+    }
+  }
+
+  /**
+   * TE41: with hbasecop.endpoint.allow-mutate=true (a per-table coprocessor property), the "put"
+   * endpoint reads then writes cf:val on the invoking region; a normal client Get sees the write.
+   */
+  @Test
+  void clientReverseMutateWritesWhenEnabled() throws Throwable {
+    requireStagedJar();
+    TableName tn = TableName.valueOf("hbasecop_endpoint_mutate_on_it");
+    byte[] row = "row-1".getBytes(StandardCharsets.UTF_8);
+    byte[] val = "val".getBytes(StandardCharsets.UTF_8);
+
+    try (Connection conn = ConnectionFactory.createConnection(clientConfig());
+        Admin admin = conn.getAdmin()) {
+
+      waitForClusterReady(admin, Duration.ofSeconds(300));
+      dropTable(admin, tn);
+      createTableWithCoproc(admin, tn, true); // allow-mutate ON
+      try (Table table = conn.getTable(tn)) {
+        byte[] result = callEndpoint(table, "put", ByteString.copyFromUtf8("row-1=hello"));
+        assertEquals("ok", new String(result, StandardCharsets.UTF_8));
+
+        Result r = table.get(new Get(row));
+        assertEquals(
+            "hello",
+            new String(r.getValue(CF, val), StandardCharsets.UTF_8),
+            "reverse MUTATE must write cf:val, visible to a normal client Get");
+      } finally {
+        dropTable(admin, tn);
+      }
+    }
+  }
+
+  /**
+   * TE41 re-entry: many endpoint calls run concurrently, each a read-then-write on the SAME region
+   * it was invoked on. Proves an endpoint mutating its own region does not self-deadlock under
+   * concurrency (the servicing pool is never the blocked RS handler thread); every write must land.
+   */
+  @Test
+  void clientReverseMutateReentryStress() throws Throwable {
+    requireStagedJar();
+    TableName tn = TableName.valueOf("hbasecop_endpoint_mutate_reentry_it");
+    byte[] val = "val".getBytes(StandardCharsets.UTF_8);
+    int n = 20;
+
+    try (Connection conn = ConnectionFactory.createConnection(clientConfig());
+        Admin admin = conn.getAdmin()) {
+
+      waitForClusterReady(admin, Duration.ofSeconds(300));
+      dropTable(admin, tn);
+      createTableWithCoproc(admin, tn, true);
+      try (Table table = conn.getTable(tn)) {
+        ExecutorService pool = Executors.newFixedThreadPool(8);
+        try {
+          List<Future<byte[]>> futures = new ArrayList<>();
+          for (int i = 0; i < n; i++) {
+            String spec = "k-" + i + "=v-" + i;
+            futures.add(pool.submit(() -> putExpectingOk(table, spec)));
+          }
+          for (Future<byte[]> f : futures) {
+            assertEquals("ok", new String(f.get(60, TimeUnit.SECONDS), StandardCharsets.UTF_8));
+          }
+        } finally {
+          pool.shutdownNow();
+        }
+        for (int i = 0; i < n; i++) {
+          byte[] row = ("k-" + i).getBytes(StandardCharsets.UTF_8);
+          Result r = table.get(new Get(row));
+          assertEquals(
+              "v-" + i,
+              new String(r.getValue(CF, val), StandardCharsets.UTF_8),
+              "reentry-stress: every concurrent endpoint write must land");
+        }
+      } finally {
+        dropTable(admin, tn);
+      }
+    }
+  }
+
+  private static byte[] putExpectingOk(Table table, String spec) {
+    try {
+      return callEndpoint(table, "put", ByteString.copyFromUtf8(spec));
+    } catch (Throwable t) {
+      throw new RuntimeException(t);
+    }
+  }
+
+  private static boolean chainContains(Throwable t, String needle) {
+    for (Throwable c = t; c != null; c = c.getCause()) {
+      if (c.getMessage() != null && c.getMessage().contains(needle)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private static void requireStagedJar() {
     Path jarOnHost = resolveJarOnHost();
     assertTrue(
@@ -312,14 +450,24 @@ final class EndpointRoundTripIT {
   }
 
   private static void createTableWithCoproc(Admin admin, TableName tn) throws IOException {
+    createTableWithCoproc(admin, tn, false);
+  }
+
+  private static void createTableWithCoproc(Admin admin, TableName tn, boolean allowMutate)
+      throws IOException {
+    CoprocessorDescriptorBuilder coproc =
+        CoprocessorDescriptorBuilder.newBuilder(COPROC_CLASSNAME)
+            .setJarPath(COPROC_JAR_IN_CONTAINER)
+            .setPriority(0);
+    if (allowMutate) {
+      // Per-table gating: the coprocessor property is merged into the coprocessor's
+      // Configuration (env.getConfiguration()), which buildConfig reads for allow-mutate.
+      coproc.setProperty("hbasecop.endpoint.allow-mutate", "true");
+    }
     TableDescriptor desc =
         TableDescriptorBuilder.newBuilder(tn)
             .setColumnFamily(ColumnFamilyDescriptorBuilder.of(CF))
-            .setCoprocessor(
-                CoprocessorDescriptorBuilder.newBuilder(COPROC_CLASSNAME)
-                    .setJarPath(COPROC_JAR_IN_CONTAINER)
-                    .setPriority(0)
-                    .build())
+            .setCoprocessor(coproc.build())
             .build();
     admin.createTable(desc);
   }

@@ -9,7 +9,9 @@
 // Methods: "upper" (upper-cases its payload); "get" (TE31 reverse GET: reads the
 // row named by its payload and returns the first cell's value); "follow" (TE32
 // data-dependent reverse read: reads row A=payload, takes cf:next as a pointer to
-// row B, reads B, returns cf:val). The no-op observer is required because
+// row B, reads B, returns cf:val); "put" (TE41 reverse MUTATE: read-then-write of
+// cf:val on the invoking region, gated by hbasecop.endpoint.allow-mutate). The
+// no-op observer is required because
 // GenericRegionObserver is a RegionCoprocessor: without a registered region
 // observer the strict preOpen hook would dispatch to Go, find no observer, and
 // abort region open. With UnimplementedRegionObserver every region hook is a no-op.
@@ -53,6 +55,8 @@ func (upperEndpoint) Call(ctx context.Context, env *hbasecop.EndpointEnv, method
 		return scanCount(ctx, env)
 	case "sum":
 		return sumColumn(ctx, env, payload)
+	case "put":
+		return putRow(ctx, env, payload)
 	case "scan-leak":
 		return scanLeak(ctx, env)
 	default:
@@ -156,6 +160,38 @@ func sumColumn(ctx context.Context, env *hbasecop.EndpointEnv, qualifier []byte)
 	}
 	slog.Info("endpoint-observer: sum ok", "qualifier", string(qualifier), "total", total)
 	return []byte(strconv.FormatInt(total, 10)), nil
+}
+
+// putRow performs a reverse write against the invoking region (TE41). payload is
+// "row=value" (no '=' → value defaults to "mutated"). It first reads the row —
+// exercising read+write on the same region within one endpoint call, the
+// re-entry path — then writes cf:val=value. Reverse MUTATE is gated server-side;
+// when hbasecop.endpoint.allow-mutate is off, env.Mutate returns an error that
+// surfaces to the client.
+func putRow(ctx context.Context, env *hbasecop.EndpointEnv, payload []byte) ([]byte, error) {
+	row, value, found := bytes.Cut(payload, []byte("="))
+	if !found {
+		value = []byte("mutated")
+	}
+	if _, err := env.Get(ctx, row); err != nil { // read-then-write on the invoking region
+		return nil, err
+	}
+	m := &hbasecop.MutationProto{
+		Row: row,
+		ColumnValue: []*hbasecop.MutationProto_ColumnValue{
+			{
+				Family: cf,
+				QualifierValue: []*hbasecop.MutationProto_ColumnValue_QualifierValue{
+					{Qualifier: []byte("val"), Value: value},
+				},
+			},
+		},
+	}
+	if err := env.Put(ctx, m); err != nil {
+		return nil, err
+	}
+	slog.Info("endpoint-observer: put ok", "row", string(row), "value", string(value))
+	return []byte("ok"), nil
 }
 
 // scanLeak opens a scanner, pulls one batch, and crashes WITHOUT closing it —
