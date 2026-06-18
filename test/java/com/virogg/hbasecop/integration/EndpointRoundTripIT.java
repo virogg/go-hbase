@@ -346,6 +346,57 @@ final class EndpointRoundTripIT {
     }
   }
 
+  /**
+   * TE42 per-table gate: two tables share one coproc-jar (so one Go runtime), one with
+   * allow-mutate=true and one with =false, both open at once. The bridge must gate each on its own
+   * table descriptor — the mutate-on table writes, the mutate-off table is rejected — not on a
+   * single runtime-wide flag (which "first table to open" would otherwise win).
+   */
+  @Test
+  void clientReverseMutatePerTableGate() throws Throwable {
+    requireStagedJar();
+    TableName on = TableName.valueOf("hbasecop_endpoint_pt_on_it");
+    TableName off = TableName.valueOf("hbasecop_endpoint_pt_off_it");
+    byte[] row = "row-1".getBytes(StandardCharsets.UTF_8);
+    byte[] val = "val".getBytes(StandardCharsets.UTF_8);
+
+    try (Connection conn = ConnectionFactory.createConnection(clientConfig());
+        Admin admin = conn.getAdmin()) {
+
+      waitForClusterReady(admin, Duration.ofSeconds(300));
+      dropTable(admin, on);
+      dropTable(admin, off);
+      createTableWithCoproc(admin, on, true);
+      createTableWithCoproc(admin, off, false);
+      try (Table tOn = conn.getTable(on);
+          Table tOff = conn.getTable(off)) {
+        // mutate-on table: the write lands.
+        assertEquals(
+            "ok",
+            new String(
+                callEndpoint(tOn, "put", ByteString.copyFromUtf8("row-1=hello")),
+                StandardCharsets.UTF_8));
+        assertEquals(
+            "hello",
+            new String(tOn.get(new Get(row)).getValue(CF, val), StandardCharsets.UTF_8),
+            "mutate-on table must accept the reverse write");
+
+        // mutate-off table sharing the same runtime: rejected, row unwritten.
+        Throwable err =
+            assertThrows(
+                Throwable.class,
+                () -> callEndpoint(tOff, "put", ByteString.copyFromUtf8("row-1=nope")));
+        assertTrue(
+            chainContains(err, "allow-mutate"), () -> "expected gate rejection, got: " + err);
+        assertTrue(
+            tOff.get(new Get(row)).isEmpty(), "mutate-off table must reject the reverse write");
+      } finally {
+        dropTable(admin, on);
+        dropTable(admin, off);
+      }
+    }
+  }
+
   private static byte[] putExpectingOk(Table table, String spec) {
     try {
       return callEndpoint(table, "put", ByteString.copyFromUtf8(spec));
@@ -461,11 +512,10 @@ final class EndpointRoundTripIT {
         CoprocessorDescriptorBuilder.newBuilder(COPROC_CLASSNAME)
             .setJarPath(COPROC_JAR_IN_CONTAINER)
             .setPriority(0);
-    if (allowMutate) {
-      // Per-table gating: the coprocessor property is merged into the coprocessor's
-      // Configuration (env.getConfiguration()), which buildConfig reads for allow-mutate.
-      coproc.setProperty("hbasecop.endpoint.allow-mutate", "true");
-    }
+    // Per-table gating (TE42): set the coprocessor property explicitly to true OR false so the
+    // bridge's per-table gate reads this table's own value rather than falling back to the shared
+    // runtime's baked default — essential when two tables share one coproc-jar (one Go runtime).
+    coproc.setProperty("hbasecop.endpoint.allow-mutate", String.valueOf(allowMutate));
     TableDescriptor desc =
         TableDescriptorBuilder.newBuilder(tn)
             .setColumnFamily(ColumnFamilyDescriptorBuilder.of(CF))
