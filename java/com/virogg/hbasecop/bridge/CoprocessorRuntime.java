@@ -358,48 +358,62 @@ public final class CoprocessorRuntime implements AutoCloseable {
     Message req =
         new Message(FrameType.ENDPOINT_INVOKE, 0L, regionId, (byte) 0, invoke.toByteArray());
     Multiplexer.Call call = m.callTracked(req);
-    CompletableFuture<Message> fut = call.future;
-
-    final Message resp;
     try {
-      resp = fut.get(cfg.endpointTimeout().toMillis(), TimeUnit.MILLISECONDS);
-    } catch (TimeoutException e) {
-      fut.cancel(false);
-      m.cancel(call.reqId);
-      throw new IOException("hbasecop: endpoint " + invoke.getMethod() + " timed out", e);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new IOException("hbasecop: endpoint " + invoke.getMethod() + " interrupted", e);
-    } catch (ExecutionException e) {
-      Throwable cause = e.getCause();
-      if (cause instanceof ChannelClosedException) {
-        throw new IOException("hbasecop: channel closed during endpoint call", cause);
-      }
-      if (cause instanceof IOException) {
-        throw (IOException) cause;
-      }
-      throw new IOException("hbasecop: endpoint " + invoke.getMethod() + " dispatch failed", cause);
-    }
+      CompletableFuture<Message> fut = call.future;
 
-    if (resp.type() == FrameType.ERROR) {
+      final Message resp;
       try {
-        com.virogg.hbasecop.bridge.wire.pb.Error err =
-            com.virogg.hbasecop.bridge.wire.pb.Error.parseFrom(resp.payload());
+        resp = fut.get(cfg.endpointTimeout().toMillis(), TimeUnit.MILLISECONDS);
+      } catch (TimeoutException e) {
+        fut.cancel(false);
+        m.cancel(call.reqId);
+        throw new IOException("hbasecop: endpoint " + invoke.getMethod() + " timed out", e);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new IOException("hbasecop: endpoint " + invoke.getMethod() + " interrupted", e);
+      } catch (ExecutionException e) {
+        Throwable cause = e.getCause();
+        if (cause instanceof ChannelClosedException) {
+          throw new IOException("hbasecop: channel closed during endpoint call", cause);
+        }
+        if (cause instanceof IOException) {
+          throw (IOException) cause;
+        }
         throw new IOException(
-            "hbasecop: endpoint "
-                + invoke.getMethod()
-                + " returned error (code="
-                + err.getCode()
-                + "): "
-                + err.getMessage());
-      } catch (InvalidProtocolBufferException e) {
-        throw new IOException("hbasecop: malformed endpoint Error payload", e);
+            "hbasecop: endpoint " + invoke.getMethod() + " dispatch failed", cause);
       }
-    }
-    try {
-      return EndpointResult.parseFrom(resp.payload()).getPayload().toByteArray();
-    } catch (InvalidProtocolBufferException e) {
-      throw new IOException("hbasecop: malformed EndpointResult payload", e);
+
+      if (resp.type() == FrameType.ERROR) {
+        try {
+          com.virogg.hbasecop.bridge.wire.pb.Error err =
+              com.virogg.hbasecop.bridge.wire.pb.Error.parseFrom(resp.payload());
+          throw new IOException(
+              "hbasecop: endpoint "
+                  + invoke.getMethod()
+                  + " returned error (code="
+                  + err.getCode()
+                  + "): "
+                  + err.getMessage());
+        } catch (InvalidProtocolBufferException e) {
+          throw new IOException("hbasecop: malformed endpoint Error payload", e);
+        }
+      }
+      try {
+        return EndpointResult.parseFrom(resp.payload()).getPayload().toByteArray();
+      } catch (InvalidProtocolBufferException e) {
+        throw new IOException("hbasecop: malformed EndpointResult payload", e);
+      }
+    } finally {
+      // TE33: reap any scanners this endpoint call opened but did not close (handler bug, early
+      // return, panic, or timeout) so a RegionScanner read point never leaks past the call.
+      int reaped = scannerRegistry.closeForCall(call.reqId);
+      if (reaped > 0) {
+        LOG.log(
+            Level.WARNING,
+            "CoprocessorRuntime: reaped {0} scanner(s) left open by endpoint call (req_id={1})",
+            reaped,
+            call.reqId);
+      }
     }
   }
 

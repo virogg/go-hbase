@@ -9,12 +9,21 @@ import (
 	"log/slog"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
 	"github.com/virogg/go-hbase/internal/wire"
 	"github.com/virogg/go-hbase/internal/wire/wirepb"
 )
+
+// defaultReverseTimeout bounds a single reverse RPC. Without it, a dropped or
+// lost reply (e.g. the bridge's bulk-ring send failed and was swallowed) would
+// block the calling endpoint goroutine — and leak its pending entry and any open
+// scanner — for the whole process lifetime, since the endpoint ctx is
+// process-scoped. The bound converts that into a clean error. (Per-call tuning
+// is TE42 admission control.)
+const defaultReverseTimeout = 30 * time.Second
 
 // ReverseClient (Tier 2, TE31) is the Go-initiated reverse-RPC channel: a
 // running endpoint handler reads region-local data by sending an RpcRequest to
@@ -30,7 +39,8 @@ import (
 // All methods are safe for concurrent use: one endpoint goroutine per in-flight
 // call, all funnelling onto the shared writer.
 type ReverseClient struct {
-	logger *slog.Logger
+	logger  *slog.Logger
+	timeout time.Duration
 
 	out    chan<- *wire.Message
 	nextID atomic.Uint64
@@ -45,8 +55,16 @@ func NewReverseClient(logger *slog.Logger) *ReverseClient {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &ReverseClient{logger: logger, pending: make(map[uint64]chan *wire.Message)}
+	return &ReverseClient{
+		logger:  logger,
+		timeout: defaultReverseTimeout,
+		pending: make(map[uint64]chan *wire.Message),
+	}
 }
+
+// SetTimeout overrides the per-reverse-call deadline. A non-positive value keeps
+// the caller's context as the only bound (intended for tests).
+func (c *ReverseClient) SetTimeout(d time.Duration) { c.timeout = d }
 
 // Bind attaches the outbound writer the client enqueues RpcRequest frames onto
 // (the Loop's single Go→Java writer). Call once at startup, before any request.
@@ -77,6 +95,14 @@ func (c *ReverseClient) Deliver(m *wire.Message) {
 func (c *ReverseClient) call(ctx context.Context, regionID uint32, req *wirepb.RpcRequest) (*wirepb.RpcResponse, error) {
 	if c.out == nil {
 		return nil, fmt.Errorf("cpruntime: ReverseClient not bound to an outbound writer")
+	}
+	// Bound every reverse call so a dropped/lost reply can never block the calling
+	// endpoint goroutine (and leak its pending entry + open scanner) for the whole
+	// process lifetime; the endpoint ctx is process-scoped.
+	if c.timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, c.timeout)
+		defer cancel()
 	}
 	payload, err := proto.Marshal(req)
 	if err != nil {

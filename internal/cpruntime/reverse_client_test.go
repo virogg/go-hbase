@@ -132,6 +132,28 @@ func TestReverseClientReqIDStartsAtOneMonotonic(t *testing.T) {
 	}
 }
 
+// TE34 hardening: a reverse call is bounded by a per-call deadline, so a
+// dropped/lost reply (the bridge swallowed a bulk-send failure) returns a clean
+// error instead of blocking the endpoint goroutine for the process lifetime.
+func TestReverseClientCallDeadlineBoundsLostReply(t *testing.T) {
+	out := make(chan *wire.Message, 4)
+	rc := cpruntime.NewReverseClient(nil)
+	rc.SetTimeout(150 * time.Millisecond)
+	rc.Bind(out)
+
+	go func() { <-out }() // consume the request but never deliver a reply
+
+	start := time.Now()
+	_, err := rc.Get(context.Background(), 1, nil)
+	elapsed := time.Since(start)
+	if err == nil {
+		t.Fatal("want a deadline error when no reply arrives")
+	}
+	if elapsed > 2*time.Second {
+		t.Fatalf("Get blocked %v; the per-call deadline must bound it", elapsed)
+	}
+}
+
 // Get on an unbound client fails cleanly rather than panicking on a nil writer.
 func TestReverseClientGetUnboundErrors(t *testing.T) {
 	rc := cpruntime.NewReverseClient(nil)

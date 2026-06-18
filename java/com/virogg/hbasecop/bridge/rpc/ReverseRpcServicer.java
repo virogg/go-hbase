@@ -59,6 +59,9 @@ public final class ReverseRpcServicer {
   private final Consumer<Message> replySink;
   private final int slotMaxObjectSize;
   private final ThreadPoolExecutor pool;
+  // Single dedicated thread for sending pool-saturation ERROR replies, so the reject path never
+  // sends inline on the reader thread (the reply is itself a bulk-ring send that can block).
+  private final ThreadPoolExecutor overflowReplies;
   private final Duration shutdownTimeout;
 
   /**
@@ -110,6 +113,21 @@ public final class ReverseRpcServicer {
     // Let idle threads die so a pure-observer deployment that never issues a reverse RPC keeps no
     // servicing threads parked; they respawn on demand up to poolSize.
     this.pool.allowCoreThreadTimeOut(true);
+
+    this.overflowReplies =
+        new ThreadPoolExecutor(
+            1,
+            1,
+            60L,
+            TimeUnit.SECONDS,
+            new ArrayBlockingQueue<>(queueDepth),
+            r -> {
+              Thread t = new Thread(r, "hbasecop-rpcsvc-overflow");
+              t.setDaemon(true);
+              return t;
+            },
+            new ThreadPoolExecutor.AbortPolicy());
+    this.overflowReplies.allowCoreThreadTimeOut(true);
   }
 
   /**
@@ -120,7 +138,17 @@ public final class ReverseRpcServicer {
     try {
       pool.execute(() -> service(request));
     } catch (RejectedExecutionException e) {
-      replyError(request, "reverse RPC servicing pool saturated");
+      // Fail closed WITHOUT blocking the reader thread. The ERROR reply is itself a (possibly
+      // blocking) bulk-ring send, so hand it to a dedicated thread — accept() must stay O(1), else
+      // it stalls the reader, starves heartbeat accounting, and risks a false watchdog kill of a
+      // healthy Go process (A-1).
+      try {
+        overflowReplies.execute(() -> replyError(request, "reverse RPC servicing pool saturated"));
+      } catch (RejectedExecutionException drop) {
+        // Even the overflow path is saturated (extreme, sustained load): drop the reply; the Go
+        // caller's reverse-call deadline surfaces it as a clean error.
+        LOG.log(Level.WARNING, "hbasecop: dropped reverse-RPC saturation reply (overflow full)");
+      }
     }
   }
 
@@ -236,11 +264,11 @@ public final class ReverseRpcServicer {
             .build());
   }
 
-  private void serviceScanClose(Message request, RpcRequest req) throws IOException {
-    RegionScanner scanner = scannerRegistry.remove(req.getCallId(), req.getScannerId());
-    if (scanner != null) {
-      scanner.close();
-    }
+  private void serviceScanClose(Message request, RpcRequest req) {
+    // closeQuietly: if close() throws, the scanner is already removed from the registry, so swallow
+    // (and log) rather than leak the exception into an ERROR reply for an otherwise-successful
+    // close.
+    closeQuietly(scannerRegistry.remove(req.getCallId(), req.getScannerId()));
     sendReply(request, RpcResponse.newBuilder().setStatus(RpcResponse.Status.OK).build());
   }
 
@@ -291,6 +319,7 @@ public final class ReverseRpcServicer {
   /** Stop servicing and wait briefly for in-flight tasks to drain. Idempotent. */
   public void close() {
     pool.shutdownNow();
+    overflowReplies.shutdownNow();
     try {
       if (!pool.awaitTermination(shutdownTimeout.toMillis(), TimeUnit.MILLISECONDS)) {
         LOG.log(Level.WARNING, "hbasecop: reverse-RPC servicing pool did not drain in time");

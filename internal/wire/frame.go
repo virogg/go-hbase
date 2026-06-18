@@ -113,7 +113,8 @@ var (
 	// frames and frames shorter than the framing header.
 	ErrFrameTooLarge = errors.New("wire: frame length out of range")
 
-	// ErrUnknownType: the type byte is 0 or above TypeLog.
+	// ErrUnknownType: the type byte is 0 or above TypeRpcResponse (the highest
+	// known type); see Type.Valid.
 	ErrUnknownType = errors.New("wire: unknown frame type")
 
 	// ErrInvalidChunk: chunk_total/chunk_idx are inconsistent, the same

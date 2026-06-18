@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Get;
@@ -164,6 +165,55 @@ class ReverseRpcServicerTest {
           () -> "error detail: " + resp.getPayload().toStringUtf8());
     } finally {
       block.countDown();
+    }
+  }
+
+  @Test
+  void saturationReplyDoesNotBlockTheReaderThread() throws Exception {
+    RegionRegistry registry = new RegionRegistry();
+    registry.register(7, region);
+
+    CountDownLatch started = new CountDownLatch(1);
+    CountDownLatch workerBlock = new CountDownLatch(1);
+    when(region.get(any(Get.class)))
+        .thenAnswer(
+            inv -> {
+              started.countDown();
+              workerBlock.await();
+              return Result.EMPTY_RESULT;
+            });
+
+    // A reply sink that blocks (simulates a momentarily full bulk ring whose send spins to the
+    // deadline). If the reject path replied inline on the calling (reader) thread, accept() would
+    // block here — the very stall that can starve heartbeats and trip a false watchdog kill (A-1).
+    CountDownLatch sinkBlock = new CountDownLatch(1);
+    Consumer<Message> blockingSink =
+        m -> {
+          try {
+            sinkBlock.await();
+            replies.add(m);
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+          }
+        };
+
+    servicer =
+        new ReverseRpcServicer(
+            registry, new ScannerRegistry(), blockingSink, SLOT, 1, 1, Duration.ofSeconds(5));
+    try {
+      servicer.accept(getRequest(1, 7, "r1")); // occupies the single worker, blocks in region.get
+      assertTrue(started.await(2, TimeUnit.SECONDS), "first task did not start");
+      servicer.accept(getRequest(2, 7, "r2")); // fills the bounded queue
+      // The 3rd is rejected; its ERROR reply is handed to the overflow thread (which blocks on the
+      // sink), so accept() must return promptly rather than block inline on the reply send.
+      long t0 = System.nanoTime();
+      servicer.accept(getRequest(3, 7, "r3"));
+      long ms = (System.nanoTime() - t0) / 1_000_000L;
+      assertTrue(
+          ms < 1_000, "accept() blocked " + ms + "ms on the reply sink; the reader must not block");
+    } finally {
+      sinkBlock.countDown();
+      workerBlock.countDown();
     }
   }
 
