@@ -124,6 +124,8 @@ public final class CoprocessorRuntime implements AutoCloseable {
   // TE33: open server-side scanners, reaped on Go-process crash so no RegionScanner leaks.
   // TE42: bounded per call + idle-lease evicted (constructed from cfg).
   private final com.virogg.hbasecop.bridge.rpc.ScannerRegistry scannerRegistry;
+  // TE42 admission: bounds concurrent client endpoint calls (each pins an RS handler thread).
+  private final java.util.concurrent.Semaphore endpointAdmission;
 
   private Channel javaToGo;
   private Channel goToJava;
@@ -150,6 +152,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
     this.scannerRegistry =
         new com.virogg.hbasecop.bridge.rpc.ScannerRegistry(
             cfg.maxScannersPerCall(), cfg.scannerIdleLease().toMillis(), System::currentTimeMillis);
+    this.endpointAdmission = new java.util.concurrent.Semaphore(cfg.maxConcurrentCalls());
   }
 
   /**
@@ -361,10 +364,21 @@ public final class CoprocessorRuntime implements AutoCloseable {
     if (m == null) {
       throw new IOException("hbasecop: endpoint invoked before runtime start");
     }
+    // TE42 admission: bound concurrent client endpoint calls so they cannot exhaust the RS handler
+    // thread pool — each call blocks an RS handler thread on fut.get below (A-1). tryAcquire never
+    // blocks; over the cap we fail fast with a clear, client-visible error.
+    if (!endpointAdmission.tryAcquire()) {
+      throw new IOException(
+          "hbasecop: endpoint max-concurrent-calls ("
+              + cfg.maxConcurrentCalls()
+              + ") exceeded; rejecting "
+              + invoke.getMethod());
+    }
     Message req =
         new Message(FrameType.ENDPOINT_INVOKE, 0L, regionId, (byte) 0, invoke.toByteArray());
-    Multiplexer.Call call = m.callTracked(req);
+    Multiplexer.Call call = null;
     try {
+      call = m.callTracked(req);
       CompletableFuture<Message> fut = call.future;
 
       final Message resp;
@@ -412,14 +426,17 @@ public final class CoprocessorRuntime implements AutoCloseable {
     } finally {
       // TE33: reap any scanners this endpoint call opened but did not close (handler bug, early
       // return, panic, or timeout) so a RegionScanner read point never leaks past the call.
-      int reaped = scannerRegistry.closeForCall(call.reqId);
-      if (reaped > 0) {
-        LOG.log(
-            Level.WARNING,
-            "CoprocessorRuntime: reaped {0} scanner(s) left open by endpoint call (req_id={1})",
-            reaped,
-            call.reqId);
+      if (call != null) {
+        int reaped = scannerRegistry.closeForCall(call.reqId);
+        if (reaped > 0) {
+          LOG.log(
+              Level.WARNING,
+              "CoprocessorRuntime: reaped {0} scanner(s) left open by endpoint call (req_id={1})",
+              reaped,
+              call.reqId);
+        }
       }
+      endpointAdmission.release(); // TE42: paired with the tryAcquire above
     }
   }
 
