@@ -271,7 +271,9 @@ IT → собрать логи → `compose down`). Новые ключи `hbase
       **live IT зелёный** (scan 5 rows; crash-mid-scan → "reaped 1 orphaned scanner" → recovery,
       HBase 2.5.11, 2026-06-18). NB: leak-proof via unit-reap + наблюдаемый reap-лог (проект
       log-only, без JMX — отклонение от плана "JMX/метрики")
-- [ ] TE34 Go SDK `EndpointEnv.OpenScanner/Get`
+- [x] TE34 Go SDK `EndpointEnv.OpenScanner/Get` — эргономичный API (Get TE32 + OpenScanner/Scanner
+      TE33); канонический server-side SUM endpoint (агрегация в контексте региона). **live IT
+      зелёный** (EndpointRoundTripIT server-side SUM = 15, HBase 2.5.11, 2026-06-18)
 - [ ] **CP-E3:** серверная агрегация по данным региона + leak-safety сканеров
 
 ### Phase E4 — запись + лимиты + master

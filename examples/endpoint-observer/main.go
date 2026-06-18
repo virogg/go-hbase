@@ -51,6 +51,8 @@ func (upperEndpoint) Call(ctx context.Context, env *hbasecop.EndpointEnv, method
 		return follow(ctx, env, payload)
 	case "scan":
 		return scanCount(ctx, env)
+	case "sum":
+		return sumColumn(ctx, env, payload)
 	case "scan-leak":
 		return scanLeak(ctx, env)
 	default:
@@ -119,6 +121,41 @@ func scanCount(ctx context.Context, env *hbasecop.EndpointEnv) ([]byte, error) {
 	}
 	slog.Info("endpoint-observer: scan ok", "cells", count)
 	return []byte(strconv.Itoa(count)), nil
+}
+
+// sumColumn is the canonical E3 aggregating endpoint (CP-E3): it scans the whole
+// region server-side and sums the cf:<qualifier> cells as int64, returning the
+// total — the aggregation runs in the database process over region-local data,
+// shipping one number to the client instead of every row.
+func sumColumn(ctx context.Context, env *hbasecop.EndpointEnv, qualifier []byte) ([]byte, error) {
+	sc, err := env.OpenScanner(ctx, &hbasecop.Scan{})
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = sc.Close(ctx) }()
+
+	var total int64
+	for {
+		cells, hasMore, err := sc.Next(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, c := range cells {
+			if bytes.Equal(c.GetFamily(), cf) && bytes.Equal(c.GetQualifier(), qualifier) {
+				n, err := strconv.ParseInt(string(c.GetValue()), 10, 64)
+				if err != nil {
+					return nil, fmt.Errorf("endpoint-observer: non-numeric cf:%s value %q: %w",
+						qualifier, c.GetValue(), err)
+				}
+				total += n
+			}
+		}
+		if !hasMore {
+			break
+		}
+	}
+	slog.Info("endpoint-observer: sum ok", "qualifier", string(qualifier), "total", total)
+	return []byte(strconv.FormatInt(total, 10)), nil
 }
 
 // scanLeak opens a scanner, pulls one batch, and crashes WITHOUT closing it —

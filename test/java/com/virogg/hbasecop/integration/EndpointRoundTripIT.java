@@ -185,6 +185,44 @@ final class EndpointRoundTripIT {
     }
   }
 
+  /**
+   * TE34 / CP-E3 capstone: the canonical server-side aggregation. Seeds rows with a numeric column,
+   * invokes "sum", and asserts the total — the scan + sum runs inside the region (region-local
+   * data), returning one number instead of every row.
+   */
+  @Test
+  void clientServerSideSum() throws Throwable {
+    requireStagedJar();
+    TableName tn = TableName.valueOf("hbasecop_endpoint_sum_it");
+    byte[] n = "n".getBytes(StandardCharsets.UTF_8);
+    int rows = 5;
+    long expected = 0; // 1+2+3+4+5 = 15
+
+    try (Connection conn = ConnectionFactory.createConnection(clientConfig());
+        Admin admin = conn.getAdmin()) {
+
+      waitForClusterReady(admin, Duration.ofSeconds(300));
+      dropTable(admin, tn);
+      createTableWithCoproc(admin, tn);
+      try (Table table = conn.getTable(tn)) {
+        for (int i = 1; i <= rows; i++) {
+          expected += i;
+          table.put(
+              new Put(("row-" + i).getBytes(StandardCharsets.UTF_8))
+                  .addColumn(CF, n, Long.toString(i).getBytes(StandardCharsets.UTF_8)));
+        }
+
+        byte[] result = callEndpoint(table, "sum", ByteString.copyFrom(n));
+        assertEquals(
+            Long.toString(expected),
+            new String(result, StandardCharsets.UTF_8),
+            "server-side SUM must aggregate the cf:n column over region-local data");
+      } finally {
+        dropTable(admin, tn);
+      }
+    }
+  }
+
   private static void requireStagedJar() {
     Path jarOnHost = resolveJarOnHost();
     assertTrue(
