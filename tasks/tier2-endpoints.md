@@ -348,7 +348,13 @@ IT → собрать логи → `compose down`). Новые ключи `hbase
       запись — allow-mutate off-by-default). Deferred → TE54: admission/idle-lease/crash live fault-ITs.
 
 ### Phase E5 — клиент, упаковка, доки
-- [ ] TE51 region client helper (fan-out + reduce)
+- [x] TE51 region client helper (fan-out + reduce) — `com.virogg.hbasecop.client.EndpointClient`:
+      `callAllRegions`/`callRegions` fan `GoEndpointService.Call(method,payload)` out over a table's
+      regions via `Table.coprocessorService` (unshaded controller+callback, extracted from the
+      inline IT path); `callAndReduce` folds the per-region payloads into one aggregate. **live IT
+      зелёный** (EndpointMultiRegionIT 1/1 — 4-way pre-split, "sum" partials {3,7,11,15} reduce to
+      table total 36, HBase 2.5.11, 2026-06-18); make `test-integration-endpoint-multiregion`.
+      Unit: fold/raw-map/empty-payload/error-surfacing/null-response/controller-failure (Mockito).
 - [ ] TE52 admin master-endpoint helper
 - [ ] TE53 упаковка (getServices в Generic*, hbasecop-build, preflight)
 - [ ] TE54 IT + fault-matrix + доки

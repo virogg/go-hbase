@@ -558,6 +558,24 @@ test-integration-endpoint: endpoint-observer-jar ## TE22: full IT - bring up HBa
 	  exit $$status
 
 # ---------------------------------------------------------------------------
+# Integration (TE51): endpoint fan-out + reduce - EndpointClient aggregates the
+# per-region "sum" partials over a 4-way pre-split table into the table total.
+# ---------------------------------------------------------------------------
+
+.PHONY: test-integration-endpoint-multiregion
+test-integration-endpoint-multiregion: endpoint-observer-jar ## TE51: full IT - bring up HBase, run EndpointMultiRegionIT (4-way pre-split fan-out + reduce), tear down.
+	@mkdir -p test/integration/coproc-jars
+	cp $(ENDPOINT_OBSERVER_DIR)/target/endpoint-observer.jar $(ENDPOINT_COPROC_JAR_STAGED)
+	$(HBASE_COMPOSE_CMD) up -d --build
+	./test/integration/scripts/wait-master-status.sh
+	@set +e; \
+	  $(MVN) $(MVN_FLAGS) test -Dtest=EndpointMultiRegionIT -DfailIfNoTests=false; \
+	  status=$$?; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-endpoint-multiregion.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
+
+# ---------------------------------------------------------------------------
 # Integration (T63): refcounted SharedRuntime - N regions share one Go process.
 # ---------------------------------------------------------------------------
 
