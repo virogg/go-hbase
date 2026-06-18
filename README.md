@@ -17,7 +17,7 @@ HBase client ──RPC──▶ RegionServer
 > **Статус: pre-release.** Реализовано по Phase 7 включительно из
 > [`tasks/plan.md`](tasks/plan.md); v0.1.0 заблокирован
 > [`tasks/RELEASE-BLOCKERS.md`](tasks/RELEASE-BLOCKERS.md).
-> Целевая платформа — HBase **2.5.x**, Java 11, только Linux x86-64.
+> Целевая платформа — HBase **2.5.x** (минимум **2.5.6** — shaded-protobuf 3.25 ABI floor, см. SPEC §1), Java 11, только Linux x86-64.
 
 - Полная спецификация: [`SPEC.md`](SPEC.md) · архитектура: [`docs/architecture.md`](docs/architecture.md)
 - Tier 2 endpoint-копроцессоры (пост-v0.1.0): [`tasks/tier2-endpoints.md`](tasks/tier2-endpoints.md) · модель безопасности: [`docs/endpoint-security.md`](docs/endpoint-security.md)
@@ -275,7 +275,7 @@ make test-integration    # counter example end-to-end
 
 CI прогоняет проверки структуры/лицензий, Go (lint+race+coverage+fuzz), Java
 (spotless+tests+JaCoCo), кросс-языковой contract-job на golden-corpus и
-(на main/nightly) полную матрицу интеграции на HBase 2.5.0 и 2.5.11.
+(на main/nightly) полную матрицу интеграции на HBase 2.5.6 и 2.5.11.
 
 ## Лицензия
 

@@ -412,7 +412,7 @@ External dep: `github.com/virogg/java-go-shmem` (Go pkg + Java jar). Lock вер
 | Latency target <100µs не достижим из-за shmem busy-spin  | средняя     | med    | P8 даёт буфер; альтернатива: futex-based wait в форке shmem                 |
 | WALObserver overhead убивает throughput                  | высокая     | high   | T53 + T82: явный bench-gate; возможный fallback: sampling-only WAL hooks   |
 | Go-process kill -9 при 1000 inflight теряет данные       | средняя     | high   | T34/T35 + T36 fault-injection как обязательный gate                         |
-| HBase 2.5 patch versions меняют RegionObserver signature | низкая      | med    | Pin minor 2.5.x; CI matrix на 2.5.0 и latest 2.5                            |
+| HBase 2.5 patch versions меняют RegionObserver signature | низкая      | med    | Pin minor 2.5.x; CI matrix на 2.5.6 (floor) и latest 2.5                    |
 | Embedded Go ELF в jar > 50MB → медленный coproc-load     | средняя     | low    | UPX или strip + `-trimpath -ldflags "-s -w"`; merit для shared-mode (1 ELF) |
 
 ## 6. Estimates (calendar, single dev, evenings/weekends)

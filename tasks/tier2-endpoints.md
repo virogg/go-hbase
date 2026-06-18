@@ -239,7 +239,7 @@ IT → собрать логи → `compose down`). Новые ключи `hbase
 
 - Каждая фаза заканчивается live-HBase IT (`make test-integration-endpoint*`), не только unit.
 - Fault-matrix (TE54) — обязательное условие релиза.
-- Прогон на обеих CI-версиях (HBase 2.5.0 / 2.5.11), как остальная интеграция.
+- Прогон на обеих CI-версиях (HBase 2.5.6 / 2.5.11), как остальная интеграция.
 
 ## Критические файлы
 
@@ -283,6 +283,12 @@ IT → собрать логи → `compose down`). Новые ключи `hbase
 > `proto-endpoint/`) против server-provided `com.google.protobuf` 2.5.0. Coproc-jar **не бандлит protobuf**.
 > Tier-1 регрессия (counter IT) зелёная. Корневая причина: HBase 2.5 CPEP-API жёстко привязан к unshaded
 > protobuf 2.5.0, а jar-first CoprocessorClassLoader не делегирует `com.google.protobuf` родителю.
+>
+> **Следствие — минимум HBase 2.5.6:** server-provided shaded protobuf варьируется по патчам. Наш
+> gencode (protoc 3.25) совместим только с hbase-thirdparty **4.1.5** (protobuf 3.25); 2.5.0–2.5.5 несут
+> 4.1.1/4.1.4 (protobuf 3.21) и падают на region-open (`GeneratedMessageV3.getUnknownFields` → abort RS →
+> createTable timeout). 2.5.6 — первый патч на 4.1.5 (проверено live: counter IT зелёный на 2.5.6). CI floor
+> поднят 2.5.0 → 2.5.6; SPEC/README обновлены.
 
 ### Phase E3 — реверс-чтения
 - [x] TE31 2-е J→G кольцо + servicing-pool + shaded-конверсия — **live reverse-GET IT зелёный**
@@ -390,7 +396,7 @@ IT → собрать логи → `compose down`). Новые ключи `hbase
       → full count через has_more, не truncate), **oversized-row** (1.6 MiB row > slot → "exceeds ring
       slot", процесс не crash-loop), mutate-reentry (RoundTripIT). Go: методы `slow`/`manyscan` в
       endpoint-observer. CI: endpoint-all + master-endpoint + packaged ITs добавлены в `integration`
-      job (2.5.0/2.5.11). Доки: `docs/endpoint-security.md` (+ reentry + handler-pinning секции),
+      job (2.5.6/2.5.11). Доки: `docs/endpoint-security.md` (+ reentry + handler-pinning секции),
       SPEC/README/CHANGELOG de-staled + cross-linked. **Deferred (unit-proven, не live):** idle-lease
       eviction и crash-vs-register scanner-гонки — детерминированный live IT timing-racy; логика
       покрыта unit-тестами + crash-reap live IT.

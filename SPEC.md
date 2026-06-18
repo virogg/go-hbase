@@ -40,7 +40,15 @@ Endpoint coproc: **out of scope MVP** и не в активном roadmap. Go AP
 > `hbasecop.endpoint.allow-mutate`, off по умолчанию.
 
 ### Версия HBase / платформа
-HBase **2.5.x LTS**, Java 11. Hadoop 3.x. **Linux x86-64 only** (POSIX shm + mmap; arm64 не таргетируем).
+HBase **2.5.x LTS** (минимум **2.5.6**), Java 11. Hadoop 3.x. **Linux x86-64 only** (POSIX shm + mmap; arm64 не таргетируем).
+
+> **Минимум 2.5.6 (post-Tier-2):** мост сериализует внутренний wire-protobuf через
+> server-provided shaded `org.apache.hbase.thirdparty.com.google.protobuf` (см.
+> TE22 в [`tasks/tier2-endpoints.md`](tasks/tier2-endpoints.md)). Наш gencode —
+> protoc 3.25; он ABI-совместим только с hbase-thirdparty **4.1.5** (protobuf
+> 3.25). HBase 2.5.0–2.5.5 несут thirdparty 4.1.1/4.1.4 (protobuf 3.21) и падают
+> на region-open (`GeneratedMessageV3.getUnknownFields` → abort). 2.5.6 — первый
+> патч на 4.1.5. CI-матрица: 2.5.6 (floor) и 2.5.11 (latest).
 
 ### Лицензия
 **Apache 2.0** (как у HBase).
