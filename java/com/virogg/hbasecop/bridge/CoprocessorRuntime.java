@@ -251,7 +251,8 @@ public final class CoprocessorRuntime implements AutoCloseable {
               cfg.bulkRingMaxObjectSize(),
               cfg.servicingPoolSize(),
               cfg.servicingQueueDepth(),
-              cfg.servicingTimeout());
+              cfg.servicingTimeout(),
+              cfg.allowMutate());
 
       // TE31: route reverse-RPC requests to the bounded, fail-closed servicing pool (never the
       // reader thread). accept() only submits, so the reader keeps routing hooks/heartbeats.
@@ -1043,6 +1044,8 @@ public final class CoprocessorRuntime implements AutoCloseable {
     private final Duration servicingTimeout;
     private final int bulkRingCapacity;
     private final int bulkRingMaxObjectSize;
+    // TE41: gate for reverse MUTATE (endpoint writes); off by default.
+    private final boolean allowMutate;
 
     private Config(Builder b) {
       this.binaryResourcePath = b.binaryResourcePath;
@@ -1086,6 +1089,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
       this.servicingTimeout = Objects.requireNonNull(b.servicingTimeout, "servicingTimeout");
       this.bulkRingCapacity = b.bulkRingCapacity;
       this.bulkRingMaxObjectSize = b.bulkRingMaxObjectSize;
+      this.allowMutate = b.allowMutate;
     }
 
     public String binaryResourcePath() {
@@ -1194,6 +1198,11 @@ public final class CoprocessorRuntime implements AutoCloseable {
       return bulkRingMaxObjectSize;
     }
 
+    /** TE41: whether reverse MUTATE (endpoint writes) is enabled; off by default. */
+    public boolean allowMutate() {
+      return allowMutate;
+    }
+
     /** TE31: the bulk ring's segment path, derived next to the control Java->Go segment. */
     public Path javaToGoBulkFile() {
       return Path.of(javaToGoFile.toString() + ".bulk");
@@ -1224,6 +1233,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
       private Duration servicingTimeout = Duration.ofSeconds(30);
       private int bulkRingCapacity = 16;
       private int bulkRingMaxObjectSize = 1 << 20; // 1 MiB
+      private boolean allowMutate = false;
 
       public Builder binaryResourcePath(String s) {
         this.binaryResourcePath = s;
@@ -1347,6 +1357,12 @@ public final class CoprocessorRuntime implements AutoCloseable {
       /** TE31: bulk ring slot byte size (default 1 MiB). */
       public Builder bulkRingMaxObjectSize(int n) {
         this.bulkRingMaxObjectSize = n;
+        return this;
+      }
+
+      /** TE41: enable reverse MUTATE (endpoint writes); off by default. */
+      public Builder allowMutate(boolean enabled) {
+        this.allowMutate = enabled;
         return this;
       }
 

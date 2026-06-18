@@ -45,6 +45,9 @@ public final class ConfigPreflight {
           "hbasecop.endpoint.bulk-ring.capacity",
           "hbasecop.endpoint.bulk-ring.max-object-size");
 
+  // Exact keys whose value must be a boolean.
+  private static final Set<String> BOOLEAN_KEYS = Set.of("hbasecop.endpoint.allow-mutate");
+
   private static final Pattern DURATION = Pattern.compile("\\d+\\s*(ns|us|ms|s|m|h|d)");
 
   private ConfigPreflight() {}
@@ -84,6 +87,8 @@ public final class ConfigPreflight {
         checkDuration(key, val, errors);
       } else if (POSITIVE_INT_KEYS.contains(key)) {
         checkPositiveInt(key, val, errors);
+      } else if (BOOLEAN_KEYS.contains(key)) {
+        checkBoolean(key, val, errors);
       } else {
         log.log(Level.WARNING, "hbasecop: unknown config key {0} (ignored)", key);
       }
@@ -124,6 +129,13 @@ public final class ConfigPreflight {
       }
     } catch (NumberFormatException ex) {
       errors.add(key + "=" + val + " (want a positive integer)");
+    }
+  }
+
+  private static void checkBoolean(String key, String val, List<String> errors) {
+    String v = val.trim();
+    if (!v.equalsIgnoreCase("true") && !v.equalsIgnoreCase("false")) {
+      errors.add(key + "=" + val + " (want true|false)");
     }
   }
 }

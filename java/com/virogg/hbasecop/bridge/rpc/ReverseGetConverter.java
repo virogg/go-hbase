@@ -4,7 +4,10 @@
 package com.virogg.hbasecop.bridge.rpc;
 
 import java.io.IOException;
+import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
+import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.shaded.protobuf.ProtobufUtil;
@@ -35,6 +38,24 @@ final class ReverseGetConverter {
   /** Parse a vendored {@code hbase.Scan} wire payload into a native {@link Scan} (TE33). */
   static Scan toNativeScan(byte[] opPayload) throws IOException {
     return ProtobufUtil.toScan(ClientProtos.Scan.parseFrom(opPayload));
+  }
+
+  /**
+   * Parse a vendored {@code hbase.MutationProto} wire payload into a native {@link Put} or {@link
+   * Delete} (TE41). Cells ride inline in the proto's {@code column_value} (no {@code CellScanner}),
+   * so the single-arg shaded converters apply. Only PUT and DELETE are supported; APPEND/INCREMENT
+   * (which return a value, needing a reply payload) are out of scope for this slice.
+   */
+  static Mutation toNativeMutation(byte[] opPayload) throws IOException {
+    ClientProtos.MutationProto proto = ClientProtos.MutationProto.parseFrom(opPayload);
+    switch (proto.getMutateType()) {
+      case PUT:
+        return ProtobufUtil.toPut(proto);
+      case DELETE:
+        return ProtobufUtil.toDelete(proto);
+      default:
+        throw new IOException("unsupported reverse mutate type: " + proto.getMutateType());
+    }
   }
 
   /**

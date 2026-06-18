@@ -26,6 +26,16 @@ final class GenericCoprocessorTest {
     assertEquals(GenericCoprocessor.DEFAULT_HOOK_TIMEOUT, cfg.hookTimeout());
     assertEquals(GenericCoprocessor.DEFAULT_ENDPOINT_TIMEOUT, cfg.endpointTimeout());
     assertEquals(GenericCoprocessor.DEFAULT_GRACEFUL_SHUTDOWN, cfg.gracefulShutdownTimeout());
+    assertFalse(cfg.allowMutate(), "reverse MUTATE must be off by default (TE41)");
+  }
+
+  @Test
+  void buildConfigHonoursAllowMutateOverride(@TempDir Path tmp) {
+    Configuration conf = new Configuration(false);
+    conf.setBoolean(GenericCoprocessor.KEY_ALLOW_MUTATE, true);
+
+    CoprocessorRuntime.Config cfg = GenericCoprocessor.buildConfig(conf, tmp);
+    assertTrue(cfg.allowMutate());
   }
 
   @Test

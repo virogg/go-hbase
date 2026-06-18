@@ -21,7 +21,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
+import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.Region;
@@ -43,8 +46,9 @@ import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
  * {@link ScannerContext}, row-aligned so a row is never split) that keeps the reply within one ring
  * slot; {@code has_more} tells the caller whether to issue another SCAN_NEXT. A single row whose
  * cells exceed one slot is a clean error (the scanner is closed) rather than a crash loop. Open
- * scanners live in the shared {@link ScannerRegistry} and are reaped on Go-process crash. MUTATE is
- * TE41.
+ * scanners live in the shared {@link ScannerRegistry} and are reaped on Go-process crash. MUTATE
+ * (TE41) applies a Put/Delete through the region (observer hooks fire, as in the stock
+ * MultiRowMutationEndpoint), gated off unless {@code hbasecop.endpoint.allow-mutate=true}.
  */
 public final class ReverseRpcServicer {
 
@@ -63,6 +67,9 @@ public final class ReverseRpcServicer {
   // sends inline on the reader thread (the reply is itself a bulk-ring send that can block).
   private final ThreadPoolExecutor overflowReplies;
   private final Duration shutdownTimeout;
+  // TE41: reverse MUTATE is gated off by default; only enabled via
+  // hbasecop.endpoint.allow-mutate=true. A disabled MUTATE fails closed with an ERROR reply.
+  private final boolean allowMutate;
 
   /**
    * @param regionRegistry resolves a request's {@code region_id} to its live {@link Region}
@@ -82,6 +89,33 @@ public final class ReverseRpcServicer {
       int poolSize,
       int queueDepth,
       Duration shutdownTimeout) {
+    // Read-only servicer: reverse MUTATE disabled (the safe default).
+    this(
+        regionRegistry,
+        scannerRegistry,
+        replySink,
+        slotMaxObjectSize,
+        poolSize,
+        queueDepth,
+        shutdownTimeout,
+        false);
+  }
+
+  /**
+   * @param allowMutate whether reverse MUTATE (TE41) is permitted; off by default
+   *     (hbasecop.endpoint.allow-mutate). When false, a MUTATE request fails closed with an ERROR
+   *     reply before any region write.
+   */
+  public ReverseRpcServicer(
+      RegionRegistry regionRegistry,
+      ScannerRegistry scannerRegistry,
+      Consumer<Message> replySink,
+      int slotMaxObjectSize,
+      int poolSize,
+      int queueDepth,
+      Duration shutdownTimeout,
+      boolean allowMutate) {
+    this.allowMutate = allowMutate;
     this.regionRegistry = Objects.requireNonNull(regionRegistry, "regionRegistry");
     this.scannerRegistry = Objects.requireNonNull(scannerRegistry, "scannerRegistry");
     this.replySink = Objects.requireNonNull(replySink, "replySink");
@@ -174,10 +208,11 @@ public final class ReverseRpcServicer {
         case SCAN_CLOSE:
           serviceScanClose(request, req);
           break;
+        case MUTATE:
+          serviceMutate(request, req);
+          break;
         default:
-          replyError(
-              request,
-              "unsupported reverse op " + req.getOp() + " (GET/SCAN in TE33; MUTATE TE41)");
+          replyError(request, "unsupported reverse op " + req.getOp());
       }
     } catch (Throwable t) {
       // A worker must never die silently or leak the exception: turn any failure into an ERROR
@@ -269,6 +304,30 @@ public final class ReverseRpcServicer {
     // (and log) rather than leak the exception into an ERROR reply for an otherwise-successful
     // close.
     closeQuietly(scannerRegistry.remove(req.getCallId(), req.getScannerId()));
+    sendReply(request, RpcResponse.newBuilder().setStatus(RpcResponse.Status.OK).build());
+  }
+
+  private void serviceMutate(Message request, RpcRequest req) throws IOException {
+    if (!allowMutate) {
+      // Fail closed: reverse writes are opt-in — they bypass the client RPC stack (ACL/quota), so
+      // exposing them by default would be a DoS / authorization-bypass surface.
+      replyError(request, "reverse MUTATE disabled (set hbasecop.endpoint.allow-mutate=true)");
+      return;
+    }
+    Region region = region(request);
+    if (region == null) {
+      return;
+    }
+    // region.put/delete go through the region's observer pipeline (Pre/Post-Put/Delete fire) but
+    // bypass the client RPC stack — the same write path as the stock MultiRowMutationEndpoint. This
+    // runs on a servicing-pool thread, never the RS handler blocked on the endpoint result (A-1),
+    // so an endpoint mutating the very region it was invoked on does not self-deadlock.
+    Mutation m = ReverseGetConverter.toNativeMutation(req.getOpPayload().toByteArray());
+    if (m instanceof Put) {
+      region.put((Put) m);
+    } else {
+      region.delete((Delete) m); // toNativeMutation only ever returns Put or Delete
+    }
     sendReply(request, RpcResponse.newBuilder().setStatus(RpcResponse.Status.OK).build());
   }
 

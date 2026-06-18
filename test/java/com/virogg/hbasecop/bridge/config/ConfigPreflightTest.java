@@ -69,6 +69,19 @@ final class ConfigPreflightTest {
   }
 
   @Test
+  void validatesAllowMutateBoolean() {
+    assertDoesNotThrow(
+        () -> ConfigPreflight.validate(conf("hbasecop.endpoint.allow-mutate", "true"), LOG));
+    assertDoesNotThrow(
+        () -> ConfigPreflight.validate(conf("hbasecop.endpoint.allow-mutate", "false"), LOG));
+    IllegalArgumentException ex =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> ConfigPreflight.validate(conf("hbasecop.endpoint.allow-mutate", "yes"), LOG));
+    assertTrue(ex.getMessage().contains("hbasecop.endpoint.allow-mutate"), ex.getMessage());
+  }
+
+  @Test
   void unknownKeyAndUnknownHookAreWarnNotError() {
     // Unknown hbasecop.* key and an unknown per-hook suffix must not fail start.
     Configuration c =

@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -24,7 +25,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.Region;
@@ -291,6 +294,110 @@ class ReverseRpcServicerTest {
     RpcResponse resp = poll();
     assertEquals(RpcResponse.Status.ERROR, resp.getStatus());
     assertTrue(resp.getPayload().toStringUtf8().contains("unknown scanner"));
+  }
+
+  private static Message mutateReq(
+      long reqId, int regionId, ClientProtos.MutationProto.MutationType type, String row) {
+    ClientProtos.MutationProto.Builder mp =
+        ClientProtos.MutationProto.newBuilder()
+            .setRow(ByteString.copyFrom(Bytes.toBytes(row)))
+            .setMutateType(type);
+    if (type == ClientProtos.MutationProto.MutationType.PUT) {
+      mp.addColumnValue(
+          ClientProtos.MutationProto.ColumnValue.newBuilder()
+              .setFamily(ByteString.copyFrom(Bytes.toBytes("cf")))
+              .addQualifierValue(
+                  ClientProtos.MutationProto.ColumnValue.QualifierValue.newBuilder()
+                      .setQualifier(ByteString.copyFrom(Bytes.toBytes("q")))
+                      .setValue(ByteString.copyFrom(Bytes.toBytes("v")))
+                      .setTimestamp(1L)));
+    }
+    byte[] rr =
+        RpcRequest.newBuilder()
+            .setOp(RpcRequest.Op.MUTATE)
+            .setOpPayload(ByteString.copyFrom(mp.build().toByteArray()))
+            .build()
+            .toByteArray();
+    return new Message(FrameType.RPC_REQUEST, reqId, regionId, (byte) 0, rr);
+  }
+
+  @Test
+  void mutateDisabledRepliesErrorWithoutWriting() throws Exception {
+    RegionRegistry registry = new RegionRegistry();
+    registry.register(7, region);
+    // 7-arg constructor: allowMutate defaults false (read-only servicer).
+    servicer =
+        new ReverseRpcServicer(
+            registry, new ScannerRegistry(), replies::add, SLOT, 4, 16, Duration.ofSeconds(5));
+    servicer.accept(mutateReq(1, 7, ClientProtos.MutationProto.MutationType.PUT, "row-1"));
+
+    RpcResponse resp = poll();
+    assertEquals(RpcResponse.Status.ERROR, resp.getStatus());
+    assertTrue(
+        resp.getPayload().toStringUtf8().contains("allow-mutate"),
+        () -> "error detail: " + resp.getPayload().toStringUtf8());
+    verify(region, never()).put(any(Put.class));
+  }
+
+  @Test
+  void mutatePutAppliesToRegionWhenAllowed() throws Exception {
+    RegionRegistry registry = new RegionRegistry();
+    registry.register(7, region);
+    servicer =
+        new ReverseRpcServicer(
+            registry,
+            new ScannerRegistry(),
+            replies::add,
+            SLOT,
+            4,
+            16,
+            Duration.ofSeconds(5),
+            true);
+    servicer.accept(mutateReq(1, 7, ClientProtos.MutationProto.MutationType.PUT, "row-1"));
+
+    RpcResponse resp = poll();
+    assertEquals(RpcResponse.Status.OK, resp.getStatus());
+    verify(region).put(any(Put.class));
+  }
+
+  @Test
+  void mutateDeleteAppliesToRegionWhenAllowed() throws Exception {
+    RegionRegistry registry = new RegionRegistry();
+    registry.register(7, region);
+    servicer =
+        new ReverseRpcServicer(
+            registry,
+            new ScannerRegistry(),
+            replies::add,
+            SLOT,
+            4,
+            16,
+            Duration.ofSeconds(5),
+            true);
+    servicer.accept(mutateReq(1, 7, ClientProtos.MutationProto.MutationType.DELETE, "row-1"));
+
+    RpcResponse resp = poll();
+    assertEquals(RpcResponse.Status.OK, resp.getStatus());
+    verify(region).delete(any(Delete.class));
+  }
+
+  @Test
+  void mutateUnknownRegionRepliesError() throws Exception {
+    servicer =
+        new ReverseRpcServicer(
+            new RegionRegistry(),
+            new ScannerRegistry(),
+            replies::add,
+            SLOT,
+            4,
+            16,
+            Duration.ofSeconds(5),
+            true);
+    servicer.accept(mutateReq(1, 99, ClientProtos.MutationProto.MutationType.PUT, "row-1"));
+
+    RpcResponse resp = poll();
+    assertEquals(RpcResponse.Status.ERROR, resp.getStatus());
+    assertTrue(resp.getPayload().toStringUtf8().contains("no region"));
   }
 
   @Test

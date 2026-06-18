@@ -43,6 +43,8 @@ final class GenericCoprocessor {
   static final String KEY_SERVICING_TIMEOUT = "hbasecop.endpoint.servicing-timeout";
   static final String KEY_BULK_RING_CAPACITY = "hbasecop.endpoint.bulk-ring.capacity";
   static final String KEY_BULK_RING_MAX_OBJECT_SIZE = "hbasecop.endpoint.bulk-ring.max-object-size";
+  // TE41: reverse MUTATE (endpoint writes) gate; off by default.
+  static final String KEY_ALLOW_MUTATE = "hbasecop.endpoint.allow-mutate";
 
   static final int DEFAULT_RING_CAPACITY = 16;
   static final int DEFAULT_RING_MAX_OBJECT_SIZE = 1 << 20; // 1 MiB
@@ -54,6 +56,7 @@ final class GenericCoprocessor {
   static final int DEFAULT_SERVICING_POOL_SIZE = 8;
   static final int DEFAULT_SERVICING_QUEUE_DEPTH = 64;
   static final Duration DEFAULT_SERVICING_TIMEOUT = Duration.ofSeconds(30);
+  static final boolean DEFAULT_ALLOW_MUTATE = false;
 
   private static final String ELF_RESOURCE_PATH = "bin/linux-amd64/hbasecop-runtime";
 
@@ -121,6 +124,10 @@ final class GenericCoprocessor {
         conf != null
             ? conf.getInt(KEY_SERVICING_QUEUE_DEPTH, DEFAULT_SERVICING_QUEUE_DEPTH)
             : DEFAULT_SERVICING_QUEUE_DEPTH;
+    boolean allowMutate =
+        conf != null
+            ? conf.getBoolean(KEY_ALLOW_MUTATE, DEFAULT_ALLOW_MUTATE)
+            : DEFAULT_ALLOW_MUTATE;
     return CoprocessorRuntime.Config.builder()
         .javaToGoFile(tmpDir.resolve("in.mmap"))
         .goToJavaFile(tmpDir.resolve("out.mmap"))
@@ -134,6 +141,7 @@ final class GenericCoprocessor {
         .servicingTimeout(duration(conf, KEY_SERVICING_TIMEOUT, DEFAULT_SERVICING_TIMEOUT))
         .bulkRingCapacity(bulkCapacity)
         .bulkRingMaxObjectSize(bulkMaxObject)
+        .allowMutate(allowMutate)
         .configuration(conf)
         .build();
   }
