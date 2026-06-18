@@ -84,7 +84,7 @@ SHMEM_POM       := $(SHMEM_SUBMODULE)/java/pom.xml
 # checked-out submodule is exactly this commit with no tracked-source drift, so
 # a bump or tampering can't slip through unreviewed. Bumping the dependency means
 # updating this SHA and docs/dep-shmem.md in the same change.
-SHMEM_EXPECTED_SHA := ef35ad6d413899b4497aca191b9cc4dcca4f98bc
+SHMEM_EXPECTED_SHA := 34f33cf873dab78166d1b22ff27654b56920d04f
 
 .PHONY: deps-shmem
 deps-shmem: $(SHMEM_POM) ## Install the local java-go-shmem jar into ~/.m2 (no-op for Go: replace directive).
