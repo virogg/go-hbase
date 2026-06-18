@@ -3,17 +3,11 @@
 
 package com.virogg.hbasecop.client;
 
-import com.google.protobuf.ByteString;
-import com.google.protobuf.RpcCallback;
 import com.virogg.hbasecop.bridge.endpoint.pb.GoEndpointRequest;
-import com.virogg.hbasecop.bridge.endpoint.pb.GoEndpointResponse;
 import com.virogg.hbasecop.bridge.endpoint.pb.GoEndpointService;
-import java.io.IOException;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.ipc.ServerRpcController;
 
 /**
  * TE51 region client helper: invokes the generic {@code GoEndpointService.Call(method, payload)} on
@@ -22,12 +16,13 @@ import org.apache.hadoop.hbase.ipc.ServerRpcController;
  * <p>An endpoint runs once per region, so a table-wide aggregation (e.g. a SUM) yields one partial
  * result per region; this helper performs the fan-out and the client-side reduce so callers write a
  * single call instead of hand-rolling {@link Table#coprocessorService} each time. It is the
- * client-side counterpart to the server-side aggregation endpoints in {@code pkg/hbasecop}.
+ * client-side counterpart to the server-side aggregation endpoints in {@code pkg/hbasecop}. For the
+ * master (no-region) endpoint, see {@link AdminEndpointClient}.
  *
- * <p>The endpoint Service is generated against the UNSHADED {@code com.google.protobuf} 2.5.0 that
- * HBase 2.5's {@code Coprocessor.getServices()} contract binds, so the per-region invocation uses
- * an unshaded {@link ServerRpcController} and {@link RpcCallback} — not HBase's shaded {@code
- * BlockingRpcCallback}, which would not bind to the generated stub.
+ * <p>The methods declare {@code throws Throwable} only because {@link Table#coprocessorService}
+ * does; an endpoint's own outcome (controller failure, missing response, or Go-side error) always
+ * surfaces as an {@link java.io.IOException}, so a caller can {@code catch (IOException)} first —
+ * symmetric with {@link AdminEndpointClient#callMaster}.
  */
 public final class EndpointClient {
 
@@ -51,13 +46,12 @@ public final class EndpointClient {
    */
   public static Map<byte[], byte[]> callRegions(
       Table table, byte[] startKey, byte[] endKey, String method, byte[] payload) throws Throwable {
-    GoEndpointRequest request =
-        GoEndpointRequest.newBuilder()
-            .setMethod(method)
-            .setPayload(payload == null ? ByteString.EMPTY : ByteString.copyFrom(payload))
-            .build();
+    GoEndpointRequest request = EndpointCalls.request(method, payload);
     return table.coprocessorService(
-        GoEndpointService.class, startKey, endKey, instance -> invokeOnRegion(instance, request));
+        GoEndpointService.class,
+        startKey,
+        endKey,
+        instance -> EndpointCalls.invoke(instance, request));
   }
 
   /**
@@ -89,29 +83,5 @@ public final class EndpointClient {
       acc = reducer.apply(acc, regionResult);
     }
     return acc;
-  }
-
-  /**
-   * Runs one region's endpoint Call through the unshaded controller/callback shape and unwraps the
-   * result, turning a controller failure, a missing response, or a Go-side error into an {@link
-   * IOException} so the failure surfaces to the caller of {@link Table#coprocessorService}.
-   */
-  private static byte[] invokeOnRegion(GoEndpointService instance, GoEndpointRequest request)
-      throws IOException {
-    ServerRpcController controller = new ServerRpcController();
-    AtomicReference<GoEndpointResponse> out = new AtomicReference<>();
-    RpcCallback<GoEndpointResponse> done = out::set;
-    instance.call(controller, request, done);
-    if (controller.failed()) {
-      throw new IOException("endpoint controller failed: " + controller.errorText());
-    }
-    GoEndpointResponse resp = out.get();
-    if (resp == null) {
-      throw new IOException("endpoint returned no response");
-    }
-    if (!resp.getError().isEmpty()) {
-      throw new IOException("endpoint error: " + resp.getError());
-    }
-    return resp.getPayload().toByteArray();
   }
 }

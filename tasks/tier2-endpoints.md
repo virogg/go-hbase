@@ -355,8 +355,21 @@ IT → собрать логи → `compose down`). Новые ключи `hbase
       зелёный** (EndpointMultiRegionIT 1/1 — 4-way pre-split, "sum" partials {3,7,11,15} reduce to
       table total 36, HBase 2.5.11, 2026-06-18); make `test-integration-endpoint-multiregion`.
       Unit: fold/raw-map/empty-payload/error-surfacing/null-response/controller-failure (Mockito).
-- [ ] TE52 admin master-endpoint helper
-- [ ] TE53 упаковка (getServices в Generic*, hbasecop-build, preflight)
+- [x] TE52 admin master-endpoint helper — `com.virogg.hbasecop.client.AdminEndpointClient.callMaster(
+      admin, method, payload)`: один вызов master-endpoint'а через `Admin.coprocessorService()`
+      `CoprocessorRpcChannel` + `GoEndpointService.newStub` (unshaded), результат unwrap'ится
+      (один master → без fan-out). Общая плумбинг-логика вынесена в package-private `EndpointCalls`
+      (request build + controller/callback/error→IOException), `EndpointClient` (TE51) переведён на
+      неё. **live IT зелёный** (MasterEndpointIT 1/1 "MASTER-HELLO" через helper, HBase 2.5.11,
+      2026-06-18); make `test-integration-master-endpoint`. Unit: request-mapping/null-payload/
+      go-error/controller-failure(+precedence)/missing-response (Mockito channel). Opus-review
+      (5 confirmed, 0 blocking): доки/nits исправлены; packaging-граница → NB в TE53.
+- [ ] TE53 упаковка (getServices в Generic*, hbasecop-build, preflight) — **NB (review)**: решить
+      судьбу `com.virogg.hbasecop.client.*` (EndpointClient/AdminEndpointClient/EndpointCalls) в
+      uber-shade coproc-jar — сейчас попадают в server-jar по wildcard (`bin/**` — единственный
+      class-exclude). Исключить из shade (клиентские хелперы → тонкий main-артефакт / отдельный
+      client-модуль) ИЛИ осознанно шипать и задокументировать. Inert (HBase client = provided), но
+      dead client-code в server-jar.
 - [ ] TE54 IT + fault-matrix + доки
 - [ ] **CP-E5 (GO/NO-GO релиз):** агрегация по multi-region таблице, zero-Java деплой, fault-matrix зелёный
 

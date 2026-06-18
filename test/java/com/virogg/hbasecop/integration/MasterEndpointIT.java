@@ -3,35 +3,30 @@
 
 package com.virogg.hbasecop.integration;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.google.protobuf.ByteString;
-import com.google.protobuf.RpcCallback;
-import com.virogg.hbasecop.bridge.endpoint.pb.GoEndpointRequest;
-import com.virogg.hbasecop.bridge.endpoint.pb.GoEndpointResponse;
-import com.virogg.hbasecop.bridge.endpoint.pb.GoEndpointService;
-import java.io.IOException;
+import com.virogg.hbasecop.client.AdminEndpointClient;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.concurrent.atomic.AtomicReference;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
-import org.apache.hadoop.hbase.ipc.CoprocessorRpcChannel;
-import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.junit.jupiter.api.Test;
 
 /**
- * TE43 integration test: the generic {@code GoEndpointService} exposed by the stock {@code
- * GenericMasterObserver} via {@code MasterCoprocessor.getServices()} is invokable through {@code
+ * TE43/TE52 integration test: the generic {@code GoEndpointService} exposed by the stock {@code
+ * GenericMasterObserver} via {@code MasterCoprocessor.getServices()} (TE43) is invokable through
+ * the TE52 {@link com.virogg.hbasecop.client.AdminEndpointClient#callMaster} helper over {@code
  * Admin.coprocessorService()} (master-scoped, no region), and the call round-trips to the Go
- * endpoint and back.
+ * endpoint and back. This is the live verification for both the master-endpoint infrastructure
+ * (TE43) and the single-call admin helper (TE52).
  *
  * <p>The master coprocessor is registered cluster-wide via {@code hbase.coprocessor.master.classes}
  * (the docker entrypoint patches hbase-site.xml when {@code make test-integration-master-endpoint}
@@ -58,31 +53,14 @@ final class MasterEndpointIT {
 
       waitForClusterReady(admin, Duration.ofSeconds(300));
 
-      // Admin.coprocessorService() targets the active master; its CoprocessorRpcChannel is the
-      // UNSHADED com.google.protobuf channel the proto2 GoEndpointService stub binds to.
-      CoprocessorRpcChannel channel = admin.coprocessorService();
-      GoEndpointService.Stub stub = GoEndpointService.newStub(channel);
-      ServerRpcController controller = new ServerRpcController();
-      AtomicReference<GoEndpointResponse> out = new AtomicReference<>();
-      RpcCallback<GoEndpointResponse> done = out::set;
-
-      stub.call(
-          controller,
-          GoEndpointRequest.newBuilder()
-              .setMethod("upper")
-              .setPayload(ByteString.copyFromUtf8("master-hello"))
-              .build(),
-          done);
-
-      if (controller.failed()) {
-        throw new IOException("master endpoint controller failed: " + controller.errorText());
-      }
-      GoEndpointResponse resp = out.get();
-      assertTrue(resp != null, "master endpoint returned no response");
-      assertTrue(resp.getError().isEmpty(), () -> "master endpoint error: " + resp.getError());
+      // AdminEndpointClient.callMaster (TE52) makes a single call (one master, no fan-out) over
+      // the master's unshaded protobuf channel from Admin.coprocessorService() — the channel the
+      // proto2 GoEndpointService stub binds to — and unwraps the result.
+      byte[] result =
+          AdminEndpointClient.callMaster(admin, "upper", "master-hello".getBytes(UTF_8));
       assertEquals(
           "MASTER-HELLO",
-          resp.getPayload().toStringUtf8(),
+          new String(result, UTF_8),
           "master endpoint must round-trip to the Go handler and upper-case the payload");
     }
   }

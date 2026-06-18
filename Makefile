@@ -689,7 +689,7 @@ test-integration-master: master-policy-observer-jar ## T51: full IT - bring up H
 	  exit $$status
 
 .PHONY: test-integration-master-endpoint
-test-integration-master-endpoint: endpoint-observer-jar ## TE43: full IT - bring up HBase with the endpoint-observer registered as a MASTER coproc, run MasterEndpointIT, tear down.
+test-integration-master-endpoint: endpoint-observer-jar ## TE43/TE52: full IT - bring up HBase with the endpoint-observer registered as a MASTER coproc, run MasterEndpointIT (via AdminEndpointClient), tear down.
 	@mkdir -p test/integration/coproc-jars
 	cp $(ENDPOINT_OBSERVER_DIR)/target/endpoint-observer.jar $(ENDPOINT_COPROC_JAR_STAGED)
 	@set +e; \
