@@ -178,11 +178,16 @@ IT → собрать логи → `compose down`). Новые ключи `hbase
   prePut на отдельной горутине, fail-closed пул конвертит насыщение в ошибку; рекурсия
   `postPut→reverse-mutate→postPut` — ответственность автора endpoint'а (как в ванильном HBase, guard'а нет).
   Verify: IT оба состояния флага + reentry-стресс-IT.
-- **TE42: лимиты + admission control** *(E4)* — Deps: TE33. AC:
+- **TE42: лимиты + admission control + per-table gate + reaping-races** *(E4)* — Deps: TE33. AC:
   `hbasecop.endpoint.{max-concurrent-calls, max-scanners-per-call, max-bytes-per-resp,
   max-rows-per-next, scanner-idle-lease}`; превышение → определённая ошибка, не hang/OOM; admission
-  отбивает лишние конкурентные вызовы (защита handler-пула RS, A-1). Verify: IT трогает каждый
-  лимит, нормальный трафик продолжает идти.
+  отбивает лишние конкурентные вызовы (защита handler-пула RS, A-1). **+ per-table `allow-mutate`
+  enforcement** (перенесено из TE41): servicer гейтит по конфигу таблицы вызывающего региона, не по
+  baked-флагу — переиспользует per-call/per-region config-путь admission. **+ 3 crash-window
+  scanner-гонки** (перенесено из CP-E3): getScanner-before-register, closeAll-vs-register,
+  scanner-before-OPEN-reply — закрыть окна в `ScannerRegistry`/reaping-пути. Verify: IT трогает
+  каждый лимит, нормальный трафик идёт; per-table gate IT (две таблицы, разный флаг); fault-IT на
+  каждую гонку (crash в окне → ноль утёкших сканеров).
 - **TE43: master-endpoint'ы (без региона)** *(E4)* — Deps: TE21. AC: `MasterCoprocessor.getServices()`
   + `Admin.coprocessorService`; scope = чтение master/meta-стейта, НЕ region-реверс (A-12). Verify:
   IT через `Admin.coprocessorService` (bring-up по образцу `MasterPolicyIT`).

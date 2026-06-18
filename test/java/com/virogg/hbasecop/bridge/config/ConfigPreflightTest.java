@@ -82,6 +82,29 @@ final class ConfigPreflightTest {
   }
 
   @Test
+  void validatesTe42Limits() {
+    assertDoesNotThrow(
+        () ->
+            ConfigPreflight.validate(
+                conf(
+                    "hbasecop.endpoint.max-concurrent-calls", "16",
+                    "hbasecop.endpoint.max-scanners-per-call", "8",
+                    "hbasecop.endpoint.max-bytes-per-resp", "1048576",
+                    "hbasecop.endpoint.max-rows-per-next", "500",
+                    "hbasecop.endpoint.scanner-idle-lease", "2m"),
+                LOG));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> ConfigPreflight.validate(conf("hbasecop.endpoint.max-rows-per-next", "0"), LOG));
+    IllegalArgumentException ex =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                ConfigPreflight.validate(conf("hbasecop.endpoint.scanner-idle-lease", "120"), LOG));
+    assertTrue(ex.getMessage().contains("hbasecop.endpoint.scanner-idle-lease"), ex.getMessage());
+  }
+
+  @Test
   void unknownKeyAndUnknownHookAreWarnNotError() {
     // Unknown hbasecop.* key and an unknown per-hook suffix must not fail start.
     Configuration c =

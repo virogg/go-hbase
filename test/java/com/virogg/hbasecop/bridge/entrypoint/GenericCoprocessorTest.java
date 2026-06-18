@@ -27,6 +27,28 @@ final class GenericCoprocessorTest {
     assertEquals(GenericCoprocessor.DEFAULT_ENDPOINT_TIMEOUT, cfg.endpointTimeout());
     assertEquals(GenericCoprocessor.DEFAULT_GRACEFUL_SHUTDOWN, cfg.gracefulShutdownTimeout());
     assertFalse(cfg.allowMutate(), "reverse MUTATE must be off by default (TE41)");
+    assertEquals(GenericCoprocessor.DEFAULT_MAX_CONCURRENT_CALLS, cfg.maxConcurrentCalls());
+    assertEquals(GenericCoprocessor.DEFAULT_MAX_SCANNERS_PER_CALL, cfg.maxScannersPerCall());
+    assertEquals(GenericCoprocessor.DEFAULT_MAX_BYTES_PER_RESP, cfg.maxBytesPerResp());
+    assertEquals(GenericCoprocessor.DEFAULT_MAX_ROWS_PER_NEXT, cfg.maxRowsPerNext());
+    assertEquals(GenericCoprocessor.DEFAULT_SCANNER_IDLE_LEASE, cfg.scannerIdleLease());
+  }
+
+  @Test
+  void buildConfigHonoursTe42LimitOverrides(@TempDir Path tmp) {
+    Configuration conf = new Configuration(false);
+    conf.setInt(GenericCoprocessor.KEY_MAX_CONCURRENT_CALLS, 32);
+    conf.setInt(GenericCoprocessor.KEY_MAX_SCANNERS_PER_CALL, 4);
+    conf.setInt(GenericCoprocessor.KEY_MAX_BYTES_PER_RESP, 1 << 18);
+    conf.setInt(GenericCoprocessor.KEY_MAX_ROWS_PER_NEXT, 50);
+    conf.set(GenericCoprocessor.KEY_SCANNER_IDLE_LEASE, "30s");
+
+    CoprocessorRuntime.Config cfg = GenericCoprocessor.buildConfig(conf, tmp);
+    assertEquals(32, cfg.maxConcurrentCalls());
+    assertEquals(4, cfg.maxScannersPerCall());
+    assertEquals(1 << 18, cfg.maxBytesPerResp());
+    assertEquals(50, cfg.maxRowsPerNext());
+    assertEquals(Duration.ofSeconds(30), cfg.scannerIdleLease());
   }
 
   @Test

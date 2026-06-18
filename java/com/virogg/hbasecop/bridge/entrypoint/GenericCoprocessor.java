@@ -45,6 +45,12 @@ final class GenericCoprocessor {
   static final String KEY_BULK_RING_MAX_OBJECT_SIZE = "hbasecop.endpoint.bulk-ring.max-object-size";
   // TE41: reverse MUTATE (endpoint writes) gate; off by default.
   static final String KEY_ALLOW_MUTATE = "hbasecop.endpoint.allow-mutate";
+  // TE42 endpoint limits + admission.
+  static final String KEY_MAX_CONCURRENT_CALLS = "hbasecop.endpoint.max-concurrent-calls";
+  static final String KEY_MAX_SCANNERS_PER_CALL = "hbasecop.endpoint.max-scanners-per-call";
+  static final String KEY_MAX_BYTES_PER_RESP = "hbasecop.endpoint.max-bytes-per-resp";
+  static final String KEY_MAX_ROWS_PER_NEXT = "hbasecop.endpoint.max-rows-per-next";
+  static final String KEY_SCANNER_IDLE_LEASE = "hbasecop.endpoint.scanner-idle-lease";
 
   static final int DEFAULT_RING_CAPACITY = 16;
   static final int DEFAULT_RING_MAX_OBJECT_SIZE = 1 << 20; // 1 MiB
@@ -57,6 +63,11 @@ final class GenericCoprocessor {
   static final int DEFAULT_SERVICING_QUEUE_DEPTH = 64;
   static final Duration DEFAULT_SERVICING_TIMEOUT = Duration.ofSeconds(30);
   static final boolean DEFAULT_ALLOW_MUTATE = false;
+  static final int DEFAULT_MAX_CONCURRENT_CALLS = 8;
+  static final int DEFAULT_MAX_SCANNERS_PER_CALL = 16;
+  static final int DEFAULT_MAX_BYTES_PER_RESP = 1 << 20; // 1 MiB
+  static final int DEFAULT_MAX_ROWS_PER_NEXT = 1000;
+  static final Duration DEFAULT_SCANNER_IDLE_LEASE = Duration.ofMinutes(2);
 
   private static final String ELF_RESOURCE_PATH = "bin/linux-amd64/hbasecop-runtime";
 
@@ -132,6 +143,22 @@ final class GenericCoprocessor {
         conf != null
             ? conf.getBoolean(KEY_ALLOW_MUTATE, DEFAULT_ALLOW_MUTATE)
             : DEFAULT_ALLOW_MUTATE;
+    int maxConcurrentCalls =
+        conf != null
+            ? conf.getInt(KEY_MAX_CONCURRENT_CALLS, DEFAULT_MAX_CONCURRENT_CALLS)
+            : DEFAULT_MAX_CONCURRENT_CALLS;
+    int maxScannersPerCall =
+        conf != null
+            ? conf.getInt(KEY_MAX_SCANNERS_PER_CALL, DEFAULT_MAX_SCANNERS_PER_CALL)
+            : DEFAULT_MAX_SCANNERS_PER_CALL;
+    int maxBytesPerResp =
+        conf != null
+            ? conf.getInt(KEY_MAX_BYTES_PER_RESP, DEFAULT_MAX_BYTES_PER_RESP)
+            : DEFAULT_MAX_BYTES_PER_RESP;
+    int maxRowsPerNext =
+        conf != null
+            ? conf.getInt(KEY_MAX_ROWS_PER_NEXT, DEFAULT_MAX_ROWS_PER_NEXT)
+            : DEFAULT_MAX_ROWS_PER_NEXT;
     return CoprocessorRuntime.Config.builder()
         .javaToGoFile(tmpDir.resolve("in.mmap"))
         .goToJavaFile(tmpDir.resolve("out.mmap"))
@@ -146,6 +173,11 @@ final class GenericCoprocessor {
         .bulkRingCapacity(bulkCapacity)
         .bulkRingMaxObjectSize(bulkMaxObject)
         .allowMutate(allowMutate)
+        .maxConcurrentCalls(maxConcurrentCalls)
+        .maxScannersPerCall(maxScannersPerCall)
+        .maxBytesPerResp(maxBytesPerResp)
+        .maxRowsPerNext(maxRowsPerNext)
+        .scannerIdleLease(duration(conf, KEY_SCANNER_IDLE_LEASE, DEFAULT_SCANNER_IDLE_LEASE))
         .configuration(conf)
         .build();
   }

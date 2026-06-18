@@ -1046,6 +1046,12 @@ public final class CoprocessorRuntime implements AutoCloseable {
     private final int bulkRingMaxObjectSize;
     // TE41: gate for reverse MUTATE (endpoint writes); off by default.
     private final boolean allowMutate;
+    // TE42 endpoint limits + admission.
+    private final int maxConcurrentCalls;
+    private final int maxScannersPerCall;
+    private final int maxBytesPerResp;
+    private final int maxRowsPerNext;
+    private final Duration scannerIdleLease;
 
     private Config(Builder b) {
       this.binaryResourcePath = b.binaryResourcePath;
@@ -1090,6 +1096,23 @@ public final class CoprocessorRuntime implements AutoCloseable {
       this.bulkRingCapacity = b.bulkRingCapacity;
       this.bulkRingMaxObjectSize = b.bulkRingMaxObjectSize;
       this.allowMutate = b.allowMutate;
+      if (b.maxConcurrentCalls <= 0) {
+        throw new IllegalArgumentException("maxConcurrentCalls must be > 0");
+      }
+      if (b.maxScannersPerCall <= 0) {
+        throw new IllegalArgumentException("maxScannersPerCall must be > 0");
+      }
+      if (b.maxBytesPerResp <= 0) {
+        throw new IllegalArgumentException("maxBytesPerResp must be > 0");
+      }
+      if (b.maxRowsPerNext <= 0) {
+        throw new IllegalArgumentException("maxRowsPerNext must be > 0");
+      }
+      this.maxConcurrentCalls = b.maxConcurrentCalls;
+      this.maxScannersPerCall = b.maxScannersPerCall;
+      this.maxBytesPerResp = b.maxBytesPerResp;
+      this.maxRowsPerNext = b.maxRowsPerNext;
+      this.scannerIdleLease = Objects.requireNonNull(b.scannerIdleLease, "scannerIdleLease");
     }
 
     public String binaryResourcePath() {
@@ -1203,6 +1226,31 @@ public final class CoprocessorRuntime implements AutoCloseable {
       return allowMutate;
     }
 
+    /** TE42: max concurrent client endpoint calls (bounds blocked RS handler threads). */
+    public int maxConcurrentCalls() {
+      return maxConcurrentCalls;
+    }
+
+    /** TE42: max open server-side scanners per endpoint call. */
+    public int maxScannersPerCall() {
+      return maxScannersPerCall;
+    }
+
+    /** TE42: max bytes in a single SCAN_NEXT reply (clamped to the bulk-ring slot). */
+    public int maxBytesPerResp() {
+      return maxBytesPerResp;
+    }
+
+    /** TE42: max rows in a single SCAN_NEXT batch. */
+    public int maxRowsPerNext() {
+      return maxRowsPerNext;
+    }
+
+    /** TE42: idle scanner lease before reaping. */
+    public Duration scannerIdleLease() {
+      return scannerIdleLease;
+    }
+
     /** TE31: the bulk ring's segment path, derived next to the control Java->Go segment. */
     public Path javaToGoBulkFile() {
       return Path.of(javaToGoFile.toString() + ".bulk");
@@ -1234,6 +1282,11 @@ public final class CoprocessorRuntime implements AutoCloseable {
       private int bulkRingCapacity = 16;
       private int bulkRingMaxObjectSize = 1 << 20; // 1 MiB
       private boolean allowMutate = false;
+      private int maxConcurrentCalls = 8;
+      private int maxScannersPerCall = 16;
+      private int maxBytesPerResp = 1 << 20; // 1 MiB
+      private int maxRowsPerNext = 1000;
+      private Duration scannerIdleLease = Duration.ofMinutes(2);
 
       public Builder binaryResourcePath(String s) {
         this.binaryResourcePath = s;
@@ -1363,6 +1416,36 @@ public final class CoprocessorRuntime implements AutoCloseable {
       /** TE41: enable reverse MUTATE (endpoint writes); off by default. */
       public Builder allowMutate(boolean enabled) {
         this.allowMutate = enabled;
+        return this;
+      }
+
+      /** TE42: max concurrent client endpoint calls (default 8). */
+      public Builder maxConcurrentCalls(int n) {
+        this.maxConcurrentCalls = n;
+        return this;
+      }
+
+      /** TE42: max open scanners per endpoint call (default 16). */
+      public Builder maxScannersPerCall(int n) {
+        this.maxScannersPerCall = n;
+        return this;
+      }
+
+      /** TE42: max bytes per SCAN_NEXT reply (default 1 MiB, clamped to slot). */
+      public Builder maxBytesPerResp(int n) {
+        this.maxBytesPerResp = n;
+        return this;
+      }
+
+      /** TE42: max rows per SCAN_NEXT batch (default 1000). */
+      public Builder maxRowsPerNext(int n) {
+        this.maxRowsPerNext = n;
+        return this;
+      }
+
+      /** TE42: idle scanner lease before reaping (default 2m). */
+      public Builder scannerIdleLease(Duration d) {
+        this.scannerIdleLease = d;
         return this;
       }
 

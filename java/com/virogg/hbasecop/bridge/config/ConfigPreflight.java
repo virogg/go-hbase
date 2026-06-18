@@ -31,6 +31,7 @@ public final class ConfigPreflight {
           "hbasecop.shutdown.graceful-timeout",
           "hbasecop.endpoint.timeout",
           "hbasecop.endpoint.servicing-timeout",
+          "hbasecop.endpoint.scanner-idle-lease",
           PolicyConfig.KEY_TIMEOUT_DEFAULT);
 
   // Exact keys whose value must be a positive integer.
@@ -43,7 +44,11 @@ public final class ConfigPreflight {
           "hbasecop.endpoint.servicing-pool-size",
           "hbasecop.endpoint.servicing-queue-depth",
           "hbasecop.endpoint.bulk-ring.capacity",
-          "hbasecop.endpoint.bulk-ring.max-object-size");
+          "hbasecop.endpoint.bulk-ring.max-object-size",
+          "hbasecop.endpoint.max-concurrent-calls",
+          "hbasecop.endpoint.max-scanners-per-call",
+          "hbasecop.endpoint.max-bytes-per-resp",
+          "hbasecop.endpoint.max-rows-per-next");
 
   // Exact keys whose value must be a boolean.
   private static final Set<String> BOOLEAN_KEYS = Set.of("hbasecop.endpoint.allow-mutate");
