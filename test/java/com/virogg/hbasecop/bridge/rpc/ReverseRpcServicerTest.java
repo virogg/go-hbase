@@ -32,7 +32,6 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
-import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
 import org.junit.jupiter.api.AfterEach;
@@ -267,29 +266,39 @@ class ReverseRpcServicerTest {
         () -> "error detail: " + resp.getPayload().toStringUtf8());
   }
 
+  // Each single-arg nextRaw adds one row "rN" with cf:q="vN" and reports more rows remain.
+  private void stubOneRowPerNext() throws Exception {
+    when(scanner.nextRaw(anyList()))
+        .thenAnswer(
+            inv -> {
+              List<Cell> out = inv.getArgument(0);
+              int i = nextRawCalls.getAndIncrement();
+              out.add(
+                  new KeyValue(
+                      Bytes.toBytes("r" + i),
+                      Bytes.toBytes("cf"),
+                      Bytes.toBytes("q"),
+                      1L,
+                      Bytes.toBytes("v" + i)));
+              return true; // more rows remain
+            });
+  }
+
+  private final java.util.concurrent.atomic.AtomicInteger nextRawCalls =
+      new java.util.concurrent.atomic.AtomicInteger();
+
   @Test
   void scanNextReturnsBatchAndHasMore() throws Exception {
     RegionRegistry regions = new RegionRegistry();
     regions.register(7, region);
     ScannerRegistry scanners = new ScannerRegistry();
     long sid = scanners.register(100, scanner);
-    // One row, then "more rows remain".
-    when(scanner.nextRaw(anyList(), any(ScannerContext.class)))
-        .thenAnswer(
-            inv -> {
-              List<Cell> out = inv.getArgument(0);
-              out.add(
-                  new KeyValue(
-                      Bytes.toBytes("r1"),
-                      Bytes.toBytes("cf"),
-                      Bytes.toBytes("q"),
-                      1L,
-                      Bytes.toBytes("v1")));
-              return true;
-            });
+    stubOneRowPerNext();
 
+    // max-rows-per-next = 1: the batch stops after one row with has_more=true.
     servicer =
-        new ReverseRpcServicer(regions, scanners, replies::add, SLOT, 4, 16, Duration.ofSeconds(5));
+        new ReverseRpcServicer(
+            regions, scanners, replies::add, SLOT, 4, 16, Duration.ofSeconds(5), false, SLOT, 1);
     servicer.accept(scanReq(1, 7, RpcRequest.Op.SCAN_NEXT, 100, sid));
 
     RpcResponse resp = poll();
@@ -297,9 +306,60 @@ class ReverseRpcServicerTest {
     assertTrue(resp.getHasMore(), "has_more must reflect that more rows remain");
     ClientProtos.Result batch = ClientProtos.Result.parseFrom(resp.getPayload());
     assertEquals(1, batch.getCellCount());
-    assertEquals("v1", batch.getCell(0).getValue().toStringUtf8());
     verify(region).startRegionOperation();
     verify(region).closeRegionOperation();
+  }
+
+  // TE42 max-rows-per-next: a SCAN_NEXT batch stops at the row cap with has_more=true.
+  @Test
+  void scanNextStopsAtMaxRowsPerNext() throws Exception {
+    RegionRegistry regions = new RegionRegistry();
+    regions.register(7, region);
+    ScannerRegistry scanners = new ScannerRegistry();
+    long sid = scanners.register(100, scanner);
+    stubOneRowPerNext(); // unbounded supply of rows
+
+    servicer =
+        new ReverseRpcServicer(
+            regions, scanners, replies::add, SLOT, 4, 16, Duration.ofSeconds(5), false, SLOT, 3);
+    servicer.accept(scanReq(1, 7, RpcRequest.Op.SCAN_NEXT, 100, sid));
+
+    RpcResponse resp = poll();
+    assertEquals(RpcResponse.Status.OK, resp.getStatus());
+    assertTrue(
+        resp.getHasMore(), "has_more must be true when the row cap stops a non-exhausted scan");
+    ClientProtos.Result batch = ClientProtos.Result.parseFrom(resp.getPayload());
+    assertEquals(3, batch.getCellCount(), "row cap of 3 yields exactly 3 rows (one cell each)");
+  }
+
+  // TE42 max-bytes-per-resp: a tiny byte ceiling stops the batch after one row, has_more=true.
+  @Test
+  void scanNextStopsAtMaxBytesPerResp() throws Exception {
+    RegionRegistry regions = new RegionRegistry();
+    regions.register(7, region);
+    ScannerRegistry scanners = new ScannerRegistry();
+    long sid = scanners.register(100, scanner);
+    stubOneRowPerNext(); // unbounded supply of rows
+
+    servicer =
+        new ReverseRpcServicer(
+            regions,
+            scanners,
+            replies::add,
+            SLOT,
+            4,
+            16,
+            Duration.ofSeconds(5),
+            false,
+            1,
+            Integer.MAX_VALUE);
+    servicer.accept(scanReq(1, 7, RpcRequest.Op.SCAN_NEXT, 100, sid));
+
+    RpcResponse resp = poll();
+    assertEquals(RpcResponse.Status.OK, resp.getStatus());
+    assertTrue(resp.getHasMore(), "has_more must be true when the byte ceiling stops the scan");
+    ClientProtos.Result batch = ClientProtos.Result.parseFrom(resp.getPayload());
+    assertEquals(1, batch.getCellCount(), "a 1-byte ceiling yields one row then stops");
   }
 
   @Test

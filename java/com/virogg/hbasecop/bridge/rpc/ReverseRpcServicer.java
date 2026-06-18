@@ -21,6 +21,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -29,7 +30,6 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
-import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
 
 /**
@@ -42,8 +42,8 @@ import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
  * <p>The pool is <em>fail-closed</em>: when both the pool and its bounded queue are saturated, a
  * request is rejected and answered with an {@code RpcResponse{ERROR}} rather than blocking.
  *
- * <p>Scans batch bytes-primary and resumably: each SCAN_NEXT pulls rows up to a size limit (via
- * {@link ScannerContext}, row-aligned so a row is never split) that keeps the reply within one ring
+ * <p>Scans batch bytes-primary and resumably: each SCAN_NEXT accumulates whole rows (never
+ * splitting a row) up to a byte ceiling and row cap (TE42) that keep the reply within one ring
  * slot; {@code has_more} tells the caller whether to issue another SCAN_NEXT. A single row whose
  * cells exceed one slot is a clean error (the scanner is closed) rather than a crash loop. Open
  * scanners live in the shared {@link ScannerRegistry} and are reaped on Go-process crash. MUTATE
@@ -70,6 +70,9 @@ public final class ReverseRpcServicer {
   // TE41: reverse MUTATE is gated off by default; only enabled via
   // hbasecop.endpoint.allow-mutate=true. A disabled MUTATE fails closed with an ERROR reply.
   private final boolean allowMutate;
+  // TE42: per-SCAN_NEXT reply caps (bytes and rows).
+  private final int maxBytesPerResp;
+  private final int maxRowsPerNext;
 
   /**
    * @param regionRegistry resolves a request's {@code region_id} to its live {@link Region}
@@ -101,11 +104,7 @@ public final class ReverseRpcServicer {
         false);
   }
 
-  /**
-   * @param allowMutate whether reverse MUTATE (TE41) is permitted; off by default
-   *     (hbasecop.endpoint.allow-mutate). When false, a MUTATE request fails closed with an ERROR
-   *     reply before any region write.
-   */
+  /** Adds the TE41 allow-mutate gate; default (unbounded) TE42 scan limits. */
   public ReverseRpcServicer(
       RegionRegistry regionRegistry,
       ScannerRegistry scannerRegistry,
@@ -115,7 +114,46 @@ public final class ReverseRpcServicer {
       int queueDepth,
       Duration shutdownTimeout,
       boolean allowMutate) {
+    this(
+        regionRegistry,
+        scannerRegistry,
+        replySink,
+        slotMaxObjectSize,
+        poolSize,
+        queueDepth,
+        shutdownTimeout,
+        allowMutate,
+        Integer.MAX_VALUE,
+        Integer.MAX_VALUE);
+  }
+
+  /**
+   * @param allowMutate whether reverse MUTATE (TE41) is permitted; off by default
+   *     (hbasecop.endpoint.allow-mutate). When false, a MUTATE request fails closed with an ERROR
+   *     reply before any region write.
+   * @param maxBytesPerResp TE42 cap on a SCAN_NEXT reply's encoded size (clamped to the ring slot)
+   * @param maxRowsPerNext TE42 cap on the number of rows in a single SCAN_NEXT batch
+   */
+  public ReverseRpcServicer(
+      RegionRegistry regionRegistry,
+      ScannerRegistry scannerRegistry,
+      Consumer<Message> replySink,
+      int slotMaxObjectSize,
+      int poolSize,
+      int queueDepth,
+      Duration shutdownTimeout,
+      boolean allowMutate,
+      int maxBytesPerResp,
+      int maxRowsPerNext) {
     this.allowMutate = allowMutate;
+    if (maxBytesPerResp <= 0) {
+      throw new IllegalArgumentException("maxBytesPerResp must be > 0, got " + maxBytesPerResp);
+    }
+    if (maxRowsPerNext <= 0) {
+      throw new IllegalArgumentException("maxRowsPerNext must be > 0, got " + maxRowsPerNext);
+    }
+    this.maxBytesPerResp = maxBytesPerResp;
+    this.maxRowsPerNext = maxRowsPerNext;
     this.regionRegistry = Objects.requireNonNull(regionRegistry, "regionRegistry");
     this.scannerRegistry = Objects.requireNonNull(scannerRegistry, "scannerRegistry");
     this.replySink = Objects.requireNonNull(replySink, "replySink");
@@ -273,19 +311,32 @@ public final class ReverseRpcServicer {
       return;
     }
 
-    // Bytes-primary, row-aligned batch (BETWEEN_ROWS: never split a row), sized so the encoded
-    // reply
-    // fits one ring slot with headroom for a trailing row.
-    long sizeLimit = Math.max(1L, (long) (slotMaxObjectSize - SLOT_HEADROOM) / 2L);
-    ScannerContext ctx =
-        ScannerContext.newBuilder()
-            .setSizeLimit(ScannerContext.LimitScope.BETWEEN_ROWS, sizeLimit, sizeLimit)
-            .build();
+    // Bytes-primary, row-aligned batch (TE33) under the TE42 caps: accumulate whole rows
+    // (single-arg nextRaw never splits a row) until the per-reply byte ceiling or the row cap is
+    // reached, keeping the encoded reply within one ring slot. The byte ceiling is the smaller of
+    // the slot budget and max-bytes-per-resp; the row cap is max-rows-per-next. has_more (the last
+    // nextRaw result) drives resumption.
+    long byteCeiling =
+        Math.max(
+            1L, Math.min((long) (slotMaxObjectSize - SLOT_HEADROOM) / 2L, (long) maxBytesPerResp));
     List<Cell> cells = new ArrayList<>();
-    boolean moreRows;
+    List<Cell> rowCells = new ArrayList<>();
+    long bytes = 0;
+    int rows = 0;
+    boolean moreRows = false;
     region.startRegionOperation();
     try {
-      moreRows = scanner.nextRaw(cells, ctx);
+      do {
+        rowCells.clear();
+        moreRows = scanner.nextRaw(rowCells);
+        if (!rowCells.isEmpty()) {
+          cells.addAll(rowCells);
+          for (Cell c : rowCells) {
+            bytes += CellUtil.estimatedSerializedSizeOf(c);
+          }
+          rows++;
+        }
+      } while (moreRows && rows < maxRowsPerNext && bytes < byteCeiling);
     } finally {
       region.closeRegionOperation();
     }

@@ -255,7 +255,9 @@ public final class CoprocessorRuntime implements AutoCloseable {
               cfg.servicingPoolSize(),
               cfg.servicingQueueDepth(),
               cfg.servicingTimeout(),
-              cfg.allowMutate());
+              cfg.allowMutate(),
+              cfg.maxBytesPerResp(),
+              cfg.maxRowsPerNext());
 
       // TE31: route reverse-RPC requests to the bounded, fail-closed servicing pool (never the
       // reader thread). accept() only submits, so the reader keeps routing hooks/heartbeats.
