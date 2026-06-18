@@ -177,6 +177,12 @@ jobs:
         run: make test-integration-rs
       - name: Fault-injection matrix IT (T36)
         run: make test-fault
+      - name: Endpoint round-trip + fault-matrix IT (TE54)
+        run: make test-integration-endpoint-all
+      - name: Master endpoint IT (TE43/TE52)
+        run: make test-integration-master-endpoint
+      - name: Endpoint packaged deploy IT (TE53)
+        run: make test-integration-endpoint-packaged
       - name: Upload HBase logs
         if: always()
         uses: actions/upload-artifact@v4

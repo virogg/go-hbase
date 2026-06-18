@@ -20,6 +20,7 @@ HBase client ──RPC──▶ RegionServer
 > Целевая платформа — HBase **2.5.x**, Java 11, только Linux x86-64.
 
 - Полная спецификация: [`SPEC.md`](SPEC.md) · архитектура: [`docs/architecture.md`](docs/architecture.md)
+- Tier 2 endpoint-копроцессоры (пост-v0.1.0): [`tasks/tier2-endpoints.md`](tasks/tier2-endpoints.md) · модель безопасности: [`docs/endpoint-security.md`](docs/endpoint-security.md)
 - IPC-примитив: [`virogg/java-go-shmem`](https://github.com/virogg/java-go-shmem)
 
 ## Установка из релиза

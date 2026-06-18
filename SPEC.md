@@ -32,6 +32,13 @@ Ring buffer + protobuf вместо stdin/stdout + line-based, как в Hadoop 
 
 Endpoint coproc: **out of scope MVP** и не в активном roadmap. Go API спроектирован так, чтобы добавить позже без breaking change, если будет запрос.
 
+> **Update (Tier 2, post-v0.1.0):** endpoint-копроцессоры реализованы как отдельный
+> workstream поверх MVP (client-initiated серверные Go-RPC: stateless + реверс-чтения/
+> записи + master-endpoints). План: [`tasks/tier2-endpoints.md`](tasks/tier2-endpoints.md);
+> модель безопасности (ACL-bypass граница, reentry, handler-pinning):
+> [`docs/endpoint-security.md`](docs/endpoint-security.md). Запись (`MUTATE`) — за
+> `hbasecop.endpoint.allow-mutate`, off по умолчанию.
+
 ### Версия HBase / платформа
 HBase **2.5.x LTS**, Java 11. Hadoop 3.x. **Linux x86-64 only** (POSIX shm + mmap; arm64 не таргетируем).
 

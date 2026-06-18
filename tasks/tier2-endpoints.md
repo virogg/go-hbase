@@ -380,8 +380,24 @@ IT → собрать логи → `compose down`). Новые ключи `hbase
       **NB (limitation):** `hbasecop-build admin deploy` — table-scoped (DeployTool: disable/modify/
       enable); master-endpoint регистрируется через `hbase.coprocessor.master.classes` в hbase-site
       (как MasterEndpointIT), не через `deploy` — отдельная affordance отложена.
-- [ ] TE54 IT + fault-matrix + доки
-- [ ] **CP-E5 (GO/NO-GO релиз):** агрегация по multi-region таблице, zero-Java деплой, fault-matrix зелёный
+- [x] TE54 IT + fault-matrix + доки — **консолидированный fault-matrix зелёный на живом HBase 2.5.11**
+      (`make test-integration-endpoint-all`: один boot → EndpointRoundTripIT 9/9 + EndpointFaultIT 8/8
+      + EndpointMultiRegionIT 1/1 = 18/18). Fault-кейсы (детерминированные): panic, crash-mid-invoke,
+      crash-mid-scan(reap), **long-endpoint-vs-watchdog** (slow 5s > miss-deadline → no false restart,
+      `GoProcess started` count неизменен), **admission cap** (max-concurrent-calls=2 → surplus
+      fail-fast "max-concurrent-calls", held завершаются), **scanner-per-call cap** (manyscan>cap →
+      "max scanners per call exceeded"), **scan caps batch** (max-rows-per-next=2 + max-bytes-per-resp
+      → full count через has_more, не truncate), **oversized-row** (1.6 MiB row > slot → "exceeds ring
+      slot", процесс не crash-loop), mutate-reentry (RoundTripIT). Go: методы `slow`/`manyscan` в
+      endpoint-observer. CI: endpoint-all + master-endpoint + packaged ITs добавлены в `integration`
+      job (2.5.0/2.5.11). Доки: `docs/endpoint-security.md` (+ reentry + handler-pinning секции),
+      SPEC/README/CHANGELOG de-staled + cross-linked. **Deferred (unit-proven, не live):** idle-lease
+      eviction и crash-vs-register scanner-гонки — детерминированный live IT timing-racy; логика
+      покрыта unit-тестами + crash-reap live IT.
+- [x] **CP-E5 (GO/NO-GO релиз)** достигнут 2026-06-18 — каноническая multi-region агрегация через
+      `EndpointClient` (TE51), zero-Java деплой через `hbasecop-build package` (TE53), полный
+      fault-matrix зелёный (TE54), доки безопасности/эксплуатации на месте. Tier 2 endpoint workstream
+      завершён.
 
 ## Открытые вопросы
 

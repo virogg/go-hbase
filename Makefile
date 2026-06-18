@@ -590,6 +590,26 @@ test-integration-endpoint-multiregion: endpoint-observer-jar ## TE51: full IT - 
 	  exit $$status
 
 # ---------------------------------------------------------------------------
+# Integration (TE54): consolidated endpoint fault-matrix - one HBase boot runs
+# every region-scoped endpoint IT (round-trip + full fault matrix + multiregion).
+# Master endpoints need their own master-coproc env, so run that separately via
+# test-integration-master-endpoint.
+# ---------------------------------------------------------------------------
+
+.PHONY: test-integration-endpoint-all
+test-integration-endpoint-all: endpoint-observer-jar ## TE54: full endpoint + fault-matrix IT - bring up HBase once, run all region-scoped endpoint ITs, tear down.
+	@mkdir -p test/integration/coproc-jars
+	cp $(ENDPOINT_OBSERVER_DIR)/target/endpoint-observer.jar $(ENDPOINT_COPROC_JAR_STAGED)
+	$(HBASE_COMPOSE_CMD) up -d --build
+	./test/integration/scripts/wait-master-status.sh
+	@set +e; \
+	  $(MVN) $(MVN_FLAGS) test -Dtest=EndpointRoundTripIT,EndpointFaultIT,EndpointMultiRegionIT -DfailIfNoTests=false; \
+	  status=$$?; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-endpoint-all.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
+
+# ---------------------------------------------------------------------------
 # Integration (TE53): deploy-IT - the coproc-jar produced by `hbasecop-build
 # package` (not the example pom) deploys and an endpoint round-trips on live HBase.
 # ---------------------------------------------------------------------------

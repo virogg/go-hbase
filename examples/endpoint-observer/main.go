@@ -24,6 +24,7 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/virogg/go-hbase/pkg/hbasecop"
 )
@@ -59,6 +60,10 @@ func (upperEndpoint) Call(ctx context.Context, env *hbasecop.EndpointEnv, method
 		return putRow(ctx, env, payload)
 	case "scan-leak":
 		return scanLeak(ctx, env)
+	case "slow":
+		return slowSleep(ctx, payload)
+	case "manyscan":
+		return manyScan(ctx, env, payload)
 	default:
 		return bytes.ToUpper(payload), nil
 	}
@@ -208,6 +213,44 @@ func scanLeak(ctx context.Context, env *hbasecop.EndpointEnv) ([]byte, error) {
 	slog.Warn("endpoint-observer: leaking scanner then os.Exit(1)")
 	os.Exit(1) // crash without sc.Close → bridge reaps the scanner
 	return nil, nil
+}
+
+// slowSleep sleeps for the duration named by payload (e.g. "5s") then returns ok.
+// TE54 watchdog probe: a long endpoint must NOT starve the dedicated heartbeat
+// goroutine, so no false heartbeat-miss restart fires mid-call. Respects ctx so the
+// endpoint timeout still bounds it.
+func slowSleep(ctx context.Context, payload []byte) ([]byte, error) {
+	d, err := time.ParseDuration(string(payload))
+	if err != nil {
+		return nil, fmt.Errorf("endpoint-observer: slow wants a duration payload, got %q: %w", payload, err)
+	}
+	select {
+	case <-time.After(d):
+		slog.Info("endpoint-observer: slow ok", "slept", d.String())
+		return []byte("ok"), nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// manyScan opens n scanners (n from payload) on the invoking region without closing
+// them, to trip the per-call scanner cap (max-scanners-per-call). It returns the
+// open error verbatim (the bridge's "max scanners per call exceeded") once the cap
+// is hit; the call's scanners are reaped when it ends.
+func manyScan(ctx context.Context, env *hbasecop.EndpointEnv, payload []byte) ([]byte, error) {
+	n, err := strconv.Atoi(string(payload))
+	if err != nil {
+		return nil, fmt.Errorf("endpoint-observer: manyscan wants an int payload, got %q: %w", payload, err)
+	}
+	opened := 0
+	for range n {
+		if _, err := env.OpenScanner(ctx, &hbasecop.Scan{}); err != nil {
+			return nil, fmt.Errorf("endpoint-observer: manyscan opened %d then: %w", opened, err)
+		}
+		opened++
+	}
+	slog.Info("endpoint-observer: manyscan opened", "count", opened)
+	return []byte(strconv.Itoa(opened)), nil
 }
 
 func main() {

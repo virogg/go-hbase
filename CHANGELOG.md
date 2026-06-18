@@ -62,5 +62,6 @@ shared-memory ring buffer: без fork-per-call, без RPC-хопа.
   будущее).
 - `MutationConverter` отбрасывает атрибуты уровня мутации (cellVisibility, ACL,
   TTL); конверсии Get/Scan отбрасывают per-CF временные диапазоны.
-- Endpoint-копроцессоры вне области охвата.
+- Endpoint-копроцессоры вне области охвата v0.1.0 (реализованы в отдельном
+  пост-v0.1.0 Tier 2 workstream — см. [`tasks/tier2-endpoints.md`](tasks/tier2-endpoints.md)).
 - Топология soak с одним RS; multi-RS chaos не протестирован.
