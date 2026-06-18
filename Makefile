@@ -171,7 +171,7 @@ java-fuzz: ## T83: run the Java wire-decoder fuzzer (jazzer, 10m per run).
 
 # Coverage gate set excludes generated protobuf, thin mains, and examples -
 # the gate measures hand-written, testable code.
-GO_COVER_PKGS := $(shell $(GO) list ./... | grep -vE '/(examples|internal/wire/hbasepb|internal/wire/hookpb|internal/wire/wirepb|internal/wiregolden|cmd/wire-golden|cmd/hbasecop-runtime|tools/gen-builder|tools/gen-wiretypes|test/bench/noop-observer)$$')
+GO_COVER_PKGS := $(shell $(GO) list ./... | grep -vE '/examples/|/(internal/wire/hbasepb|internal/wire/hookpb|internal/wire/wirepb|internal/wiregolden|cmd/wire-golden|cmd/hbasecop-runtime|tools/gen-builder|tools/gen-wiretypes|test/bench/noop-observer)$$')
 # SPEC §7 gate: Go hand-written line coverage ≥80% (generated protobuf, thin
 # mains and examples excluded above; generated files in covered packages are
 # stripped from the profile by the "DO NOT EDIT" marker). Met as of Phase-7.

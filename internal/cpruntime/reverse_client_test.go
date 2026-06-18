@@ -207,3 +207,91 @@ func TestReverseClientGetUnboundErrors(t *testing.T) {
 		t.Fatal("want error for unbound client, got nil")
 	}
 }
+
+// TE33: the reverse scanner lifecycle — OpenScanner returns the bridge-assigned
+// scanner id; ScanNext pulls a batch reporting has_more; ScanClose deregisters.
+// Each op's RpcRequest carries the right op/call/scanner/region.
+func TestReverseClientScannerLifecycle(t *testing.T) {
+	out := make(chan *wire.Message, 8)
+	rc := cpruntime.NewReverseClient(nil)
+	rc.Bind(out)
+
+	type seen struct {
+		op                wirepb.RpcRequest_Op
+		callID, scannerID uint64
+		regionID          uint32
+	}
+	got := make(chan seen, 3)
+	go func() {
+		for range 3 {
+			req := <-out
+			var rr wirepb.RpcRequest
+			_ = proto.Unmarshal(req.Payload, &rr)
+			got <- seen{rr.GetOp(), rr.GetCallId(), rr.GetScannerId(), req.RegionID}
+			resp := &wirepb.RpcResponse{Status: wirepb.RpcResponse_OK}
+			switch rr.GetOp() {
+			case wirepb.RpcRequest_SCAN_OPEN:
+				resp.ScannerId = 42
+			case wirepb.RpcRequest_SCAN_NEXT:
+				resp.Payload, _ = proto.Marshal(&hbasepb.Result{})
+				resp.HasMore = false
+			}
+			rp, _ := proto.Marshal(resp)
+			rc.Deliver(&wire.Message{Type: wire.TypeRPCResponse, ReqID: req.ReqID, Payload: rp})
+		}
+	}()
+
+	scanProto, _ := proto.Marshal(&hbasepb.Scan{})
+	sid, err := rc.OpenScanner(context.Background(), 5, 100, scanProto)
+	if err != nil {
+		t.Fatalf("OpenScanner: %v", err)
+	}
+	if sid != 42 {
+		t.Fatalf("scanner id = %d, want 42", sid)
+	}
+
+	resp, err := rc.ScanNext(context.Background(), 5, 100, sid)
+	if err != nil {
+		t.Fatalf("ScanNext: %v", err)
+	}
+	if resp.GetHasMore() {
+		t.Fatal("has_more = true, want false")
+	}
+
+	if err := rc.ScanClose(context.Background(), 5, 100, sid); err != nil {
+		t.Fatalf("ScanClose: %v", err)
+	}
+
+	o := <-got
+	if o.op != wirepb.RpcRequest_SCAN_OPEN || o.regionID != 5 || o.callID != 100 {
+		t.Fatalf("OPEN req = %+v", o)
+	}
+	n := <-got
+	if n.op != wirepb.RpcRequest_SCAN_NEXT || n.scannerID != 42 || n.callID != 100 {
+		t.Fatalf("NEXT req = %+v", n)
+	}
+	cl := <-got
+	if cl.op != wirepb.RpcRequest_SCAN_CLOSE || cl.scannerID != 42 {
+		t.Fatalf("CLOSE req = %+v", cl)
+	}
+}
+
+// OpenScanner surfaces a servicer ERROR (e.g. per-call scanner cap) as an error.
+func TestReverseClientOpenScannerError(t *testing.T) {
+	out := make(chan *wire.Message, 4)
+	rc := cpruntime.NewReverseClient(nil)
+	rc.Bind(out)
+
+	go func() {
+		req := <-out
+		rp, _ := proto.Marshal(&wirepb.RpcResponse{
+			Status:  wirepb.RpcResponse_ERROR,
+			Payload: []byte("max scanners per call exceeded"),
+		})
+		rc.Deliver(&wire.Message{Type: wire.TypeRPCResponse, ReqID: req.ReqID, Payload: rp})
+	}()
+
+	if _, err := rc.OpenScanner(context.Background(), 1, 1, nil); err == nil {
+		t.Fatal("want error for ERROR status on OpenScanner, got nil")
+	}
+}

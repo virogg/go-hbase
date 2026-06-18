@@ -131,3 +131,17 @@ func TestRunConfigRequiresMode(t *testing.T) {
 		t.Error("config with no flags should error")
 	}
 }
+
+func TestRunConfigList(t *testing.T) {
+	if err := runConfig([]string{"--list"}); err != nil {
+		t.Fatalf("config --list should succeed: %v", err)
+	}
+}
+
+func TestLowerFirst(t *testing.T) {
+	for in, want := range map[string]string{"": "", "PrePut": "prePut", "x": "x"} {
+		if got := lowerFirst(in); got != want {
+			t.Errorf("lowerFirst(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
