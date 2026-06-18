@@ -211,7 +211,16 @@ func scanLeak(ctx context.Context, env *hbasecop.EndpointEnv) ([]byte, error) {
 }
 
 func main() {
-	err := hbasecop.RunAll(hbasecop.UnimplementedRegionObserver{}, upperEndpoint{})
+	// Register no-op region AND master observers so the same binary deploys as either a region or a
+	// master coprocessor (TE43): without a matching observer the strict hooks would dispatch to Go,
+	// find none, and abort region-open / master-init. The endpoint is the same in both roles; a
+	// master-scoped invoke carries region_id 0, so region-local reverse reads/writes are unavailable
+	// there (master endpoints read master/meta state only).
+	err := hbasecop.RunAll(
+		hbasecop.UnimplementedRegionObserver{},
+		hbasecop.UnimplementedMasterObserver{},
+		upperEndpoint{},
+	)
 	if err != nil {
 		slog.Error("endpoint-observer: fatal", "err", err)
 		os.Exit(1)

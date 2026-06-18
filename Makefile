@@ -670,6 +670,21 @@ test-integration-master: master-policy-observer-jar ## T51: full IT - bring up H
 	  $(HBASE_COMPOSE_CMD) down; \
 	  exit $$status
 
+.PHONY: test-integration-master-endpoint
+test-integration-master-endpoint: endpoint-observer-jar ## TE43: full IT - bring up HBase with the endpoint-observer registered as a MASTER coproc, run MasterEndpointIT, tear down.
+	@mkdir -p test/integration/coproc-jars
+	cp $(ENDPOINT_OBSERVER_DIR)/target/endpoint-observer.jar $(ENDPOINT_COPROC_JAR_STAGED)
+	@set +e; \
+	  export HBASECOP_MASTER_COPROC_CLASS=com.virogg.hbasecop.bridge.entrypoint.GenericMasterObserver; \
+	  export HBASECOP_MASTER_COPROC_JAR=/coproc-jars/endpoint-observer.jar; \
+	  $(HBASE_COMPOSE_CMD) up -d --build; \
+	  ./test/integration/scripts/wait-master-status.sh; \
+	  $(MVN) $(MVN_FLAGS) test -Dtest=MasterEndpointIT -DfailIfNoTests=false; \
+	  status=$$?; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-master-endpoint.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
+
 # ---------------------------------------------------------------------------
 # Integration (T52): RegionServerObserver - preRollWALWriterRequest policy
 # rejection. The region-server coprocessor is registered cluster-wide (the
