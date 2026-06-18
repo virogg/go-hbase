@@ -244,6 +244,12 @@ public final class ReverseRpcServicer {
     Scan scan = ReverseGetConverter.toNativeScan(req.getOpPayload().toByteArray());
     RegionScanner scanner = region.getScanner(scan);
     long scannerId = scannerRegistry.register(req.getCallId(), scanner);
+    if (scannerId == ScannerRegistry.REJECTED) {
+      // The call is being reaped (Go-process crash) — the registry already closed the scanner.
+      replyError(
+          request, "scanner registry reaping call " + req.getCallId() + "; SCAN_OPEN rejected");
+      return;
+    }
     sendReply(
         request,
         RpcResponse.newBuilder().setStatus(RpcResponse.Status.OK).setScannerId(scannerId).build());
