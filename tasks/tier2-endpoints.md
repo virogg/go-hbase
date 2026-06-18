@@ -195,6 +195,16 @@ IT → собрать логи → `compose down`). Новые ключи `hbase
 > **Checkpoint E4:** ограниченные, безопасные endpoint'ы с опциональной записью и рабочий
 > master-endpoint. **Демо:** cap/fault-matrix зелёный; граница ACL-bypass задокументирована и
 > отревьюена. Go/no-go.
+>
+> **Closed 2026-06-18:** Phase E4 (TE41 reverse MUTATE · TE42 limits/admission/per-table-gate/
+> reaping-races · TE43 master endpoints) shipped, все live IT зелёные (EndpointRoundTripIT 9/9,
+> EndpointFaultIT 3/3, MasterEndpointIT 1/1 на HBase 2.5.11). **ACL-bypass граница задокументирована**
+> в `docs/endpoint-security.md`: endpoint исполняется с authority RegionServer'а (не клиента);
+> инвок гейтится EXEC-правом, запись — `allow-mutate` (off by default, per-table); reverse-операции
+> обходят клиентский data-ACL и RPC-стек, но не observer-pipeline — та же модель, что у штатных
+> `AggregateImplementation`/`MultiRowMutationEndpoint`. **Deferred → TE54** (E5 fault-matrix):
+> confirmatory live ITs admission-stress / idle-lease-recovery / crash-vs-register (логика
+> unit-доказана). Next: Phase E5.
 
 ### Phase E5 — клиент, упаковка, доки, fault-matrix
 - **TE51: region client helper** *(E5)* — Deps: TE22/TE34. AC: один вызов агрегирует по всем регионам
@@ -333,7 +343,9 @@ IT → собрать логи → `compose down`). Новые ключи `hbase
       Scope (A-12): чтение master/meta-стейта, region-реверс недоступен (region_id 0). **live IT
       зелёный** (MasterEndpointIT 1/1 → "MASTER-HELLO", HBase 2.5.11, 2026-06-18); make
       `test-integration-master-endpoint`.
-- [ ] **CP-E4:** ограниченные/безопасные endpoint'ы; ACL-bypass задокументирован
+- [x] **CP-E4** достигнут 2026-06-18 — E4 (TE41/TE42/TE43) shipped, live IT зелёные;
+      ACL-bypass граница в `docs/endpoint-security.md` (endpoint = authority RS, инвок гейтится EXEC,
+      запись — allow-mutate off-by-default). Deferred → TE54: admission/idle-lease/crash live fault-ITs.
 
 ### Phase E5 — клиент, упаковка, доки
 - [ ] TE51 region client helper (fan-out + reduce)
