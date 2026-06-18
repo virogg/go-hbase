@@ -124,6 +124,10 @@ final class GenericCoprocessor {
         conf != null
             ? conf.getInt(KEY_SERVICING_QUEUE_DEPTH, DEFAULT_SERVICING_QUEUE_DEPTH)
             : DEFAULT_SERVICING_QUEUE_DEPTH;
+    // TE41 gate. Like every hbasecop.endpoint.* tunable, it is read once when the shared runtime is
+    // first acquired for a coproc-id (SharedRuntime.acquire) and baked into the single shared
+    // servicer — NOT re-evaluated per table. Set it consistently for every table sharing a
+    // coproc-jar on a RegionServer; per-table enforcement is a TE42 (per-call admission) concern.
     boolean allowMutate =
         conf != null
             ? conf.getBoolean(KEY_ALLOW_MUTATE, DEFAULT_ALLOW_MUTATE)

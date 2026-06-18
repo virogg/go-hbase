@@ -170,7 +170,9 @@ IT → собрать логи → `compose down`). Новые ключи `hbase
   в HBase 2.5 публичного API записи в обход обсерверов нет (подтверждено байткодом 2.5.10:
   `Region.put|delete|batchMutate|mutateRow|mutateRowsWithLocks` → `HRegion.doMiniBatchMutate` →
   `MutationBatchOperation` вызывает хуки; `MultiRowMutationEndpoint` пишет так же). Off без
-  `hbasecop.endpoint.allow-mutate=true` (per-table coproc-property или cluster-wide hbase-site).
+  `hbasecop.endpoint.allow-mutate=true` (coproc-property или cluster-wide hbase-site). NB: флаг
+  читается ОДИН раз на shared-runtime (по `coproc-id`, как весь `hbasecop.endpoint.*`), не per-table —
+  задавать согласованно для всех таблиц одного jar на RS; per-table enforcement отложен в TE42.
   **Re-entry-решение (Option 1):** deadlock-safe by construction — servicing-pool-поток ≠
   заблокированный на `EndpointResult` handler-поток, Go goroutine-per-request обслуживает форвард
   prePut на отдельной горутине, fail-closed пул конвертит насыщение в ошибку; рекурсия
@@ -296,9 +298,10 @@ IT → собрать логи → `compose down`). Новые ключи `hbase
       **shaded** `ProtobufUtil` (`ReverseGetConverter.toNativeMutation`, PUT/DELETE) и пишет
       `region.put/delete`. Обсерверы стреляют (как штатный `MultiRowMutationEndpoint`; в обход только
       клиентского RPC-стека — в HBase 2.5 публичного API записи без обсерверов нет, подтверждено
-      байткодом 2.5.10). Gate `hbasecop.endpoint.allow-mutate` (off; per-table coproc-property или
-      hbase-site; `ConfigPreflight` валидирует). Re-entry: servicing-pool ≠ заблокированный handler +
-      goroutine-per-request → no self-deadlock; рекурсия `postPut→mutate` — на авторе.
+      байткодом 2.5.10). Gate `hbasecop.endpoint.allow-mutate` (off; coproc-property или
+      hbase-site; `ConfigPreflight` валидирует). NB: читается раз на shared-runtime (per `coproc-id`),
+      не per-table — задавать согласованно; per-table enforcement → TE42. Re-entry: servicing-pool ≠
+      заблокированный handler + goroutine-per-request → no self-deadlock; рекурсия `postPut→mutate` — на авторе.
       **live IT зелёный** (EndpointRoundTripIT 8/8, HBase 2.5.11, 2026-06-18): rejected-when-off
       (row unwritten) / writes-when-on / reentry-stress (20 concurrent read-then-write на один регион).
       Unit: converter PUT/DELETE/unsupported, servicer gate+apply+unknown-region, env.Put/Delete,

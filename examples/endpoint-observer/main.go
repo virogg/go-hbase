@@ -166,7 +166,7 @@ func sumColumn(ctx context.Context, env *hbasecop.EndpointEnv, qualifier []byte)
 // "row=value" (no '=' → value defaults to "mutated"). It first reads the row —
 // exercising read+write on the same region within one endpoint call, the
 // re-entry path — then writes cf:val=value. Reverse MUTATE is gated server-side;
-// when hbasecop.endpoint.allow-mutate is off, env.Mutate returns an error that
+// when hbasecop.endpoint.allow-mutate is off, env.Put returns an error that
 // surfaces to the client.
 func putRow(ctx context.Context, env *hbasecop.EndpointEnv, payload []byte) ([]byte, error) {
 	row, value, found := bytes.Cut(payload, []byte("="))

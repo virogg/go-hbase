@@ -317,3 +317,15 @@ func TestEndpointEnvPutUnavailable(t *testing.T) {
 		t.Fatal("want error when reverse path is disabled")
 	}
 }
+
+// A nil mutation returns a clean error rather than panicking — the guards run
+// before MutateType is stamped on m.
+func TestEndpointEnvPutNilMutation(t *testing.T) {
+	out := make(chan *wire.Message, 1)
+	rc := cpruntime.NewReverseClient(nil)
+	rc.Bind(out)
+	env := &EndpointEnv{rc: rc, regionID: 1}
+	if err := env.Put(context.Background(), nil); err == nil {
+		t.Fatal("want error for nil mutation, got nil")
+	}
+}

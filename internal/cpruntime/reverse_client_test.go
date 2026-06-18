@@ -94,12 +94,8 @@ func TestReverseClientMutate(t *testing.T) {
 		rc.Deliver(&wire.Message{Type: wire.TypeRpcResponse, ReqID: req.ReqID, Payload: respPayload})
 	}()
 
-	resp, err := rc.Mutate(context.Background(), 9, mutProto)
-	if err != nil {
+	if err := rc.Mutate(context.Background(), 9, mutProto); err != nil {
 		t.Fatalf("Mutate: %v", err)
-	}
-	if resp.GetStatus() != wirepb.RpcResponse_OK {
-		t.Fatalf("status = %v, want OK", resp.GetStatus())
 	}
 
 	req := <-gotReq

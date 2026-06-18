@@ -188,8 +188,10 @@ func (c *ReverseClient) ScanClose(ctx context.Context, regionID uint32, callID, 
 // Mutate issues a reverse MUTATE against region regionID (Tier 2, TE41).
 // mutateProto is a marshalled vendored HBase MutationProto (PUT or DELETE); on
 // success the bridge applies it to the region and replies OK with an empty
-// payload. Gated server-side by hbasecop.endpoint.allow-mutate (off by default):
-// when disabled the reply is an ERROR, surfaced here as an error.
-func (c *ReverseClient) Mutate(ctx context.Context, regionID uint32, mutateProto []byte) (*wirepb.RpcResponse, error) {
-	return c.call(ctx, regionID, &wirepb.RpcRequest{Op: wirepb.RpcRequest_MUTATE, OpPayload: mutateProto})
+// payload, so (like ScanClose) only the error is returned. Gated server-side by
+// hbasecop.endpoint.allow-mutate (off by default): when disabled the reply is an
+// ERROR, surfaced here as an error.
+func (c *ReverseClient) Mutate(ctx context.Context, regionID uint32, mutateProto []byte) error {
+	_, err := c.call(ctx, regionID, &wirepb.RpcRequest{Op: wirepb.RpcRequest_MUTATE, OpPayload: mutateProto})
+	return err
 }

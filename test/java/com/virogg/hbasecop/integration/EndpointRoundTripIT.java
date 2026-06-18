@@ -234,7 +234,7 @@ final class EndpointRoundTripIT {
 
   /**
    * TE41: reverse MUTATE is gated off by default. With no allow-mutate property the "put"
-   * endpoint's env.Mutate is rejected by the bridge; the error surfaces to the client and the row
+   * endpoint's env.Put is rejected by the bridge; the error surfaces to the client and the row
    * stays unwritten.
    */
   @Test
@@ -267,8 +267,10 @@ final class EndpointRoundTripIT {
   }
 
   /**
-   * TE41: with hbasecop.endpoint.allow-mutate=true (a per-table coprocessor property), the "put"
-   * endpoint reads then writes cf:val on the invoking region; a normal client Get sees the write.
+   * TE41: with hbasecop.endpoint.allow-mutate=true (set here as a coprocessor property; the shared
+   * runtime reads it once per coproc-id, not per-table — fine here as each test owns its runtime),
+   * the "put" endpoint reads then writes cf:val on the invoking region; a normal client Get sees
+   * the write.
    */
   @Test
   void clientReverseMutateWritesWhenEnabled() throws Throwable {
