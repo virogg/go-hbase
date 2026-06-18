@@ -291,7 +291,18 @@ IT → собрать логи → `compose down`). Новые ключи `hbase
       races (getScanner-before-register, closeAll-vs-register, scanner-before-OPEN-reply)
 
 ### Phase E4 — запись + лимиты + master
-- [ ] TE41 реверс `MUTATE` (gated off) + решение по re-entry
+- [x] TE41 реверс `MUTATE` (gated off) + re-entry-решение (Option 1) — `EndpointEnv.Put/Delete` →
+      `RpcRequest{MUTATE}` → `ReverseRpcServicer` конвертит vendored MutationProto → native через
+      **shaded** `ProtobufUtil` (`ReverseGetConverter.toNativeMutation`, PUT/DELETE) и пишет
+      `region.put/delete`. Обсерверы стреляют (как штатный `MultiRowMutationEndpoint`; в обход только
+      клиентского RPC-стека — в HBase 2.5 публичного API записи без обсерверов нет, подтверждено
+      байткодом 2.5.10). Gate `hbasecop.endpoint.allow-mutate` (off; per-table coproc-property или
+      hbase-site; `ConfigPreflight` валидирует). Re-entry: servicing-pool ≠ заблокированный handler +
+      goroutine-per-request → no self-deadlock; рекурсия `postPut→mutate` — на авторе.
+      **live IT зелёный** (EndpointRoundTripIT 8/8, HBase 2.5.11, 2026-06-18): rejected-when-off
+      (row unwritten) / writes-when-on / reentry-stress (20 concurrent read-then-write на один регион).
+      Unit: converter PUT/DELETE/unsupported, servicer gate+apply+unknown-region, env.Put/Delete,
+      preflight true|false|garbage, buildConfig default-off+override.
 - [ ] TE42 лимиты + admission control
 - [ ] TE43 master-endpoint'ы (без региона)
 - [ ] **CP-E4:** ограниченные/безопасные endpoint'ы; ACL-bypass задокументирован
