@@ -311,7 +311,21 @@ IT → собрать логи → `compose down`). Новые ключи `hbase
       (row unwritten) / writes-when-on / reentry-stress (20 concurrent read-then-write на один регион).
       Unit: converter PUT/DELETE/unsupported, servicer gate+apply+unknown-region, env.Put/Delete,
       preflight true|false|garbage, buildConfig default-off+override.
-- [ ] TE42 лимиты + admission control
+- [x] TE42 лимиты + admission + per-table gate + reaping-races — 5 ключей
+      `hbasecop.endpoint.{max-concurrent-calls=8, max-scanners-per-call=16, max-bytes-per-resp=1MiB,
+      max-rows-per-next=1000, scanner-idle-lease=2m}` (Config+preflight). **Admission**: Semaphore в
+      `invokeEndpoint` (tryAcquire→fail-fast, защита handler-пула RS, A-1). **Scanner-лимиты**:
+      per-call cap (AT_CAPACITY) + idle-lease (injected clock, `evictIdle` на scheduler-tick).
+      **Scan-reply**: byte-ceiling=min(slot,max-bytes) + row-cap через per-row `nextRaw`-loop.
+      **Per-table allow-mutate**: `serviceMutate` гейтит по coproc-property таблицы вызывающего
+      региона (override) → baked cluster-default — фикс F2 shared-runtime leak. **Reaping-гонки**
+      (CP-E3 deferral): `ScannerRegistry` переписан на per-call `closing`-tombstone + `compute`-атомарность —
+      register проигравший гонку с reap-свипом возвращает REJECTED и закрывает свой scanner
+      (закрыты #2 closeAll-vs-register, #3 scanner-before-OPEN-reply; #1 невозможна intra-call).
+      Unit: registry concurrency-stress/cap/idle-lease, servicer cap/byte/row/per-table-gate, config.
+      **live IT зелёный** (EndpointRoundTripIT 9/9 + per-table-gate две таблицы/один runtime,
+      EndpointFaultIT 3/3, HBase 2.5.11, 2026-06-18). Deferred → TE54 fault-matrix: confirmatory
+      live ITs для admission-stress / idle-lease-recovery / crash-vs-register (логика unit-доказана).
 - [ ] TE43 master-endpoint'ы (без региона)
 - [ ] **CP-E4:** ограниченные/безопасные endpoint'ы; ACL-bypass задокументирован
 
