@@ -169,6 +169,17 @@ class WireRoundTripTest {
   }
 
   @Test
+  @DisplayName("type byte one past RPC_RESPONSE is rejected (lockstep with Go)")
+  void decodeRejectsTypeOnePastCeiling() {
+    byte past = (byte) (FrameType.RPC_RESPONSE.value() + 1); // 11: a future v3 type
+    assertEquals(FrameType.UNKNOWN, FrameType.fromByte(past));
+    ByteBuffer buf = ByteBuffer.allocate(64).order(ByteOrder.BIG_ENDIAN);
+    writeRaw(buf, past, 1L, 0, (byte) 0, 0, 1, new byte[] {'x'});
+    buf.flip();
+    assertThrows(UnknownTypeException.class, () -> new Decoder().decode(buf));
+  }
+
+  @Test
   void decodeRejectsInvalidChunkBounds() {
     int[][] cases = {{0, 0}, {2, 2}, {5, 2}};
     for (int[] c : cases) {
