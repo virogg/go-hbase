@@ -399,10 +399,13 @@
 
       <!--
         Uber bridge jar (classifier "all"): bridge classes + non-provided runtime
-        deps (protobuf-java, java-go-shmem). HBase stays out (provided). This is
-        the self-contained jar `hbasecop-build package` shades into a coproc-jar
-        so authors need no per-project Maven shade. The thin main artifact is
-        unchanged for consumers that shade their own deps.
+        deps (java-go-shmem). HBase AND protobuf-java stay out (both provided): the
+        coproc-jar must carry no unshaded com.google.protobuf — the RegionServer
+        supplies protobuf-java 2.5.0, and bundling our own would clash with the
+        CoprocessorClassLoader's type identity. This is the self-contained jar
+        `hbasecop-build package` shades into a coproc-jar so authors need no
+        per-project Maven shade. The thin main artifact is unchanged for consumers
+        that shade their own deps.
       -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
