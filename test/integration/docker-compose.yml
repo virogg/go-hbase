@@ -49,6 +49,9 @@ services:
       # its coproc leg, empty (no-op) everywhere else.
       HBASECOP_WAL_COPROC_CLASS: "${HBASECOP_WAL_COPROC_CLASS:-}"
       HBASECOP_WAL_COPROC_JAR: "${HBASECOP_WAL_COPROC_JAR:-}"
+      # M3: enable HBase AccessController for the endpoint EXEC-boundary IT;
+      # `make test-integration-endpoint-acl` exports "true", no-op elsewhere.
+      HBASECOP_ENABLE_ACL: "${HBASECOP_ENABLE_ACL:-}"
     healthcheck:
       test:
         - "CMD-SHELL"

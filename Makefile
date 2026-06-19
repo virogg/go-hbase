@@ -576,6 +576,26 @@ test-integration-endpoint: endpoint-observer-jar ## TE22: full IT - bring up HBa
 # per-region "sum" partials over a 4-way pre-split table into the table total.
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Integration (M3 / review T1): endpoint EXEC-permission boundary. Brings the
+# cluster up with the AccessController enabled (HBASECOP_ENABLE_ACL) and proves
+# a client with EXEC can invoke the endpoint while one without EXEC is denied.
+# ---------------------------------------------------------------------------
+
+.PHONY: test-integration-endpoint-acl
+test-integration-endpoint-acl: endpoint-observer-jar ## M3: full IT - bring up HBase with AccessController, run EndpointAclIT (EXEC boundary), tear down.
+	@mkdir -p test/integration/coproc-jars
+	cp $(ENDPOINT_OBSERVER_DIR)/target/endpoint-observer.jar $(ENDPOINT_COPROC_JAR_STAGED)
+	@set +e; \
+	  export HBASECOP_ENABLE_ACL=true; \
+	  $(HBASE_COMPOSE_CMD) up -d --build && \
+	  ./test/integration/scripts/wait-master-status.sh; \
+	  $(MVN) $(MVN_FLAGS) test -Dtest=EndpointAclIT -DfailIfNoTests=false; \
+	  status=$$?; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-endpoint-acl.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
+
 .PHONY: test-integration-endpoint-multiregion
 test-integration-endpoint-multiregion: endpoint-observer-jar ## TE51: full IT - bring up HBase, run EndpointMultiRegionIT (4-way pre-split fan-out + reduce), tear down.
 	@mkdir -p test/integration/coproc-jars

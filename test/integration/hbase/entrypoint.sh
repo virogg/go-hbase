@@ -74,6 +74,26 @@ if [ -n "${HBASECOP_WAL_COPROC_CLASS:-}" ]; then
   echo "entrypoint: registered WAL coprocessor ${HBASECOP_WAL_COPROC_CLASS} (jar ${jar})" >&2
 fi
 
+# M3 (review T1): enable HBase's AccessController so EndpointAclIT can prove the
+# endpoint EXEC boundary. When HBASECOP_ENABLE_ACL=true, register the
+# AccessController on master/region/regionserver, turn on authorization and the
+# exec-permission checks that gate CoprocessorService.Call, and add a fixed
+# superuser the test impersonates to grant. Unset on every other IT (no-op), so
+# the shared image stays generic. NB: this path does not set
+# HBASECOP_MASTER_COPROC_CLASS, so it owns hbase.coprocessor.master.classes
+# (the endpoint region coproc is attached per-table by the IT, not here).
+if [ "${HBASECOP_ENABLE_ACL:-}" = "true" ]; then
+  acl="org.apache.hadoop.hbase.security.access.AccessController"
+  inject="  <property><name>hbase.security.authorization</name><value>true</value></property>"
+  inject="${inject}\n  <property><name>hbase.security.exec.permission.checks</name><value>true</value></property>"
+  inject="${inject}\n  <property><name>hbase.coprocessor.master.classes</name><value>${acl}</value></property>"
+  inject="${inject}\n  <property><name>hbase.coprocessor.region.classes</name><value>${acl}</value></property>"
+  inject="${inject}\n  <property><name>hbase.coprocessor.regionserver.classes</name><value>${acl}</value></property>"
+  inject="${inject}\n  <property><name>hbase.superuser</name><value>hbasecop_admin</value></property>"
+  sed -i "s#</configuration>#${inject}\n</configuration>#" "${SITE}"
+  echo "entrypoint: enabled AccessController (authorization + exec-permission checks)" >&2
+fi
+
 # Relay the embedded ZooKeeper client port onto a host-reachable address.
 # HBase 2.5.0's MiniZooKeeperCluster binds ZK to 127.0.0.1:2181 (ignoring
 # hbase.zookeeper.property.clientPortAddress), which docker's port forward
