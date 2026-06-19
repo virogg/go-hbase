@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"google.golang.org/protobuf/proto"
@@ -219,5 +220,37 @@ func TestNewMixedDispatcherRegistersOnAllSurfaces(t *testing.T) {
 	}
 	if n := len(d.bulkLoads); n != 1 {
 		t.Errorf("bulk-load: got %d, want 1", n)
+	}
+}
+
+// regionEndpointObs satisfies both RegionObserver and Endpoint from one value:
+// the TE23 case of an endpoint registered via RunAll alongside observers.
+type regionEndpointObs struct {
+	UnimplementedRegionObserver
+}
+
+func (regionEndpointObs) Call(context.Context, *EndpointEnv, string, []byte) ([]byte, error) {
+	return nil, nil
+}
+
+func TestNewMixedDispatcherRegistersEndpointAlongsideObserver(t *testing.T) {
+	d, err := newMixedDispatcher(slog.Default(), regionEndpointObs{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.observers) != 1 {
+		t.Errorf("region observer surface: got %d, want 1", len(d.observers))
+	}
+	if d.endpoint == nil {
+		t.Error("endpoint surface should be registered from the same value")
+	}
+}
+
+func TestNewMixedDispatcherRejectsSecondEndpoint(t *testing.T) {
+	ep1 := funcEndpoint(func(context.Context, *EndpointEnv, string, []byte) ([]byte, error) { return nil, nil })
+	ep2 := funcEndpoint(func(context.Context, *EndpointEnv, string, []byte) ([]byte, error) { return nil, nil })
+	_, err := newMixedDispatcher(slog.Default(), ep1, ep2)
+	if err == nil || !strings.Contains(err.Error(), "more than one Endpoint") {
+		t.Fatalf("two endpoints should be rejected, got err=%v", err)
 	}
 }

@@ -28,6 +28,13 @@ import (
 // data-dependent reads (read A, then read B by a key from A). When the reverse
 // path is disabled, env.Get returns an error; an endpoint that does no reverse
 // reads can ignore env entirely.
+//
+// ctx is the Go process lifetime context, not the client's call deadline: the
+// hbasecop.endpoint.timeout budget is enforced on the Java side (the bridge
+// abandons the call and returns an error when it expires), so ctx.Done fires
+// only on process shutdown. A long handler should therefore bound its own work;
+// reverse reads via env are separately deadline-bounded (see
+// HBASECOP_REVERSE_CALL_TIMEOUT_MS, derived from the same endpoint timeout).
 type Endpoint interface {
 	Call(ctx context.Context, env *EndpointEnv, method string, payload []byte) ([]byte, error)
 }
