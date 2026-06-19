@@ -4,6 +4,7 @@
 package com.virogg.hbasecop.client;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -178,5 +179,28 @@ final class EndpointClientTest {
             IOException.class,
             () -> EndpointClient.callAllRegions(table, "sum", "n".getBytes(UTF_8)));
     assertTrue(err.getMessage().contains("region not online"), err.getMessage());
+  }
+
+  // E5-3: the range-scoped overload must forward startKey/endKey to coprocessorService verbatim
+  // (a swapped or dropped bound would silently select the wrong regions).
+  @Test
+  void callRegionsForwardsRangeBoundsVerbatim() throws Throwable {
+    byte[] start = Bytes.toBytes("aaa");
+    byte[] end = Bytes.toBytes("mmm");
+    AtomicReference<byte[]> seenStart = new AtomicReference<>();
+    AtomicReference<byte[]> seenEnd = new AtomicReference<>();
+    Table table = mock(Table.class);
+    when(table.coprocessorService(eq(GoEndpointService.class), any(), any(), any()))
+        .thenAnswer(
+            invocation -> {
+              seenStart.set(invocation.getArgument(1));
+              seenEnd.set(invocation.getArgument(2));
+              return new TreeMap<byte[], byte[]>(Bytes.BYTES_COMPARATOR);
+            });
+
+    EndpointClient.callRegions(table, start, end, "sum", "n".getBytes(UTF_8));
+
+    assertArrayEquals(start, seenStart.get(), "startKey must reach coprocessorService verbatim");
+    assertArrayEquals(end, seenEnd.get(), "endKey must reach coprocessorService verbatim");
   }
 }
