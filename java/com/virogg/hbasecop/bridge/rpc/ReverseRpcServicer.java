@@ -302,12 +302,16 @@ public final class ReverseRpcServicer {
   }
 
   private void serviceScanNext(Message request, RpcRequest req) throws IOException {
-    Region region = region(request);
-    if (region == null) {
-      return;
-    }
     long callId = req.getCallId();
     long scannerId = req.getScannerId();
+    Region region = region(request);
+    if (region == null) {
+      // region() already replied ERROR. The scanner registered at SCAN_OPEN can no longer make
+      // progress (region moved/closed), so close it now to release its MVCC read point instead of
+      // pinning it until the per-call/idle-lease reap (review E3J-4).
+      closeQuietly(scannerRegistry.remove(callId, scannerId));
+      return;
+    }
     RegionScanner scanner = scannerRegistry.lookup(callId, scannerId);
     if (scanner == null) {
       replyError(request, "unknown scanner (call_id=" + callId + ", scanner_id=" + scannerId + ")");
@@ -327,32 +331,48 @@ public final class ReverseRpcServicer {
     long bytes = 0;
     int rows = 0;
     boolean moreRows = false;
-    region.startRegionOperation();
     try {
-      do {
-        rowCells.clear();
-        moreRows = scanner.nextRaw(rowCells);
-        if (!rowCells.isEmpty()) {
-          cells.addAll(rowCells);
-          for (Cell c : rowCells) {
-            bytes += CellUtil.estimatedSerializedSizeOf(c);
+      region.startRegionOperation();
+      try {
+        do {
+          rowCells.clear();
+          moreRows = scanner.nextRaw(rowCells);
+          if (!rowCells.isEmpty()) {
+            cells.addAll(rowCells);
+            for (Cell c : rowCells) {
+              bytes += CellUtil.estimatedSerializedSizeOf(c);
+            }
+            rows++;
           }
-          rows++;
-        }
-      } while (moreRows && rows < maxRowsPerNext && bytes < byteCeiling);
-    } finally {
-      region.closeRegionOperation();
+        } while (moreRows && rows < maxRowsPerNext && bytes < byteCeiling);
+      } finally {
+        region.closeRegionOperation();
+      }
+    } catch (IOException e) {
+      // The scan can no longer make progress (region moving/closing, or the scanner faulted), so
+      // close and deregister it to release its MVCC read point immediately rather than leaving it
+      // pinned until the per-call/idle-lease reap, then surface the failure (review E3J-4).
+      closeQuietly(scannerRegistry.remove(callId, scannerId));
+      throw e;
     }
 
     byte[] payload = ReverseGetConverter.toResultBytes(Result.create(cells));
     int max = slotMaxObjectSize - SLOT_HEADROOM;
     if (payload.length > max) {
-      // A single row's cells exceed one ring slot: clean error and close the scanner so the client
-      // does not retry into a crash loop. (Cross-slot reassembly is unsupported.)
+      // The encoded batch exceeds one ring slot (cross-slot reassembly is unsupported). The rows
+      // were already consumed from the scanner and cannot be re-read, so fail clean and close the
+      // scanner rather than risk silently skipping them on a retry. rows<=1 is a genuinely
+      // oversized
+      // single row; rows>1 is an estimator anomaly (the /2 byteCeiling should keep a multi-row
+      // batch
+      // within the slot) — distinguish them in the message for diagnosis (review E3J-5).
       RegionScanner dead = scannerRegistry.remove(callId, scannerId);
       closeQuietly(dead);
-      replyError(
-          request, "scan row exceeds ring slot (" + payload.length + " > " + max + " bytes)");
+      String detail =
+          rows <= 1
+              ? "scan row exceeds ring slot"
+              : "scan batch exceeds ring slot (" + rows + " rows; byte-estimate undercount)";
+      replyError(request, detail + " (" + payload.length + " > " + max + " bytes)");
       return;
     }
     sendReply(
