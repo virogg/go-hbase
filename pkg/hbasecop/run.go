@@ -32,6 +32,11 @@ import (
 //	HBASECOP_RING_MAX_OBJECT_SIZE  ring slot byte size
 //	HBASECOP_HEARTBEAT_MS          heartbeat period in ms; 0 = default,
 //	                               <0 disables (tests only)
+//	HBASECOP_REVERSE_CALL_TIMEOUT_MS  per reverse-RPC (env.Get/Scan) deadline in
+//	                               ms; unset/0 keeps the built-in default. The
+//	                               Java bridge derives it from
+//	                               hbasecop.endpoint.timeout so a single reverse
+//	                               read is bounded by the endpoint's own budget.
 //
 // Returns nil on clean shutdown (SIGINT/SIGTERM or inbound SHUTDOWN
 // frame), error on setup/transport failure.
@@ -109,6 +114,13 @@ func runDispatcher(d *dispatcher, label string) error {
 		defer func() { _ = inBulkCh.Close() }()
 
 		reverse = cpruntime.NewReverseClient(d.logger)
+		// The Java bridge sets HBASECOP_REVERSE_CALL_TIMEOUT_MS from
+		// hbasecop.endpoint.timeout so the per-reverse-call deadline tracks the
+		// operator's endpoint budget instead of a fixed ceiling; unset/0 keeps the
+		// client's built-in default.
+		if cfg.reverseCallTimeout > 0 {
+			reverse.SetTimeout(cfg.reverseCallTimeout)
+		}
 		loopCfg.InBulkCh = inBulkCh
 		loopCfg.ReverseResponseHandler = reverse.Deliver
 	}
@@ -267,6 +279,12 @@ type shmemEnvConfig struct {
 	// reader is opened. Capacity/slot default to the control ring's when unset.
 	bulkPath                        string
 	bulkCapacity, bulkMaxObjectSize int
+
+	// reverseCallTimeout bounds a single reverse RPC (env.Get/Scan). Zero keeps
+	// the ReverseClient's built-in default; the Java bridge sets it from
+	// hbasecop.endpoint.timeout so the per-call deadline tracks the endpoint
+	// budget (M2).
+	reverseCallTimeout time.Duration
 }
 
 func loadShmemConfigFromEnv() (shmemEnvConfig, error) {
@@ -313,6 +331,18 @@ func loadShmemConfigFromEnv() (shmemEnvConfig, error) {
 			return c, err
 		}
 	}
+
+	// Optional per-reverse-call deadline (M2). Unset/0 leaves the ReverseClient's
+	// built-in default; a negative value is rejected rather than silently treated
+	// as "no bound" (which SetTimeout reserves for tests).
+	rtMs, err := optionalEnvInt("HBASECOP_REVERSE_CALL_TIMEOUT_MS", 0)
+	if err != nil {
+		return c, err
+	}
+	if rtMs < 0 {
+		return c, fmt.Errorf("HBASECOP_REVERSE_CALL_TIMEOUT_MS=%d: must be >= 0", rtMs)
+	}
+	c.reverseCallTimeout = time.Duration(rtMs) * time.Millisecond
 	return c, nil
 }
 
