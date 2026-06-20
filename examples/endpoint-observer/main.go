@@ -219,8 +219,10 @@ func scanLeak(ctx context.Context, env *hbasecop.EndpointEnv) ([]byte, error) {
 
 // slowSleep sleeps for the duration named by payload (e.g. "5s") then returns ok.
 // TE54 watchdog probe: a long endpoint must NOT starve the dedicated heartbeat
-// goroutine, so no false heartbeat-miss restart fires mid-call. Respects ctx so the
-// endpoint timeout still bounds it.
+// goroutine, so no false heartbeat-miss restart fires mid-call. It selects on
+// ctx.Done for clean shutdown — note that ctx is process-scoped, not the client
+// deadline: the hbasecop.endpoint.timeout budget is enforced Java-side, which
+// abandons the call on expiry while this goroutine runs to completion.
 func slowSleep(ctx context.Context, payload []byte) ([]byte, error) {
 	d, err := time.ParseDuration(string(payload))
 	if err != nil {

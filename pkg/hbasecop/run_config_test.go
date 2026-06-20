@@ -123,6 +123,41 @@ func TestLoadShmemConfigFromEnv(t *testing.T) {
 	})
 }
 
+func TestLoadReverseCallTimeoutFromEnv(t *testing.T) {
+	t.Run("unset keeps built-in default (zero)", func(t *testing.T) {
+		setShmemEnv(t, "/tmp/in", "/tmp/out", "16", "4096", "0")
+		t.Setenv("HBASECOP_REVERSE_CALL_TIMEOUT_MS", "")
+		c, err := loadShmemConfigFromEnv()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if c.reverseCallTimeout != 0 {
+			t.Fatalf("reverseCallTimeout = %v, want 0 (use ReverseClient default)", c.reverseCallTimeout)
+		}
+	})
+
+	t.Run("positive ms parsed", func(t *testing.T) {
+		setShmemEnv(t, "/tmp/in", "/tmp/out", "16", "4096", "0")
+		t.Setenv("HBASECOP_REVERSE_CALL_TIMEOUT_MS", "120000")
+		c, err := loadShmemConfigFromEnv()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if c.reverseCallTimeout != 120*time.Second {
+			t.Fatalf("reverseCallTimeout = %v, want 120s", c.reverseCallTimeout)
+		}
+	})
+
+	t.Run("negative rejected", func(t *testing.T) {
+		setShmemEnv(t, "/tmp/in", "/tmp/out", "16", "4096", "0")
+		t.Setenv("HBASECOP_REVERSE_CALL_TIMEOUT_MS", "-5")
+		_, err := loadShmemConfigFromEnv()
+		if err == nil || !strings.Contains(err.Error(), "HBASECOP_REVERSE_CALL_TIMEOUT_MS") {
+			t.Fatalf("want error mentioning HBASECOP_REVERSE_CALL_TIMEOUT_MS, got %v", err)
+		}
+	})
+}
+
 func TestEnvIntHelpers(t *testing.T) {
 	t.Setenv("HBASECOP_X", "")
 	if _, err := mustEnvInt("HBASECOP_X"); err == nil {

@@ -5,6 +5,7 @@ package com.virogg.hbasecop.bridge.rpc;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -378,6 +379,43 @@ class ReverseRpcServicerTest {
     RpcResponse resp = poll();
     assertEquals(RpcResponse.Status.ERROR, resp.getStatus());
     assertTrue(resp.getPayload().toStringUtf8().contains("unknown scanner"));
+  }
+
+  // T2: a single row whose encoded size exceeds one ring slot must reply a clean ERROR and close +
+  // deregister the scanner (no crash loop, no pinned read point). Fast-feedback unit twin of the
+  // EndpointFaultIT oversized-row case, which the default `mvn verify` does not run.
+  @Test
+  void scanNextOversizedRowRepliesErrorAndClosesScanner() throws Exception {
+    RegionRegistry regions = new RegionRegistry();
+    regions.register(7, region);
+    ScannerRegistry scanners = new ScannerRegistry();
+    long sid = scanners.register(100, scanner);
+    // One row whose value alone dwarfs the (slot - headroom) ceiling.
+    byte[] big = new byte[4096];
+    when(scanner.nextRaw(anyList()))
+        .thenAnswer(
+            inv -> {
+              List<Cell> out = inv.getArgument(0);
+              out.add(
+                  new KeyValue(
+                      Bytes.toBytes("r"), Bytes.toBytes("cf"), Bytes.toBytes("q"), 1L, big));
+              return false; // scanner exhausted after this one row
+            });
+
+    // SLOT_HEADROOM is 64 KiB; size the slot so max = slot - headroom = 1 KiB, below the 4 KiB row.
+    int slot = 64 * 1024 + 1024;
+    servicer =
+        new ReverseRpcServicer(
+            regions, scanners, replies::add, slot, 4, 16, Duration.ofSeconds(5), false, slot, 4);
+    servicer.accept(scanReq(1, 7, RpcRequest.Op.SCAN_NEXT, 100, sid));
+
+    RpcResponse resp = poll();
+    assertEquals(RpcResponse.Status.ERROR, resp.getStatus());
+    assertTrue(
+        resp.getPayload().toStringUtf8().contains("exceeds ring slot"),
+        "oversized row must surface a clean 'exceeds ring slot' error");
+    verify(scanner).close();
+    assertNull(scanners.lookup(100, sid), "the oversized-row scanner must be deregistered");
   }
 
   private static Message mutateReq(

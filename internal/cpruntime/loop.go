@@ -72,11 +72,14 @@ type Config struct {
 	// ReverseResponseHandler receives inbound RpcResponse frames: the
 	// Java-side replies to a Go-initiated reverse RPC (Tier 2). Correlation
 	// is by the wire-header req_id, which the handler reads from the Message;
-	// the reader does NOT unmarshal the protobuf payload. The handler must be
-	// quick and non-blocking (it runs on the single reader goroutine); the
-	// real implementation (E3) just wakes the waiting caller keyed by req_id.
-	// Nil drops RpcResponse frames silently (endpoints disabled), matching how
-	// other unsolicited inbound types are ignored here.
+	// the reader does NOT unmarshal the protobuf payload. It must be quick and
+	// non-blocking, and goroutine-safe: replies normally ride the dedicated
+	// bulk ring (runBulkReader), but the primary reader also routes any
+	// RpcResponse that lands on the control ring, so the handler can be invoked
+	// from both readers. The real implementation (E3, [ReverseClient.Deliver])
+	// wakes the waiting caller keyed by req_id under a lock. Nil drops
+	// RpcResponse frames silently (endpoints disabled), matching how other
+	// unsolicited inbound types are ignored here.
 	ReverseResponseHandler func(*wire.Message)
 
 	// EndpointHandler dispatches inbound EndpointInvoke frames (Tier 2): a
@@ -211,8 +214,9 @@ func (l *Loop) runReader(ctx context.Context, cancel context.CancelFunc) {
 			// goroutine like a hook so a slow endpoint does not stall the reader.
 			go l.handleEndpoint(ctx, msg)
 		case wire.TypeRPCResponse:
-			// Reply to a Go-initiated reverse RPC (Tier 2). Route to the
-			// stub waiter keyed by req_id; no PB decode in the router.
+			// Reply to a Go-initiated reverse RPC (Tier 2). Replies normally ride
+			// the bulk ring, but route a stray one here too, keyed by req_id; no
+			// PB decode in the router.
 			if h := l.cfg.ReverseResponseHandler; h != nil {
 				h(msg)
 			}
@@ -220,9 +224,13 @@ func (l *Loop) runReader(ctx context.Context, cancel context.CancelFunc) {
 			l.cfg.Logger.Info("cpruntime: inbound SHUTDOWN received")
 			cancel()
 			return
+		default:
+			// Heartbeat/Log/Response/Error are Go→Java only, so a frame landing
+			// here is unexpected — log it rather than vanishing silently (mirrors
+			// Java routeFrame's default WARN).
+			l.cfg.Logger.Debug("cpruntime: unexpected frame on control ring (ignored)",
+				"type", uint8(msg.Type), "req_id", msg.ReqID)
 		}
-		// Other inbound types (Heartbeat, Log, Response, Error) are ignored
-		// here; the supervisor (T18+) drives them from the Java side.
 	}
 }
 

@@ -23,6 +23,13 @@ import org.apache.hadoop.hbase.client.Table;
  * does; an endpoint's own outcome (controller failure, missing response, or Go-side error) always
  * surfaces as an {@link java.io.IOException}, so a caller can {@code catch (IOException)} first —
  * symmetric with {@link AdminEndpointClient#callMaster}.
+ *
+ * <p><b>All-or-nothing fan-out:</b> these helpers use the non-callback {@link
+ * Table#coprocessorService} overload, so if any single region's invoke fails the whole call aborts
+ * with that exception and the other regions' already-computed partial results are discarded — there
+ * is no partial-result accessor. This is the intended default for an aggregation helper (a partial
+ * SUM is a silently-wrong SUM, worse than an error). A caller needing per-region tolerance should
+ * use {@code Table.coprocessorService(..., Batch.Callback)} directly.
  */
 public final class EndpointClient {
 
@@ -39,8 +46,10 @@ public final class EndpointClient {
   }
 
   /**
-   * Invokes {@code method} with {@code payload} on every region of {@code table} whose start key
-   * falls in {@code [startKey, endKey)}; null keys mean unbounded (all regions).
+   * Invokes {@code method} with {@code payload} on every region of {@code table} that covers any
+   * row in {@code [startKey, endKey)} — i.e. HBase selects regions overlapping the range, including
+   * the region containing {@code startKey} even if its own start key is {@code < startKey}. Null
+   * keys mean unbounded (all regions).
    *
    * @return per-region raw response payloads keyed by region name
    */

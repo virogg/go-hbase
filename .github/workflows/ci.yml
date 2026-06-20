@@ -187,6 +187,13 @@ jobs:
         run: make test-integration-master-endpoint
       - name: Endpoint packaged deploy IT (TE53)
         run: make test-integration-endpoint-packaged
+      - name: Endpoint EXEC-permission boundary IT (M3)
+        run: make test-integration-endpoint-acl
+      # Native-vs-Go parity: equivalence is the gate (assertEquals in each *CompareIT);
+      # the printed COMPARE_RESULT/COMPARE_SUMMARY perf lines are report-only. See
+      # docs/bench/compare.md.
+      - name: Native-vs-Go coprocessor comparison (equivalence + perf)
+        run: make compare-all
       - name: Upload HBase logs
         if: always()
         uses: actions/upload-artifact@v4

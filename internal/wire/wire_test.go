@@ -206,6 +206,21 @@ func TestDecodeRejectsUnknownType(t *testing.T) {
 	}
 }
 
+// TestDecodeRejectsTypeOnePastCeiling pins the exact wire-type ceiling: byte 11
+// is the value a future v3 frame type would occupy, so a contributor adding a
+// type without raising Type.Valid() must trip this (and its Java twin) rather
+// than silently decode. TypeRPCResponse=10 is the current top.
+func TestDecodeRejectsTypeOnePastCeiling(t *testing.T) {
+	var buf bytes.Buffer
+	writeRawChunk(t, &buf, rawChunk{
+		TypeByte: uint8(wire.TypeRPCResponse) + 1, ReqID: 1, ChunkTotal: 1, Payload: []byte("x"),
+	})
+	_, err := wire.NewDecoder(&buf).Decode()
+	if !errors.Is(err, wire.ErrUnknownType) {
+		t.Fatalf("want ErrUnknownType for type byte %d, got %v", uint8(wire.TypeRPCResponse)+1, err)
+	}
+}
+
 func TestDecodeRejectsInvalidChunkBounds(t *testing.T) {
 	cases := []struct {
 		name string

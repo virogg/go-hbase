@@ -5,6 +5,7 @@ package hbasecop
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"log/slog"
 	"runtime/debug"
@@ -311,8 +312,12 @@ func (d *dispatcher) responseFrame(req *wire.Message, result HookResult, callErr
 func (d *dispatcher) errorFrame(req *wire.Message, code uint32, msg string) *wire.Message {
 	payload, err := proto.Marshal(&wirepb.Error{Code: code, Message: msg})
 	if err != nil {
+		// Marshalling a fixed wirepb.Error effectively never fails, but if it
+		// did, returning nil sends no reply and the client blocks until the
+		// Java-side timeout. Hand-encode a minimal Error so the client always
+		// gets a prompt failure frame instead of a silent hang.
 		d.logger.Error("hbasecop: marshal wirepb.Error failed", "err", err, "req_id", req.ReqID)
-		return nil
+		payload = encodeMinimalError(code, msg)
 	}
 	return &wire.Message{
 		Type:     wire.TypeError,
@@ -321,4 +326,17 @@ func (d *dispatcher) errorFrame(req *wire.Message, code uint32, msg string) *wir
 		HookID:   req.HookID,
 		Payload:  payload,
 	}
+}
+
+// encodeMinimalError hand-encodes a wirepb.Error (code=field 1 varint,
+// message=field 2 length-delimited) without proto.Marshal, as the fallback
+// when Marshal fails so an Error frame is always deliverable.
+func encodeMinimalError(code uint32, msg string) []byte {
+	b := make([]byte, 0, len(msg)+12)
+	b = append(b, 0x08) // field 1 (code), wire type 0 (varint)
+	b = binary.AppendUvarint(b, uint64(code))
+	b = append(b, 0x12) // field 2 (message), wire type 2 (length-delimited)
+	b = binary.AppendUvarint(b, uint64(len(msg)))
+	b = append(b, msg...)
+	return b
 }

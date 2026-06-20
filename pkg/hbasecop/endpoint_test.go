@@ -97,3 +97,50 @@ func TestDispatchEndpointNilEndpointIsError(t *testing.T) {
 		t.Fatalf("type = %v, want Error when no endpoint registered", resp.Type)
 	}
 }
+
+// TestDispatchEndpointPropagatesContextAndMethod pins the single-handler
+// contract: the caller's context reaches the handler, and an arbitrary/unknown
+// method name is passed through verbatim (routing by name is the user's job).
+func TestDispatchEndpointPropagatesContextAndMethod(t *testing.T) {
+	type ctxKey struct{}
+	ctx := context.WithValue(context.Background(), ctxKey{}, "deadline-owner")
+
+	var gotMethod string
+	var gotCtxVal any
+	d := &dispatcher{
+		logger: slog.Default(),
+		endpoint: funcEndpoint(func(c context.Context, _ *EndpointEnv, method string, _ []byte) ([]byte, error) {
+			gotMethod = method
+			gotCtxVal = c.Value(ctxKey{})
+			return []byte("ok"), nil
+		}),
+	}
+
+	resp := d.dispatchEndpoint(ctx, endpointInvokeFrame(t, 9, "totally.unknown.method", nil))
+	if resp.Type != wire.TypeEndpointResult {
+		t.Fatalf("type = %v, want EndpointResult", resp.Type)
+	}
+	if gotMethod != "totally.unknown.method" {
+		t.Errorf("method = %q, want it passed through verbatim", gotMethod)
+	}
+	if gotCtxVal != "deadline-owner" {
+		t.Errorf("ctx value = %v, want the caller's context propagated", gotCtxVal)
+	}
+}
+
+// TestEncodeMinimalErrorRoundTrips verifies the hand-encoded fallback used when
+// proto.Marshal of a wirepb.Error fails: it must still decode to the same Error
+// so the client gets a prompt failure instead of a silent hang (E2GO-4).
+func TestEncodeMinimalErrorRoundTrips(t *testing.T) {
+	raw := encodeMinimalError(errCodeMarshalResponse, "boom detail")
+	var werr wirepb.Error
+	if err := proto.Unmarshal(raw, &werr); err != nil {
+		t.Fatalf("hand-encoded Error must be valid protobuf: %v", err)
+	}
+	if werr.GetCode() != errCodeMarshalResponse {
+		t.Errorf("code = %d, want %d", werr.GetCode(), errCodeMarshalResponse)
+	}
+	if werr.GetMessage() != "boom detail" {
+		t.Errorf("message = %q, want %q", werr.GetMessage(), "boom detail")
+	}
+}

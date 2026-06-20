@@ -47,6 +47,9 @@ AUDIT_OBSERVER_OUT := $(AUDIT_OBSERVER_DIR)/src/main/resources/bin/linux-amd64/h
 TTL_VALIDATOR_DIR := examples/ttl-validator
 TTL_VALIDATOR_OUT := $(TTL_VALIDATOR_DIR)/src/main/resources/bin/linux-amd64/hbasecop-runtime
 
+# Native (pure-Java) coprocessor twins for the native-vs-Go comparison harness.
+NATIVE_COPROC_DIR := examples/native-coproc
+
 WAL_OBSERVER_DIR := examples/wal-observer
 WAL_OBSERVER_OUT := $(WAL_OBSERVER_DIR)/src/main/resources/bin/linux-amd64/hbasecop-runtime
 
@@ -535,6 +538,7 @@ COPROC_JAR_STAGED := test/integration/coproc-jars/counter-observer.jar
 FAULT_COPROC_JAR_STAGED := test/integration/coproc-jars/fault-observer.jar
 FILTER_COPROC_JAR_STAGED := test/integration/coproc-jars/filter-observer.jar
 ENDPOINT_COPROC_JAR_STAGED := test/integration/coproc-jars/endpoint-observer.jar
+NATIVE_COPROC_JAR_STAGED := test/integration/coproc-jars/native-coproc.jar
 
 .PHONY: demo-counter
 demo-counter: ## CP-γ: public demo - Put on HBase triggers Go observer counter; leaves cluster up.
@@ -575,6 +579,26 @@ test-integration-endpoint: endpoint-observer-jar ## TE22: full IT - bring up HBa
 # Integration (TE51): endpoint fan-out + reduce - EndpointClient aggregates the
 # per-region "sum" partials over a 4-way pre-split table into the table total.
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Integration (M3 / review T1): endpoint EXEC-permission boundary. Brings the
+# cluster up with the AccessController enabled (HBASECOP_ENABLE_ACL) and proves
+# a client with EXEC can invoke the endpoint while one without EXEC is denied.
+# ---------------------------------------------------------------------------
+
+.PHONY: test-integration-endpoint-acl
+test-integration-endpoint-acl: endpoint-observer-jar ## M3: full IT - bring up HBase with AccessController, run EndpointAclIT (EXEC boundary), tear down.
+	@mkdir -p test/integration/coproc-jars
+	cp $(ENDPOINT_OBSERVER_DIR)/target/endpoint-observer.jar $(ENDPOINT_COPROC_JAR_STAGED)
+	@set +e; \
+	  export HBASECOP_ENABLE_ACL=true; \
+	  $(HBASE_COMPOSE_CMD) up -d --build && \
+	  ./test/integration/scripts/wait-master-status.sh; \
+	  $(MVN) $(MVN_FLAGS) test -Dtest=EndpointAclIT -DfailIfNoTests=false; \
+	  status=$$?; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-endpoint-acl.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
 
 .PHONY: test-integration-endpoint-multiregion
 test-integration-endpoint-multiregion: endpoint-observer-jar ## TE51: full IT - bring up HBase, run EndpointMultiRegionIT (4-way pre-split fan-out + reduce), tear down.
@@ -648,6 +672,13 @@ test-integration-shared: counter-observer-jar ## T63: full IT - bring up HBase, 
 # Integration (T36): fault-injection matrix on real HBase.
 # ---------------------------------------------------------------------------
 
+# Hard wall-clock bound on the fault IT. Fault cases deliberately crash/hang the
+# Go process, so a supervisor-recovery regression can wedge a case; the timeout
+# guarantees we still dump hbase-fault.log and tear the container down (rather
+# than the CI job timing out and SIGTERM'ing the step with no logs + a leaked
+# container). Happy-path runtime is ~3 min; the default leaves wide headroom.
+FAULT_TIMEOUT ?= 600
+
 .PHONY: test-fault
 test-fault: fault-observer-jar ## T36: full IT - bring up HBase, run FaultMatrixIT (10 cases), tear down.
 	@mkdir -p test/integration/coproc-jars
@@ -655,8 +686,9 @@ test-fault: fault-observer-jar ## T36: full IT - bring up HBase, run FaultMatrix
 	$(HBASE_COMPOSE_CMD) up -d --build
 	./test/integration/scripts/wait-master-status.sh
 	@set +e; \
-	  $(MVN) $(MVN_FLAGS) test -Dtest=FaultMatrixIT -DfailIfNoTests=false; \
+	  timeout -k 30 $(FAULT_TIMEOUT) $(MVN) $(MVN_FLAGS) test -Dtest=FaultMatrixIT -DfailIfNoTests=false; \
 	  status=$$?; \
+	  if [ $$status -eq 124 ]; then echo "ERROR: test-fault timed out after $(FAULT_TIMEOUT)s" >&2; fi; \
 	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-fault.log 2>&1 || true; \
 	  $(HBASE_COMPOSE_CMD) down; \
 	  exit $$status
@@ -811,6 +843,105 @@ test-integration-ttl: ttl-validator-jar ## T73: full IT - bring up HBase, run Tt
 	  $(MVN) $(MVN_FLAGS) test -Dtest=TtlValidatorIT -DfailIfNoTests=false; \
 	  status=$$?; \
 	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-ttl.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
+
+# ---------------------------------------------------------------------------
+# Comparison (native-vs-Go): same logic implemented as a pure-Java coprocessor
+# and as a Go coprocessor (over the bridge), run on a live cluster on two
+# co-resident tables. Each *CompareIT asserts the two arms produce identical
+# results (hard pass/fail) and prints COMPARE_RESULT / COMPARE_SUMMARY perf
+# lines (report-only, never gated). See docs/bench/compare-*.md.
+# ---------------------------------------------------------------------------
+
+.PHONY: native-coproc-jar
+native-coproc-jar: ## Compare: build the native (pure-Java) coproc-jar (installs bridge into ~/.m2 first).
+	$(MVN) $(MVN_FLAGS) install -DskipTests
+	$(MVN) $(MVN_FLAGS) -f $(NATIVE_COPROC_DIR)/pom.xml package
+	@unzip -l $(NATIVE_COPROC_DIR)/target/native-coproc.jar | \
+	  grep -q 'com/virogg/hbasecop/examples/nativecoproc/NativeSumEndpoint.class' || \
+	  { echo "ERROR: native coproc classes missing from native-coproc.jar" >&2; exit 1; }
+	@unzip -l $(NATIVE_COPROC_DIR)/target/native-coproc.jar | \
+	  grep -q 'com/virogg/hbasecop/bridge/endpoint/pb/GoEndpointService.class' || \
+	  { echo "ERROR: GoEndpointService not bundled into native-coproc.jar" >&2; exit 1; }
+	@if unzip -l $(NATIVE_COPROC_DIR)/target/native-coproc.jar | \
+	  grep -qE 'org/apache/hadoop/hbase/|com/google/protobuf/'; then \
+	  echo "ERROR: HBase/protobuf leaked into native-coproc.jar (must be provided)" >&2; exit 1; fi
+	@echo "OK: native-coproc.jar -- native classes + endpoint Service, no bridge/ELF/HBase"
+
+# One compare-* target per comparison: stage the native jar + the matching Go
+# example jar, boot the cluster once, run the *CompareIT, dump logs, tear down.
+.PHONY: compare-sum
+compare-sum: native-coproc-jar endpoint-observer-jar ## Compare: native vs Go aggregating endpoint (SUM).
+	@mkdir -p test/integration/coproc-jars
+	cp $(NATIVE_COPROC_DIR)/target/native-coproc.jar $(NATIVE_COPROC_JAR_STAGED)
+	cp $(ENDPOINT_OBSERVER_DIR)/target/endpoint-observer.jar $(ENDPOINT_COPROC_JAR_STAGED)
+	$(HBASE_COMPOSE_CMD) up -d --build
+	./test/integration/scripts/wait-master-status.sh
+	@set +e; \
+	  $(MVN) $(MVN_FLAGS) test -Dtest=SumEndpointCompareIT -DfailIfNoTests=false -Djacoco.skip=true; \
+	  status=$$?; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-compare-sum.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
+
+.PHONY: compare-ttl
+compare-ttl: native-coproc-jar ttl-validator-jar ## Compare: native vs Go validating prePut observer (TTL).
+	@mkdir -p test/integration/coproc-jars
+	cp $(NATIVE_COPROC_DIR)/target/native-coproc.jar $(NATIVE_COPROC_JAR_STAGED)
+	cp $(TTL_VALIDATOR_DIR)/target/ttl-validator.jar test/integration/coproc-jars/ttl-validator.jar
+	$(HBASE_COMPOSE_CMD) up -d --build
+	./test/integration/scripts/wait-master-status.sh
+	@set +e; \
+	  $(MVN) $(MVN_FLAGS) test -Dtest=TtlObserverCompareIT -DfailIfNoTests=false -Djacoco.skip=true; \
+	  status=$$?; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-compare-ttl.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
+
+.PHONY: compare-audit
+compare-audit: native-coproc-jar audit-observer-jar ## Compare: native vs Go auditing postPut observer (SHA-256).
+	@mkdir -p test/integration/coproc-jars
+	cp $(NATIVE_COPROC_DIR)/target/native-coproc.jar $(NATIVE_COPROC_JAR_STAGED)
+	cp $(AUDIT_OBSERVER_DIR)/target/audit-observer.jar test/integration/coproc-jars/audit-observer.jar
+	$(HBASE_COMPOSE_CMD) up -d --build
+	./test/integration/scripts/wait-master-status.sh
+	@set +e; \
+	  $(MVN) $(MVN_FLAGS) test -Dtest=AuditObserverCompareIT -DfailIfNoTests=false -Djacoco.skip=true; \
+	  status=$$?; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-compare-audit.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
+
+.PHONY: compare-filter
+compare-filter: native-coproc-jar filter-observer-jar ## Compare: native vs Go read-path bypass observer (filter).
+	@mkdir -p test/integration/coproc-jars
+	cp $(NATIVE_COPROC_DIR)/target/native-coproc.jar $(NATIVE_COPROC_JAR_STAGED)
+	cp $(FILTER_OBSERVER_DIR)/target/filter-observer.jar $(FILTER_COPROC_JAR_STAGED)
+	$(HBASE_COMPOSE_CMD) up -d --build
+	./test/integration/scripts/wait-master-status.sh
+	@set +e; \
+	  $(MVN) $(MVN_FLAGS) test -Dtest=FilterReadCompareIT -DfailIfNoTests=false -Djacoco.skip=true; \
+	  status=$$?; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-compare-filter.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
+
+.PHONY: compare-all
+compare-all: native-coproc-jar endpoint-observer-jar ttl-validator-jar audit-observer-jar filter-observer-jar ## Compare: all four native-vs-Go comparisons in one cluster boot.
+	@mkdir -p test/integration/coproc-jars
+	cp $(NATIVE_COPROC_DIR)/target/native-coproc.jar $(NATIVE_COPROC_JAR_STAGED)
+	cp $(ENDPOINT_OBSERVER_DIR)/target/endpoint-observer.jar $(ENDPOINT_COPROC_JAR_STAGED)
+	cp $(TTL_VALIDATOR_DIR)/target/ttl-validator.jar test/integration/coproc-jars/ttl-validator.jar
+	cp $(AUDIT_OBSERVER_DIR)/target/audit-observer.jar test/integration/coproc-jars/audit-observer.jar
+	cp $(FILTER_OBSERVER_DIR)/target/filter-observer.jar $(FILTER_COPROC_JAR_STAGED)
+	$(HBASE_COMPOSE_CMD) up -d --build
+	./test/integration/scripts/wait-master-status.sh
+	@set +e; \
+	  $(MVN) $(MVN_FLAGS) test -DfailIfNoTests=false -Djacoco.skip=true \
+	    -Dtest=SumEndpointCompareIT,TtlObserverCompareIT,AuditObserverCompareIT,FilterReadCompareIT; \
+	  status=$$?; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-compare-all.log 2>&1 || true; \
 	  $(HBASE_COMPOSE_CMD) down; \
 	  exit $$status
 

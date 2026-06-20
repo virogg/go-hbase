@@ -21,8 +21,11 @@ import (
 // lost reply (e.g. the bridge's bulk-ring send failed and was swallowed) would
 // block the calling endpoint goroutine — and leak its pending entry and any open
 // scanner — for the whole process lifetime, since the endpoint ctx is
-// process-scoped. The bound converts that into a clean error. (Per-call tuning
-// is TE42 admission control.)
+// process-scoped. The bound converts that into a clean error. It is the fallback
+// only: the supervisor overrides it via [ReverseClient.SetTimeout] from
+// HBASECOP_REVERSE_CALL_TIMEOUT_MS (derived from hbasecop.endpoint.timeout) so
+// the per-call deadline tracks the operator's endpoint budget rather than a
+// fixed ceiling (M2).
 const defaultReverseTimeout = 30 * time.Second
 
 // ReverseClient (Tier 2, TE31) is the Go-initiated reverse-RPC channel: a

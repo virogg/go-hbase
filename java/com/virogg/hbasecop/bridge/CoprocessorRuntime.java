@@ -732,6 +732,10 @@ public final class CoprocessorRuntime implements AutoCloseable {
     env.put("HBASECOP_SHMEM_BULK_PATH", cfg.javaToGoBulkFile().toString());
     env.put("HBASECOP_BULK_RING_CAPACITY", Integer.toString(cfg.bulkRingCapacity()));
     env.put("HBASECOP_BULK_RING_MAX_OBJECT_SIZE", Integer.toString(cfg.bulkRingMaxObjectSize()));
+    // M2: bound each reverse RPC (env.Get/Scan) by the endpoint budget rather than a fixed Go-side
+    // ceiling, so raising/lowering hbasecop.endpoint.timeout moves the per-call deadline with it
+    // (the two were previously decoupled 30s defaults; review INT-1).
+    env.put("HBASECOP_REVERSE_CALL_TIMEOUT_MS", Long.toString(cfg.endpointTimeout().toMillis()));
     GoProcessConfig procCfg =
         GoProcessConfig.builder()
             .binaryResourcePath(cfg.binaryResourcePath())

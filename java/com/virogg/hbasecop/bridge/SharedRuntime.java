@@ -208,7 +208,10 @@ public final class SharedRuntime {
 
     private final String key;
     private final CoprocessorRuntime runtime;
-    private boolean released;
+    // volatile: written under synchronized release() but read on the endpoint/observer
+    // accessors from RS handler threads; without it a concurrent invoke racing region
+    // close has no happens-before guarantee to observe the release (review E2J-3).
+    private volatile boolean released;
 
     private Handle(String key, CoprocessorRuntime runtime) {
       this.key = key;

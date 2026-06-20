@@ -72,7 +72,10 @@ func (d *Decoder) readChunk() (*Message, error) {
 	}
 	l := binary.BigEndian.Uint32(lenBuf[:])
 
-	if l < headerSize || int(l) > d.maxFrame-4 {
+	// Compare in unsigned width: a peer-supplied length above 2 GiB would
+	// sign-extend negative under int() on a 32-bit build and slip past the cap
+	// into make([]byte, l). uint64 keeps the bound portable.
+	if l < headerSize || uint64(l) > uint64(d.maxFrame)-4 {
 		return nil, fmt.Errorf("%w: %d", ErrFrameTooLarge, l)
 	}
 
