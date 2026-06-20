@@ -41,7 +41,8 @@ class Wave4ShapeTest {
   void postCompactCarriesResultFileAndRequest() throws IOException {
     PostCompactRequest msg =
         PostCompactRequest.newBuilder()
-            .setColumnFamily(com.google.protobuf.ByteString.copyFromUtf8("cf"))
+            .setColumnFamily(
+                org.apache.hbase.thirdparty.com.google.protobuf.ByteString.copyFromUtf8("cf"))
             .setResultFile(StoreFilePathProto.newBuilder().setPath("/foo.hfile").setSizeBytes(1024))
             .setRequest(
                 CompactionRequestSummary.newBuilder()
@@ -64,7 +65,9 @@ class Wave4ShapeTest {
         PreBulkLoadHFileRequest.newBuilder()
             .addFamilyPath(
                 FamilyPath.newBuilder()
-                    .setFamily(com.google.protobuf.ByteString.copyFromUtf8("cf"))
+                    .setFamily(
+                        org.apache.hbase.thirdparty.com.google.protobuf.ByteString.copyFromUtf8(
+                            "cf"))
                     .setPath("/staging/a.hfile"))
             .build();
     assertEquals(1, PreBulkLoadHFileRequest.parseFrom(pre.toByteArray()).getFamilyPathCount());
@@ -73,7 +76,9 @@ class Wave4ShapeTest {
         PostBulkLoadHFileRequest.newBuilder()
             .addFinalPath(
                 BulkLoadFamilyPaths.newBuilder()
-                    .setFamily(com.google.protobuf.ByteString.copyFromUtf8("cf"))
+                    .setFamily(
+                        org.apache.hbase.thirdparty.com.google.protobuf.ByteString.copyFromUtf8(
+                            "cf"))
                     .addPath("/final/a.hfile")
                     .addPath("/final/b.hfile"))
             .build();
@@ -85,7 +90,8 @@ class Wave4ShapeTest {
   void preCommitStoreFilePathPairs() throws IOException {
     PreCommitStoreFileRequest msg =
         PreCommitStoreFileRequest.newBuilder()
-            .setFamily(com.google.protobuf.ByteString.copyFromUtf8("cf"))
+            .setFamily(
+                org.apache.hbase.thirdparty.com.google.protobuf.ByteString.copyFromUtf8("cf"))
             .addPair(PathPair.newBuilder().setSource("/src/a").setDestination("/dst/a"))
             .build();
     PathPair re = PreCommitStoreFileRequest.parseFrom(msg.toByteArray()).getPair(0);
@@ -97,10 +103,12 @@ class Wave4ShapeTest {
   void preWALAppendCarriesWalKeyAndEdit() throws IOException {
     CellProtos.Cell cell =
         CellProtos.Cell.newBuilder()
-            .setRow(com.google.protobuf.ByteString.copyFromUtf8("r"))
-            .setFamily(com.google.protobuf.ByteString.copyFromUtf8("cf"))
-            .setQualifier(com.google.protobuf.ByteString.copyFromUtf8("q"))
-            .setValue(com.google.protobuf.ByteString.copyFromUtf8("v"))
+            .setRow(org.apache.hbase.thirdparty.com.google.protobuf.ByteString.copyFromUtf8("r"))
+            .setFamily(
+                org.apache.hbase.thirdparty.com.google.protobuf.ByteString.copyFromUtf8("cf"))
+            .setQualifier(
+                org.apache.hbase.thirdparty.com.google.protobuf.ByteString.copyFromUtf8("q"))
+            .setValue(org.apache.hbase.thirdparty.com.google.protobuf.ByteString.copyFromUtf8("v"))
             .setCellType(CellProtos.CellType.PUT)
             .build();
     PreWALAppendRequest msg =

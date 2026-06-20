@@ -3,12 +3,12 @@
 
 package com.virogg.hbasecop.bridge.observer;
 
-import com.google.protobuf.ByteString;
 import com.virogg.hbasecop.hbase.v1.CellProtos;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.PrivateCellUtil;
+import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
 
 /**
  * Converts an HBase {@link Cell} to the vendored {@link CellProtos.Cell} envelope. Used by the

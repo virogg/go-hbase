@@ -37,6 +37,10 @@ desktop.ini
 # Local dev
 tmp/
 *.local
+# Ignore every dot-directory (local IDE/agent/tooling state); re-include tracked infra dirs.
+.*/
+!.github/
+!.mvn/
 
 # Agent / assistant tooling (local only)
 .claude/

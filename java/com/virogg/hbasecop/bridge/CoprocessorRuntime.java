@@ -23,8 +23,12 @@ import com.virogg.hbasecop.bridge.supervisor.RestartConfig;
 import com.virogg.hbasecop.bridge.supervisor.RestartController;
 import com.virogg.hbasecop.bridge.wire.Decoder;
 import com.virogg.hbasecop.bridge.wire.Encoder;
+import com.virogg.hbasecop.bridge.wire.FrameType;
 import com.virogg.hbasecop.bridge.wire.Message;
 import com.virogg.hbasecop.bridge.wire.WireException;
+import com.virogg.hbasecop.bridge.wire.pb.EndpointInvoke;
+import com.virogg.hbasecop.bridge.wire.pb.EndpointResult;
+import com.virogg.hbasecop.multiplex.ChannelClosedException;
 import com.virogg.hbasecop.multiplex.GoSideCrashedException;
 import com.virogg.hbasecop.multiplex.Multiplexer;
 import java.io.IOException;
@@ -41,14 +45,18 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.jar.Manifest;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
+import org.apache.hbase.thirdparty.com.google.protobuf.InvalidProtocolBufferException;
 
 /**
  * In-RegionServer bridge runtime: ties together the {@link GoProcess} supervisor, the shmem {@link
@@ -105,8 +113,24 @@ public final class CoprocessorRuntime implements AutoCloseable {
 
   private final Config cfg;
 
+  // TE31: shared per-process region_id space + region_id -> live Region map. The
+  // RegionObserverAdapter populates both over the region open/close lifecycle;
+  // the endpoint path resolves region_id (regionIdFor) to stamp reverse RPCs and
+  // the servicing pool resolves the Region (regionRegistry) to execute them.
+  private final com.virogg.hbasecop.multiplex.RegionIdAllocator regionIdAllocator =
+      new com.virogg.hbasecop.multiplex.RegionIdAllocator();
+  private final com.virogg.hbasecop.bridge.rpc.RegionRegistry regionRegistry =
+      new com.virogg.hbasecop.bridge.rpc.RegionRegistry();
+  // TE33: open server-side scanners, reaped on Go-process crash so no RegionScanner leaks.
+  // TE42: bounded per call + idle-lease evicted (constructed from cfg).
+  private final com.virogg.hbasecop.bridge.rpc.ScannerRegistry scannerRegistry;
+  // TE42 admission: bounds concurrent client endpoint calls (each pins an RS handler thread).
+  private final java.util.concurrent.Semaphore endpointAdmission;
+
   private Channel javaToGo;
   private Channel goToJava;
+  private Channel javaToGoBulk; // TE31: bulk J->G ring carrying reverse-RPC replies
+  private com.virogg.hbasecop.bridge.rpc.ReverseRpcServicer reverseRpcServicer;
   private GoProcess goProcess;
   private Multiplexer mux;
   private ChannelReader reader;
@@ -125,6 +149,10 @@ public final class CoprocessorRuntime implements AutoCloseable {
 
   public CoprocessorRuntime(Config cfg) {
     this.cfg = Objects.requireNonNull(cfg, "cfg");
+    this.scannerRegistry =
+        new com.virogg.hbasecop.bridge.rpc.ScannerRegistry(
+            cfg.maxScannersPerCall(), cfg.scannerIdleLease().toMillis(), System::currentTimeMillis);
+    this.endpointAdmission = new java.util.concurrent.Semaphore(cfg.maxConcurrentCalls());
   }
 
   /**
@@ -147,6 +175,15 @@ public final class CoprocessorRuntime implements AutoCloseable {
           Channel.open(
               shmemConfig(
                   cfg.goToJavaFile(), Role.CONSUMER, cfg.ringCapacity(), cfg.ringMaxObjectSize()));
+      // TE31: dedicated bulk J->G ring for reverse-RPC replies (Result data), isolated from the
+      // control ring so a large reply never queues behind a hook invoke or starves the heartbeat.
+      javaToGoBulk =
+          Channel.open(
+              shmemConfig(
+                  cfg.javaToGoBulkFile(),
+                  Role.PRODUCER,
+                  cfg.bulkRingCapacity(),
+                  cfg.bulkRingMaxObjectSize()));
 
       effectiveHeartbeatMs = resolveHeartbeatPeriodMs(cfg);
       goProcess = buildGoProcess();
@@ -190,14 +227,52 @@ public final class CoprocessorRuntime implements AutoCloseable {
               .scheduler(watchdogScheduler)
               .build();
 
-      reader = new ChannelReader(goToJava, new Decoder(), mux, watchdog);
+      // TE31: reverse-RPC replies ride a SECOND send funnel on the dedicated bulk ring, so a large
+      // Result never contends with hook/endpoint/heartbeat traffic under the control sendLock. The
+      // bulk ring has one logical producer; the lock guards the concurrent servicing-pool threads.
+      final Encoder bulkEnc = new Encoder();
+      final Object bulkSendLock = new Object();
+      final Channel javaToGoBulkRef = javaToGoBulk;
+      java.util.function.Consumer<Message> bulkReplySink =
+          msg -> {
+            synchronized (bulkSendLock) {
+              try {
+                sendOnChannel(javaToGoBulkRef, bulkEnc, msg, sendDeadlineMs);
+              } catch (ShmemException | WireException e) {
+                // The Go caller's reverse RPC will fail on its own deadline; a lost reply must not
+                // take down the servicing thread or the bridge.
+                LOG.log(Level.WARNING, "CoprocessorRuntime: reverse-RPC reply send failed", e);
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                LOG.log(
+                    Level.WARNING, "CoprocessorRuntime: interrupted sending reverse-RPC reply", e);
+              }
+            }
+          };
+      reverseRpcServicer =
+          new com.virogg.hbasecop.bridge.rpc.ReverseRpcServicer(
+              regionRegistry,
+              scannerRegistry,
+              bulkReplySink,
+              cfg.bulkRingMaxObjectSize(),
+              cfg.servicingPoolSize(),
+              cfg.servicingQueueDepth(),
+              cfg.servicingTimeout(),
+              cfg.allowMutate(),
+              cfg.maxBytesPerResp(),
+              cfg.maxRowsPerNext());
+
+      // TE31: route reverse-RPC requests to the bounded, fail-closed servicing pool (never the
+      // reader thread). accept() only submits, so the reader keeps routing hooks/heartbeats.
+      reader =
+          new ChannelReader(goToJava, new Decoder(), mux, watchdog, reverseRpcServicer::accept);
       readerThread = new Thread(reader, "hbasecop-reader");
       readerThread.setDaemon(true);
       readerThread.start();
 
       HookDispatcher dispatcher = new MuxHookDispatcher(mux);
       com.virogg.hbasecop.bridge.config.PolicyConfig policy = buildPolicyConfig(cfg);
-      observer = new RegionObserverAdapter(dispatcher, policy);
+      observer = new RegionObserverAdapter(dispatcher, policy, regionIdAllocator, regionRegistry);
       masterObserver = new MasterObserverAdapter(dispatcher, policy);
       regionServerObserver = new RegionServerObserverAdapter(dispatcher, policy);
       walObserver = new WALObserverAdapter(dispatcher, policy);
@@ -256,6 +331,113 @@ public final class CoprocessorRuntime implements AutoCloseable {
   /** The BulkLoadObserver to expose to HBase (T54); null until {@link #start()} succeeds. */
   public org.apache.hadoop.hbase.coprocessor.BulkLoadObserver getBulkLoadObserver() {
     return bulkLoadObserver;
+  }
+
+  /**
+   * Forwards a Tier 2 endpoint invocation to the Go side and returns the result payload. Sends an
+   * {@code ENDPOINT_INVOKE} frame through the same multiplexer + send lock as hooks, blocks for the
+   * matching {@code ENDPOINT_RESULT} (or an {@code ERROR}) up to the configured hook timeout, and
+   * unwraps the result. Throws {@link IOException} on timeout, a Go-side error, channel close, or a
+   * malformed reply, which {@code GoEndpointServiceImpl} surfaces to the client as an endpoint
+   * error.
+   */
+  public byte[] invokeEndpoint(EndpointInvoke invoke) throws IOException {
+    return invokeEndpoint(invoke, 0);
+  }
+
+  /**
+   * The region id under which the named region was allocated (TE61/TE31), or 0 if it is not
+   * currently open here. The endpoint path stamps this onto an {@link EndpointInvoke} so a Go
+   * handler's reverse RPCs target the region the client invoked the endpoint on.
+   */
+  public int regionIdFor(String encodedRegionName) {
+    return regionIdAllocator.idFor(encodedRegionName);
+  }
+
+  /**
+   * TE31 variant: forward an endpoint invocation stamped with {@code regionId}, so a Go endpoint
+   * handler's reverse RPCs (reads of region-local data) resolve to the originating region. {@code
+   * regionId} 0 means no region scope (e.g. master endpoints).
+   */
+  public byte[] invokeEndpoint(EndpointInvoke invoke, int regionId) throws IOException {
+    Multiplexer m = mux;
+    if (m == null) {
+      throw new IOException("hbasecop: endpoint invoked before runtime start");
+    }
+    // TE42 admission: bound concurrent client endpoint calls so they cannot exhaust the RS handler
+    // thread pool — each call blocks an RS handler thread on fut.get below (A-1). tryAcquire never
+    // blocks; over the cap we fail fast with a clear, client-visible error.
+    if (!endpointAdmission.tryAcquire()) {
+      throw new IOException(
+          "hbasecop: endpoint max-concurrent-calls ("
+              + cfg.maxConcurrentCalls()
+              + ") exceeded; rejecting "
+              + invoke.getMethod());
+    }
+    Message req =
+        new Message(FrameType.ENDPOINT_INVOKE, 0L, regionId, (byte) 0, invoke.toByteArray());
+    Multiplexer.Call call = null;
+    try {
+      call = m.callTracked(req);
+      CompletableFuture<Message> fut = call.future;
+
+      final Message resp;
+      try {
+        resp = fut.get(cfg.endpointTimeout().toMillis(), TimeUnit.MILLISECONDS);
+      } catch (TimeoutException e) {
+        fut.cancel(false);
+        m.cancel(call.reqId);
+        throw new IOException("hbasecop: endpoint " + invoke.getMethod() + " timed out", e);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new IOException("hbasecop: endpoint " + invoke.getMethod() + " interrupted", e);
+      } catch (ExecutionException e) {
+        Throwable cause = e.getCause();
+        if (cause instanceof ChannelClosedException) {
+          throw new IOException("hbasecop: channel closed during endpoint call", cause);
+        }
+        if (cause instanceof IOException) {
+          throw (IOException) cause;
+        }
+        throw new IOException(
+            "hbasecop: endpoint " + invoke.getMethod() + " dispatch failed", cause);
+      }
+
+      if (resp.type() == FrameType.ERROR) {
+        try {
+          com.virogg.hbasecop.bridge.wire.pb.Error err =
+              com.virogg.hbasecop.bridge.wire.pb.Error.parseFrom(resp.payload());
+          throw new IOException(
+              "hbasecop: endpoint "
+                  + invoke.getMethod()
+                  + " returned error (code="
+                  + err.getCode()
+                  + "): "
+                  + err.getMessage());
+        } catch (InvalidProtocolBufferException e) {
+          throw new IOException("hbasecop: malformed endpoint Error payload", e);
+        }
+      }
+      try {
+        return EndpointResult.parseFrom(resp.payload()).getPayload().toByteArray();
+      } catch (InvalidProtocolBufferException e) {
+        throw new IOException("hbasecop: malformed EndpointResult payload", e);
+      }
+    } finally {
+      // TE33: reap any scanners this endpoint call opened but did not close (handler bug, early
+      // return, panic, or timeout) so a RegionScanner read point never leaks past the call.
+      if (call != null) {
+        int reaped = scannerRegistry.closeForCall(call.reqId);
+        if (reaped > 0) {
+          LOG.log(
+              Level.WARNING,
+              "CoprocessorRuntime: reaped {0} scanner(s) left open by endpoint call (req_id={1})",
+              reaped,
+              call.reqId);
+        }
+      }
+      endpointAdmission.release(); // TE42: paired with the tryAcquire above
+    }
   }
 
   /**
@@ -336,6 +518,13 @@ public final class CoprocessorRuntime implements AutoCloseable {
         Thread.currentThread().interrupt();
       }
     }
+    // TE31: stop the reverse-RPC servicing pool after the reader has joined (no new requests are
+    // handed off) and before the bulk channel is closed (in-flight replies still have a sink).
+    if (reverseRpcServicer != null) {
+      reverseRpcServicer.close();
+    }
+    // TE33: close any scanners still open at teardown (clean stop, not a crash) so none leak.
+    reapScanners("runtime teardown");
     if (mux != null) {
       mux.close();
     }
@@ -351,13 +540,16 @@ public final class CoprocessorRuntime implements AutoCloseable {
     }
     closeChannelQuietly(goToJava);
     closeChannelQuietly(javaToGo);
+    closeChannelQuietly(javaToGoBulk);
 
     reader = null;
     readerThread = null;
+    reverseRpcServicer = null;
     mux = null;
     goProcess = null;
     goToJava = null;
     javaToGo = null;
+    javaToGoBulk = null;
     observer = null;
     masterObserver = null;
     regionServerObserver = null;
@@ -365,6 +557,19 @@ public final class CoprocessorRuntime implements AutoCloseable {
     bulkLoadObserver = null;
     watchdog = null;
     restartController = null;
+  }
+
+  /**
+   * TE33: close every open server-side scanner when the Go process dies, so no {@link
+   * org.apache.hadoop.hbase.regionserver.RegionScanner} — and the MVCC read point it pins — leaks.
+   * Invoked alongside {@code pauseInflightFailing} on the crash path; logs the count so a leak
+   * regression is observable in the RegionServer log.
+   */
+  private void reapScanners(String reason) {
+    int n = scannerRegistry.closeAll();
+    if (n > 0) {
+      LOG.log(Level.INFO, "CoprocessorRuntime: reaped {0} orphaned scanner(s) ({1})", n, reason);
+    }
   }
 
   private static void closeChannelQuietly(Channel ch) {
@@ -399,6 +604,16 @@ public final class CoprocessorRuntime implements AutoCloseable {
         LOG.log(Level.WARNING, "CoprocessorRuntime: restart controller tick threw", e);
       }
     }
+    // TE42: reap scanners idle past their lease (an endpoint that opened a scanner and never
+    // closed it, or a reaping-race straggler).
+    try {
+      int evicted = scannerRegistry.evictIdle();
+      if (evicted > 0) {
+        LOG.log(Level.INFO, "CoprocessorRuntime: evicted {0} idle scanner(s)", evicted);
+      }
+    } catch (RuntimeException e) {
+      LOG.log(Level.WARNING, "CoprocessorRuntime: scanner idle-evict threw", e);
+    }
   }
 
   private void detectExitedGoProcess() {
@@ -417,6 +632,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
         m.pauseInflightFailing(
             new GoSideCrashedException("Go process pid=" + pid + " exited unexpectedly"));
       }
+      reapScanners("exited pid=" + pid);
       if (c != null) {
         c.notifyDead();
       }
@@ -448,6 +664,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
           new GoSideCrashedException(
               "Go process pid=" + pid + " hung for " + elapsedMs + "ms, SIGKILLed"));
     }
+    reapScanners("hung pid=" + pid);
     RestartController c = restartController;
     if (c != null) {
       c.notifyDead();
@@ -508,6 +725,13 @@ public final class CoprocessorRuntime implements AutoCloseable {
   }
 
   private GoProcess buildGoProcess() {
+    // TE31: tell the Go child where the bulk ring is and how it is sized, so it opens the matching
+    // consumer endpoint and stands up its reverse in-pump. Carried as extra env on top of the
+    // caller's, so no GoProcess change is needed.
+    Map<String, String> env = new LinkedHashMap<>(cfg.extraEnv());
+    env.put("HBASECOP_SHMEM_BULK_PATH", cfg.javaToGoBulkFile().toString());
+    env.put("HBASECOP_BULK_RING_CAPACITY", Integer.toString(cfg.bulkRingCapacity()));
+    env.put("HBASECOP_BULK_RING_MAX_OBJECT_SIZE", Integer.toString(cfg.bulkRingMaxObjectSize()));
     GoProcessConfig procCfg =
         GoProcessConfig.builder()
             .binaryResourcePath(cfg.binaryResourcePath())
@@ -521,7 +745,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
             // extracted ELF before exec and fails closed on a corrupt/wrong-arch/tampered binary.
             // Without this, the checksum hbasecop-build writes is never verified at runtime.
             .expectedBinarySha256(resolveExpectedBinarySha256())
-            .extraEnv(cfg.extraEnv())
+            .extraEnv(env)
             .build();
     return new GoProcess(procCfg, javaToGo);
   }
@@ -729,19 +953,70 @@ public final class CoprocessorRuntime implements AutoCloseable {
     }
   }
 
+  /**
+   * Sink for inbound {@code RPC_REQUEST} frames: a Go-initiated reverse RPC (Tier 2). The bounded
+   * servicing pool that executes scan/get/mutate against the region lands in TE31; in E1 this is a
+   * stub. Correlation is by the wire-header {@code req_id} carried on the {@link Message}; the
+   * router does not unmarshal the protobuf payload.
+   */
+  @FunctionalInterface
+  interface ReverseRpcSink {
+    void accept(Message m);
+  }
+
+  /**
+   * Routes one decoded Go→Java frame. Package-private and static so it can be unit-tested by
+   * injecting Messages without standing up a Channel/Thread.
+   */
+  static void routeFrame(
+      Message m, Multiplexer mux, HeartbeatWatchdog watchdog, ReverseRpcSink reverseRpc) {
+    switch (m.type()) {
+      case RESPONSE:
+      case ERROR:
+      case ENDPOINT_RESULT:
+        // All carry the req_id of a pending mux call: a hook RESPONSE, an
+        // ENDPOINT_RESULT for an endpoint invoke, or an ERROR for either. The
+        // Go side picks ERROR when the call fails; the waiting caller
+        // (MuxHookDispatcher / invokeEndpoint) inspects FrameType.
+        if (!mux.deliver(m)) {
+          LOG.log(Level.DEBUG, "CoprocessorRuntime: unmatched {0} req_id={1}", m.type(), m.reqId());
+        }
+        break;
+      case HEARTBEAT:
+        if (watchdog != null) {
+          watchdog.recordHeartbeat();
+        }
+        break;
+      case RPC_REQUEST:
+        // Go-initiated reverse RPC (Tier 2); hand to the stub sink keyed by
+        // req_id. No PB decode here.
+        reverseRpc.accept(m);
+        break;
+      default:
+        LOG.log(Level.WARNING, "CoprocessorRuntime: unexpected frame type {0}", m.type());
+    }
+  }
+
   /** Reader thread: drains the Go→Java ring and routes frames to the multiplexer. */
   private static final class ChannelReader implements Runnable {
     private final Channel ch;
     private final Decoder decoder;
     private final Multiplexer mux;
     private final HeartbeatWatchdog watchdog;
+    private final ReverseRpcSink reverseRpc;
     private volatile boolean stop;
 
-    ChannelReader(Channel ch, Decoder decoder, Multiplexer mux, HeartbeatWatchdog watchdog) {
+    ChannelReader(
+        Channel ch,
+        Decoder decoder,
+        Multiplexer mux,
+        HeartbeatWatchdog watchdog,
+        ReverseRpcSink reverseRpc) {
       this.ch = ch;
       this.decoder = decoder;
       this.mux = mux;
       this.watchdog = watchdog;
+      this.reverseRpc = reverseRpc;
     }
 
     void shutdown() {
@@ -773,25 +1048,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
           // Partial frame: Decoder will resume on next chunk; here we treat as "wait".
           continue;
         }
-        switch (m.type()) {
-          case RESPONSE:
-          case ERROR:
-            // Both carry the same req_id; the Go side picks ERROR when a hook
-            // call fails (e.g. unknown hook, malformed payload, marshal fail).
-            // MuxHookDispatcher inspects FrameType and surfaces an IOException.
-            if (!mux.deliver(m)) {
-              LOG.log(
-                  Level.DEBUG, "CoprocessorRuntime: unmatched {0} req_id={1}", m.type(), m.reqId());
-            }
-            break;
-          case HEARTBEAT:
-            if (watchdog != null) {
-              watchdog.recordHeartbeat();
-            }
-            break;
-          default:
-            LOG.log(Level.WARNING, "CoprocessorRuntime: unexpected frame type {0}", m.type());
-        }
+        routeFrame(m, mux, watchdog, reverseRpc);
       }
     }
   }
@@ -807,11 +1064,26 @@ public final class CoprocessorRuntime implements AutoCloseable {
     private final int ringMaxObjectSize;
     private final long heartbeatPeriodMs;
     private final Duration hookTimeout;
+    private final Duration endpointTimeout;
     private final Duration gracefulShutdownTimeout;
     private final Configuration configuration;
     private final RestartConfig restartConfig;
     private final Duration restartDeadline;
     private final Map<String, String> extraEnv;
+    // TE31 reverse-RPC servicing pool + bulk ring sizing.
+    private final int servicingPoolSize;
+    private final int servicingQueueDepth;
+    private final Duration servicingTimeout;
+    private final int bulkRingCapacity;
+    private final int bulkRingMaxObjectSize;
+    // TE41: gate for reverse MUTATE (endpoint writes); off by default.
+    private final boolean allowMutate;
+    // TE42 endpoint limits + admission.
+    private final int maxConcurrentCalls;
+    private final int maxScannersPerCall;
+    private final int maxBytesPerResp;
+    private final int maxRowsPerNext;
+    private final Duration scannerIdleLease;
 
     private Config(Builder b) {
       this.binaryResourcePath = b.binaryResourcePath;
@@ -828,6 +1100,7 @@ public final class CoprocessorRuntime implements AutoCloseable {
       this.ringMaxObjectSize = b.ringMaxObjectSize;
       this.heartbeatPeriodMs = b.heartbeatPeriodMs;
       this.hookTimeout = Objects.requireNonNull(b.hookTimeout, "hookTimeout");
+      this.endpointTimeout = Objects.requireNonNull(b.endpointTimeout, "endpointTimeout");
       this.gracefulShutdownTimeout =
           Objects.requireNonNull(b.gracefulShutdownTimeout, "gracefulShutdownTimeout");
       this.configuration = b.configuration;
@@ -837,6 +1110,41 @@ public final class CoprocessorRuntime implements AutoCloseable {
           b.extraEnv.isEmpty()
               ? Collections.emptyMap()
               : Collections.unmodifiableMap(new LinkedHashMap<>(b.extraEnv));
+      if (b.servicingPoolSize <= 0) {
+        throw new IllegalArgumentException("servicingPoolSize must be > 0");
+      }
+      if (b.servicingQueueDepth <= 0) {
+        throw new IllegalArgumentException("servicingQueueDepth must be > 0");
+      }
+      if (b.bulkRingCapacity <= 0) {
+        throw new IllegalArgumentException("bulkRingCapacity must be > 0");
+      }
+      if (b.bulkRingMaxObjectSize <= 0) {
+        throw new IllegalArgumentException("bulkRingMaxObjectSize must be > 0");
+      }
+      this.servicingPoolSize = b.servicingPoolSize;
+      this.servicingQueueDepth = b.servicingQueueDepth;
+      this.servicingTimeout = Objects.requireNonNull(b.servicingTimeout, "servicingTimeout");
+      this.bulkRingCapacity = b.bulkRingCapacity;
+      this.bulkRingMaxObjectSize = b.bulkRingMaxObjectSize;
+      this.allowMutate = b.allowMutate;
+      if (b.maxConcurrentCalls <= 0) {
+        throw new IllegalArgumentException("maxConcurrentCalls must be > 0");
+      }
+      if (b.maxScannersPerCall <= 0) {
+        throw new IllegalArgumentException("maxScannersPerCall must be > 0");
+      }
+      if (b.maxBytesPerResp <= 0) {
+        throw new IllegalArgumentException("maxBytesPerResp must be > 0");
+      }
+      if (b.maxRowsPerNext <= 0) {
+        throw new IllegalArgumentException("maxRowsPerNext must be > 0");
+      }
+      this.maxConcurrentCalls = b.maxConcurrentCalls;
+      this.maxScannersPerCall = b.maxScannersPerCall;
+      this.maxBytesPerResp = b.maxBytesPerResp;
+      this.maxRowsPerNext = b.maxRowsPerNext;
+      this.scannerIdleLease = Objects.requireNonNull(b.scannerIdleLease, "scannerIdleLease");
     }
 
     public String binaryResourcePath() {
@@ -873,6 +1181,11 @@ public final class CoprocessorRuntime implements AutoCloseable {
 
     public Duration hookTimeout() {
       return hookTimeout;
+    }
+
+    /** Wall-clock bound on a Tier 2 endpoint call awaiting its EndpointResult. */
+    public Duration endpointTimeout() {
+      return endpointTimeout;
     }
 
     public Duration gracefulShutdownTimeout() {
@@ -915,6 +1228,66 @@ public final class CoprocessorRuntime implements AutoCloseable {
       return extraEnv;
     }
 
+    /** TE31: max concurrent reverse-RPC servicing threads. */
+    public int servicingPoolSize() {
+      return servicingPoolSize;
+    }
+
+    /** TE31: bounded reverse-RPC backlog before requests fail closed. */
+    public int servicingQueueDepth() {
+      return servicingQueueDepth;
+    }
+
+    /** TE31: how long teardown waits for in-flight reverse-RPC tasks to drain. */
+    public Duration servicingTimeout() {
+      return servicingTimeout;
+    }
+
+    /** TE31: slot count of the dedicated bulk Java->Go ring carrying reverse-RPC replies. */
+    public int bulkRingCapacity() {
+      return bulkRingCapacity;
+    }
+
+    /** TE31: slot byte size of the bulk Java->Go ring. */
+    public int bulkRingMaxObjectSize() {
+      return bulkRingMaxObjectSize;
+    }
+
+    /** TE41: whether reverse MUTATE (endpoint writes) is enabled; off by default. */
+    public boolean allowMutate() {
+      return allowMutate;
+    }
+
+    /** TE42: max concurrent client endpoint calls (bounds blocked RS handler threads). */
+    public int maxConcurrentCalls() {
+      return maxConcurrentCalls;
+    }
+
+    /** TE42: max open server-side scanners per endpoint call. */
+    public int maxScannersPerCall() {
+      return maxScannersPerCall;
+    }
+
+    /** TE42: max bytes in a single SCAN_NEXT reply (clamped to the bulk-ring slot). */
+    public int maxBytesPerResp() {
+      return maxBytesPerResp;
+    }
+
+    /** TE42: max rows in a single SCAN_NEXT batch. */
+    public int maxRowsPerNext() {
+      return maxRowsPerNext;
+    }
+
+    /** TE42: idle scanner lease before reaping. */
+    public Duration scannerIdleLease() {
+      return scannerIdleLease;
+    }
+
+    /** TE31: the bulk ring's segment path, derived next to the control Java->Go segment. */
+    public Path javaToGoBulkFile() {
+      return Path.of(javaToGoFile.toString() + ".bulk");
+    }
+
     public static Builder builder() {
       return new Builder();
     }
@@ -929,11 +1302,23 @@ public final class CoprocessorRuntime implements AutoCloseable {
       private int ringMaxObjectSize = 1 << 20; // 1 MiB
       private long heartbeatPeriodMs = 0L;
       private Duration hookTimeout = Duration.ofSeconds(5);
+      private Duration endpointTimeout = Duration.ofSeconds(30);
       private Duration gracefulShutdownTimeout = Duration.ofSeconds(2);
       private Configuration configuration;
       private RestartConfig restartConfig;
       private Duration restartDeadline;
       private Map<String, String> extraEnv = new LinkedHashMap<>();
+      private int servicingPoolSize = 8;
+      private int servicingQueueDepth = 64;
+      private Duration servicingTimeout = Duration.ofSeconds(30);
+      private int bulkRingCapacity = 16;
+      private int bulkRingMaxObjectSize = 1 << 20; // 1 MiB
+      private boolean allowMutate = false;
+      private int maxConcurrentCalls = 8;
+      private int maxScannersPerCall = 16;
+      private int maxBytesPerResp = 1 << 20; // 1 MiB
+      private int maxRowsPerNext = 1000;
+      private Duration scannerIdleLease = Duration.ofMinutes(2);
 
       public Builder binaryResourcePath(String s) {
         this.binaryResourcePath = s;
@@ -980,6 +1365,11 @@ public final class CoprocessorRuntime implements AutoCloseable {
         return this;
       }
 
+      public Builder endpointTimeout(Duration d) {
+        this.endpointTimeout = d;
+        return this;
+      }
+
       public Builder gracefulShutdownTimeout(Duration d) {
         this.gracefulShutdownTimeout = d;
         return this;
@@ -1022,6 +1412,72 @@ public final class CoprocessorRuntime implements AutoCloseable {
        */
       public Builder extraEnv(Map<String, String> env) {
         this.extraEnv = env == null ? new LinkedHashMap<>() : new LinkedHashMap<>(env);
+        return this;
+      }
+
+      /** TE31: max concurrent reverse-RPC servicing threads (default 8). */
+      public Builder servicingPoolSize(int n) {
+        this.servicingPoolSize = n;
+        return this;
+      }
+
+      /** TE31: bounded reverse-RPC backlog before requests fail closed (default 64). */
+      public Builder servicingQueueDepth(int n) {
+        this.servicingQueueDepth = n;
+        return this;
+      }
+
+      /** TE31: teardown drain timeout for in-flight reverse-RPC tasks (default 30s). */
+      public Builder servicingTimeout(Duration d) {
+        this.servicingTimeout = d;
+        return this;
+      }
+
+      /** TE31: bulk ring slot count (default 16). */
+      public Builder bulkRingCapacity(int n) {
+        this.bulkRingCapacity = n;
+        return this;
+      }
+
+      /** TE31: bulk ring slot byte size (default 1 MiB). */
+      public Builder bulkRingMaxObjectSize(int n) {
+        this.bulkRingMaxObjectSize = n;
+        return this;
+      }
+
+      /** TE41: enable reverse MUTATE (endpoint writes); off by default. */
+      public Builder allowMutate(boolean enabled) {
+        this.allowMutate = enabled;
+        return this;
+      }
+
+      /** TE42: max concurrent client endpoint calls (default 8). */
+      public Builder maxConcurrentCalls(int n) {
+        this.maxConcurrentCalls = n;
+        return this;
+      }
+
+      /** TE42: max open scanners per endpoint call (default 16). */
+      public Builder maxScannersPerCall(int n) {
+        this.maxScannersPerCall = n;
+        return this;
+      }
+
+      /** TE42: max bytes per SCAN_NEXT reply (default 1 MiB, clamped to slot). */
+      public Builder maxBytesPerResp(int n) {
+        this.maxBytesPerResp = n;
+        return this;
+      }
+
+      /** TE42: max rows per SCAN_NEXT batch (default 1000). */
+      public Builder maxRowsPerNext(int n) {
+        this.maxRowsPerNext = n;
+        return this;
+      }
+
+      /** TE42: idle scanner lease before reaping (default 2m). */
+      public Builder scannerIdleLease(Duration d) {
+        this.scannerIdleLease = d;
         return this;
       }
 

@@ -77,10 +77,18 @@ const (
 	TypeError     Type = 4
 	TypeShutdown  Type = 5
 	TypeLog       Type = 6
+
+	// Tier 2 (wire v2). Endpoint invoke/result carry a client-initiated
+	// server-side RPC; RpcRequest/RpcResponse carry the Go-initiated reverse
+	// data-access channel. New bytes are appended; v1 values are unchanged.
+	TypeEndpointInvoke Type = 7
+	TypeEndpointResult Type = 8
+	TypeRPCRequest     Type = 9
+	TypeRPCResponse    Type = 10
 )
 
 // Valid reports whether t is a known payload type.
-func (t Type) Valid() bool { return t >= TypeRequest && t <= TypeLog }
+func (t Type) Valid() bool { return t >= TypeRequest && t <= TypeRPCResponse }
 
 // isControl reports whether a frame type is a stateless control frame
 // that must be single-chunk (Heartbeat/Shutdown/Log).
@@ -105,7 +113,8 @@ var (
 	// frames and frames shorter than the framing header.
 	ErrFrameTooLarge = errors.New("wire: frame length out of range")
 
-	// ErrUnknownType: the type byte is 0 or above TypeLog.
+	// ErrUnknownType: the type byte is 0 or above TypeRPCResponse (the highest
+	// known type); see Type.Valid.
 	ErrUnknownType = errors.New("wire: unknown frame type")
 
 	// ErrInvalidChunk: chunk_total/chunk_idx are inconsistent, the same

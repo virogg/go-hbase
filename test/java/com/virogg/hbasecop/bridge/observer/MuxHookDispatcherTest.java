@@ -8,7 +8,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.google.protobuf.ByteString;
 import com.virogg.hbasecop.bridge.wire.FrameType;
 import com.virogg.hbasecop.bridge.wire.Message;
 import com.virogg.hbasecop.bridge.wire.pb.HookResponse;
@@ -16,6 +15,7 @@ import com.virogg.hbasecop.multiplex.Multiplexer;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.concurrent.TimeoutException;
+import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
 import org.junit.jupiter.api.Test;
 
 /**

@@ -3,6 +3,7 @@
 
 package com.virogg.hbasecop.bridge.entrypoint;
 
+import com.google.protobuf.Service;
 import com.virogg.hbasecop.bridge.SharedRuntime;
 import java.io.IOException;
 import java.util.Optional;
@@ -38,5 +39,11 @@ public final class GenericMasterObserver implements MasterCoprocessor {
   @Override
   public Optional<MasterObserver> getMasterObserver() {
     return handle == null ? Optional.empty() : Optional.ofNullable(handle.getMasterObserver());
+  }
+
+  /** Exposes the generic Go endpoint Service (Tier 2) alongside the master observer. */
+  @Override
+  public Iterable<Service> getServices() {
+    return GenericCoprocessor.endpointServices(() -> handle);
   }
 }

@@ -9,6 +9,25 @@ import (
 	"testing"
 )
 
+// HookNames must enumerate every surface's hooks (the config CLI uses it for
+// per-hook key validation); it includes region hooks like PrePut.
+func TestHookNames(t *testing.T) {
+	names := HookNames()
+	if len(names) == 0 {
+		t.Fatal("HookNames returned empty")
+	}
+	found := false
+	for _, n := range names {
+		if n == "PrePut" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("HookNames missing PrePut; got %v", names)
+	}
+}
+
 // TestHookTableIsCanonical pins the T41 hook surface: the (HookID, name)
 // table is the single source of truth shared by Go and Java sides. Adding a
 // new HBase RegionObserver hook means appending one row here and the Java

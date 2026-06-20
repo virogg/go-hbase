@@ -29,6 +29,9 @@ public final class ConfigPreflight {
           "hbasecop.restart.deadline",
           "hbasecop.restart.probe-interval",
           "hbasecop.shutdown.graceful-timeout",
+          "hbasecop.endpoint.timeout",
+          "hbasecop.endpoint.servicing-timeout",
+          "hbasecop.endpoint.scanner-idle-lease",
           PolicyConfig.KEY_TIMEOUT_DEFAULT);
 
   // Exact keys whose value must be a positive integer.
@@ -37,7 +40,18 @@ public final class ConfigPreflight {
           "hbasecop.heartbeat.miss-threshold",
           "hbasecop.restart.max-fails",
           "hbasecop.ring.capacity",
-          "hbasecop.ring.max-object-size");
+          "hbasecop.ring.max-object-size",
+          "hbasecop.endpoint.servicing-pool-size",
+          "hbasecop.endpoint.servicing-queue-depth",
+          "hbasecop.endpoint.bulk-ring.capacity",
+          "hbasecop.endpoint.bulk-ring.max-object-size",
+          "hbasecop.endpoint.max-concurrent-calls",
+          "hbasecop.endpoint.max-scanners-per-call",
+          "hbasecop.endpoint.max-bytes-per-resp",
+          "hbasecop.endpoint.max-rows-per-next");
+
+  // Exact keys whose value must be a boolean.
+  private static final Set<String> BOOLEAN_KEYS = Set.of("hbasecop.endpoint.allow-mutate");
 
   private static final Pattern DURATION = Pattern.compile("\\d+\\s*(ns|us|ms|s|m|h|d)");
 
@@ -78,6 +92,8 @@ public final class ConfigPreflight {
         checkDuration(key, val, errors);
       } else if (POSITIVE_INT_KEYS.contains(key)) {
         checkPositiveInt(key, val, errors);
+      } else if (BOOLEAN_KEYS.contains(key)) {
+        checkBoolean(key, val, errors);
       } else {
         log.log(Level.WARNING, "hbasecop: unknown config key {0} (ignored)", key);
       }
@@ -118,6 +134,13 @@ public final class ConfigPreflight {
       }
     } catch (NumberFormatException ex) {
       errors.add(key + "=" + val + " (want a positive integer)");
+    }
+  }
+
+  private static void checkBoolean(String key, String val, List<String> errors) {
+    String v = val.trim();
+    if (!v.equalsIgnoreCase("true") && !v.equalsIgnoreCase("false")) {
+      errors.add(key + "=" + val + " (want true|false)");
     }
   }
 }

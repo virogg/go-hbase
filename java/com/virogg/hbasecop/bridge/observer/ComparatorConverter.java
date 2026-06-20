@@ -3,9 +3,9 @@
 
 package com.virogg.hbasecop.bridge.observer;
 
-import com.google.protobuf.ByteString;
 import com.virogg.hbasecop.hbase.v1.ClientProtos;
 import org.apache.hadoop.hbase.filter.ByteArrayComparable;
+import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
 
 /**
  * Maps an HBase {@link ByteArrayComparable} to its vendored proto envelope. Ships the upstream

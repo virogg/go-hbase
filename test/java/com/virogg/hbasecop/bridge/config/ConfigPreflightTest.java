@@ -52,9 +52,56 @@ final class ConfigPreflightTest {
   }
 
   @Test
+  void validatesEndpointTimeoutDuration() {
+    assertDoesNotThrow(
+        () -> ConfigPreflight.validate(conf("hbasecop.endpoint.timeout", "30s"), LOG));
+    IllegalArgumentException ex =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> ConfigPreflight.validate(conf("hbasecop.endpoint.timeout", "30"), LOG));
+    assertTrue(ex.getMessage().contains("hbasecop.endpoint.timeout"), ex.getMessage());
+  }
+
+  @Test
   void rejectsNonPositiveInt() {
     Configuration c = conf("hbasecop.ring.capacity", "0");
     assertThrows(IllegalArgumentException.class, () -> ConfigPreflight.validate(c, LOG));
+  }
+
+  @Test
+  void validatesAllowMutateBoolean() {
+    assertDoesNotThrow(
+        () -> ConfigPreflight.validate(conf("hbasecop.endpoint.allow-mutate", "true"), LOG));
+    assertDoesNotThrow(
+        () -> ConfigPreflight.validate(conf("hbasecop.endpoint.allow-mutate", "false"), LOG));
+    IllegalArgumentException ex =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> ConfigPreflight.validate(conf("hbasecop.endpoint.allow-mutate", "yes"), LOG));
+    assertTrue(ex.getMessage().contains("hbasecop.endpoint.allow-mutate"), ex.getMessage());
+  }
+
+  @Test
+  void validatesTe42Limits() {
+    assertDoesNotThrow(
+        () ->
+            ConfigPreflight.validate(
+                conf(
+                    "hbasecop.endpoint.max-concurrent-calls", "16",
+                    "hbasecop.endpoint.max-scanners-per-call", "8",
+                    "hbasecop.endpoint.max-bytes-per-resp", "1048576",
+                    "hbasecop.endpoint.max-rows-per-next", "500",
+                    "hbasecop.endpoint.scanner-idle-lease", "2m"),
+                LOG));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> ConfigPreflight.validate(conf("hbasecop.endpoint.max-rows-per-next", "0"), LOG));
+    IllegalArgumentException ex =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                ConfigPreflight.validate(conf("hbasecop.endpoint.scanner-idle-lease", "120"), LOG));
+    assertTrue(ex.getMessage().contains("hbasecop.endpoint.scanner-idle-lease"), ex.getMessage());
   }
 
   @Test

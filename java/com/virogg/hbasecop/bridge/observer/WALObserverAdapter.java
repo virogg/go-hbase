@@ -3,8 +3,6 @@
 
 package com.virogg.hbasecop.bridge.observer;
 
-import com.google.protobuf.ByteString;
-import com.google.protobuf.InvalidProtocolBufferException;
 import com.virogg.hbasecop.bridge.config.HookPolicy;
 import com.virogg.hbasecop.bridge.config.Policy;
 import com.virogg.hbasecop.bridge.config.PolicyConfig;
@@ -31,6 +29,8 @@ import org.apache.hadoop.hbase.coprocessor.WALCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.WALObserver;
 import org.apache.hadoop.hbase.wal.WALEdit;
 import org.apache.hadoop.hbase.wal.WALKey;
+import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
+import org.apache.hbase.thirdparty.com.google.protobuf.InvalidProtocolBufferException;
 
 /**
  * T53 WALObserver bridge. Routes every WALObserver hook the SDK exposes (T53 Wave A, 4 hooks:

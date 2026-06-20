@@ -205,13 +205,13 @@ class MultiplexerTest {
   }
 
   @Test
-  void requestRewrittenWithAllocatedReqIdAndRequestType() throws Exception {
+  void rewritesAllocatedReqIdButPreservesCallerType() throws Exception {
     ConcurrentLinkedQueue<Message> outbox = new ConcurrentLinkedQueue<>();
     Multiplexer mux = new Multiplexer(outbox::add);
 
-    // Caller passes RESPONSE type with non-zero reqId - mux should
-    // rewrite both fields before handing to the sender.
-    mux.call(new Message(FrameType.RESPONSE, 999L, 7, (byte) 3, new byte[] {1, 2, 3}));
+    // A hook REQUEST: the mux stamps the allocated req_id but keeps every other
+    // field, including the frame type.
+    mux.call(new Message(FrameType.REQUEST, 999L, 7, (byte) 3, new byte[] {1, 2, 3}));
 
     assertEquals(1, outbox.size());
     Message sent = outbox.poll();
@@ -221,6 +221,23 @@ class MultiplexerTest {
     assertEquals(7, sent.regionId());
     assertEquals((byte) 3, sent.hookId());
     assertTrue(Arrays.equals(new byte[] {1, 2, 3}, sent.payload()));
+  }
+
+  @Test
+  void preservesNonRequestCallerType() {
+    // Tier 2: an endpoint invocation rides the same multiplexer as hooks but must
+    // keep its ENDPOINT_INVOKE type, or the Go side mis-routes it to the hook
+    // dispatcher ("unknown hook"). Regression for the hardcoded-REQUEST bug.
+    ConcurrentLinkedQueue<Message> outbox = new ConcurrentLinkedQueue<>();
+    Multiplexer mux = new Multiplexer(outbox::add);
+
+    mux.call(new Message(FrameType.ENDPOINT_INVOKE, 0L, 0, (byte) 0, new byte[] {9}));
+
+    Message sent = outbox.poll();
+    assertNotNull(sent);
+    assertEquals(
+        FrameType.ENDPOINT_INVOKE, sent.type(), "endpoint invoke type must survive the mux");
+    assertEquals(1L, sent.reqId(), "req_id is still allocated by the mux");
   }
 
   @Test

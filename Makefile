@@ -26,6 +26,9 @@ GO_RUNTIME_OUT := src/main/resources/bin/linux-amd64/hbasecop-runtime
 COUNTER_OBSERVER_DIR := examples/counter-observer
 COUNTER_OBSERVER_OUT := $(COUNTER_OBSERVER_DIR)/src/main/resources/bin/linux-amd64/hbasecop-runtime
 
+ENDPOINT_OBSERVER_DIR := examples/endpoint-observer
+ENDPOINT_OBSERVER_OUT := $(ENDPOINT_OBSERVER_DIR)/src/main/resources/bin/linux-amd64/hbasecop-runtime
+
 FAULT_OBSERVER_DIR := examples/fault-observer
 FAULT_OBSERVER_OUT := $(FAULT_OBSERVER_DIR)/src/main/resources/bin/linux-amd64/hbasecop-runtime
 
@@ -81,7 +84,7 @@ SHMEM_POM       := $(SHMEM_SUBMODULE)/java/pom.xml
 # checked-out submodule is exactly this commit with no tracked-source drift, so
 # a bump or tampering can't slip through unreviewed. Bumping the dependency means
 # updating this SHA and docs/dep-shmem.md in the same change.
-SHMEM_EXPECTED_SHA := ef35ad6d413899b4497aca191b9cc4dcca4f98bc
+SHMEM_EXPECTED_SHA := 34f33cf873dab78166d1b22ff27654b56920d04f
 
 .PHONY: deps-shmem
 deps-shmem: $(SHMEM_POM) ## Install the local java-go-shmem jar into ~/.m2 (no-op for Go: replace directive).
@@ -168,7 +171,7 @@ java-fuzz: ## T83: run the Java wire-decoder fuzzer (jazzer, 10m per run).
 
 # Coverage gate set excludes generated protobuf, thin mains, and examples -
 # the gate measures hand-written, testable code.
-GO_COVER_PKGS := $(shell $(GO) list ./... | grep -vE '/(examples|internal/wire/hbasepb|internal/wire/hookpb|internal/wire/wirepb|internal/wiregolden|cmd/wire-golden|cmd/hbasecop-runtime|tools/gen-builder|tools/gen-wiretypes|test/bench/noop-observer)$$')
+GO_COVER_PKGS := $(shell $(GO) list ./... | grep -vE '/examples/|/(internal/wire/hbasepb|internal/wire/hookpb|internal/wire/wirepb|internal/wiregolden|cmd/wire-golden|cmd/hbasecop-runtime|tools/gen-builder|tools/gen-wiretypes|test/bench/noop-observer)$$')
 # SPEC §7 gate: Go hand-written line coverage ≥80% (generated protobuf, thin
 # mains and examples excluded above; generated files in covered packages are
 # stripped from the profile by the "DO NOT EDIT" marker). Met as of Phase-7.
@@ -287,6 +290,44 @@ counter-observer-jar: go-build-counter ## T25: build deployable coproc-jar (inst
 	  grep -q 'com/virogg/hbasecop/bridge/observer/RegionObserverAdapter.class' || \
 	  { echo "ERROR: bridge classes not shaded into coproc-jar" >&2; exit 1; }
 	@echo "OK: counter-observer.jar -- bridge shaded, Go ELF embedded"
+
+# ---------------------------------------------------------------------------
+# Examples (TE22): endpoint-observer coproc-jar (Tier 2 endpoint round-trip).
+# ---------------------------------------------------------------------------
+
+.PHONY: go-build-endpoint
+go-build-endpoint: ## TE22: build endpoint-observer Go ELF into example resources (Linux x86-64).
+	@mkdir -p $(dir $(ENDPOINT_OBSERVER_OUT))
+	GOOS=linux GOARCH=amd64 $(GO) build $(GO_BUILD_FLAGS) -o $(ENDPOINT_OBSERVER_OUT) ./$(ENDPOINT_OBSERVER_DIR)
+
+.PHONY: endpoint-observer-jar
+endpoint-observer-jar: go-build-endpoint ## TE22: build deployable endpoint coproc-jar (installs bridge into ~/.m2 first).
+	$(MVN) $(MVN_FLAGS) install -DskipTests
+	$(MVN) $(MVN_FLAGS) -f $(ENDPOINT_OBSERVER_DIR)/pom.xml package
+	@unzip -l $(ENDPOINT_OBSERVER_DIR)/target/endpoint-observer.jar | \
+	  grep -q 'bin/linux-amd64/hbasecop-runtime' || \
+	  { echo "ERROR: Go ELF missing from endpoint-observer.jar" >&2; exit 1; }
+	@unzip -l $(ENDPOINT_OBSERVER_DIR)/target/endpoint-observer.jar | \
+	  grep -q 'com/virogg/hbasecop/bridge/entrypoint/GenericRegionObserver.class' || \
+	  { echo "ERROR: GenericRegionObserver class missing from coproc-jar" >&2; exit 1; }
+	@unzip -l $(ENDPOINT_OBSERVER_DIR)/target/endpoint-observer.jar | \
+	  grep -q 'com/virogg/hbasecop/bridge/endpoint/GoEndpointServiceImpl.class' || \
+	  { echo "ERROR: GoEndpointServiceImpl class missing from coproc-jar" >&2; exit 1; }
+	@echo "OK: endpoint-observer.jar -- bridge shaded, Go ELF embedded"
+
+.PHONY: endpoint-package-smoke
+endpoint-package-smoke: ## TE53: smoke - `hbasecop-build package` builds a deployable endpoint coproc-jar (ELF + Service + delegate; no client helpers).
+	$(MVN) $(MVN_FLAGS) install -DskipTests
+	$(GO) run ./cmd/hbasecop-build package --src ./$(ENDPOINT_OBSERVER_DIR) --surface region --out target/endpoint-packaged.jar
+	@unzip -l target/endpoint-packaged.jar | grep -q 'bin/linux-amd64/hbasecop-runtime' || \
+	  { echo "ERROR: Go ELF missing from packaged jar" >&2; exit 1; }
+	@unzip -l target/endpoint-packaged.jar | grep -q 'com/virogg/hbasecop/bridge/endpoint/GoEndpointServiceImpl.class' || \
+	  { echo "ERROR: GoEndpointServiceImpl (endpoint Service) missing from packaged jar" >&2; exit 1; }
+	@unzip -l target/endpoint-packaged.jar | grep -q 'com/virogg/hbasecop/bridge/entrypoint/GenericRegionObserver.class' || \
+	  { echo "ERROR: GenericRegionObserver delegate missing from packaged jar" >&2; exit 1; }
+	@if unzip -l target/endpoint-packaged.jar | grep -q 'com/virogg/hbasecop/client/'; then \
+	  echo "ERROR: client helpers leaked into the coproc-jar (shade exclude failed)" >&2; exit 1; fi
+	@echo "OK: hbasecop-build package -> deployable endpoint coproc-jar (Service + delegate, no client helpers)"
 
 # ---------------------------------------------------------------------------
 # Examples (T36): fault-injection coproc-jar.
@@ -493,6 +534,7 @@ hbase-status: ## T26: curl the master-status page (smoke check post-up).
 COPROC_JAR_STAGED := test/integration/coproc-jars/counter-observer.jar
 FAULT_COPROC_JAR_STAGED := test/integration/coproc-jars/fault-observer.jar
 FILTER_COPROC_JAR_STAGED := test/integration/coproc-jars/filter-observer.jar
+ENDPOINT_COPROC_JAR_STAGED := test/integration/coproc-jars/endpoint-observer.jar
 
 .PHONY: demo-counter
 demo-counter: ## CP-γ: public demo - Put on HBase triggers Go observer counter; leaves cluster up.
@@ -508,6 +550,80 @@ test-integration: counter-observer-jar ## T27: full IT - bring up HBase, run Pre
 	  $(MVN) $(MVN_FLAGS) test -Dtest=PrePutCounterIT -DfailIfNoTests=false; \
 	  status=$$?; \
 	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
+
+# ---------------------------------------------------------------------------
+# Integration (TE22): Tier 2 endpoint round-trip - client coprocessorService
+# call to the stock GenericRegionObserver round-trips to a Go Endpoint.
+# ---------------------------------------------------------------------------
+
+.PHONY: test-integration-endpoint
+test-integration-endpoint: endpoint-observer-jar ## TE22: full IT - bring up HBase, run EndpointRoundTripIT, tear down.
+	@mkdir -p test/integration/coproc-jars
+	cp $(ENDPOINT_OBSERVER_DIR)/target/endpoint-observer.jar $(ENDPOINT_COPROC_JAR_STAGED)
+	$(HBASE_COMPOSE_CMD) up -d --build
+	./test/integration/scripts/wait-master-status.sh
+	@set +e; \
+	  $(MVN) $(MVN_FLAGS) test -Dtest=EndpointRoundTripIT,EndpointFaultIT -DfailIfNoTests=false; \
+	  status=$$?; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-endpoint.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
+
+# ---------------------------------------------------------------------------
+# Integration (TE51): endpoint fan-out + reduce - EndpointClient aggregates the
+# per-region "sum" partials over a 4-way pre-split table into the table total.
+# ---------------------------------------------------------------------------
+
+.PHONY: test-integration-endpoint-multiregion
+test-integration-endpoint-multiregion: endpoint-observer-jar ## TE51: full IT - bring up HBase, run EndpointMultiRegionIT (4-way pre-split fan-out + reduce), tear down.
+	@mkdir -p test/integration/coproc-jars
+	cp $(ENDPOINT_OBSERVER_DIR)/target/endpoint-observer.jar $(ENDPOINT_COPROC_JAR_STAGED)
+	$(HBASE_COMPOSE_CMD) up -d --build
+	./test/integration/scripts/wait-master-status.sh
+	@set +e; \
+	  $(MVN) $(MVN_FLAGS) test -Dtest=EndpointMultiRegionIT -DfailIfNoTests=false; \
+	  status=$$?; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-endpoint-multiregion.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
+
+# ---------------------------------------------------------------------------
+# Integration (TE54): consolidated endpoint fault-matrix - one HBase boot runs
+# every region-scoped endpoint IT (round-trip + full fault matrix + multiregion).
+# Master endpoints need their own master-coproc env, so run that separately via
+# test-integration-master-endpoint.
+# ---------------------------------------------------------------------------
+
+.PHONY: test-integration-endpoint-all
+test-integration-endpoint-all: endpoint-observer-jar ## TE54: full endpoint + fault-matrix IT - bring up HBase once, run all region-scoped endpoint ITs, tear down.
+	@mkdir -p test/integration/coproc-jars
+	cp $(ENDPOINT_OBSERVER_DIR)/target/endpoint-observer.jar $(ENDPOINT_COPROC_JAR_STAGED)
+	$(HBASE_COMPOSE_CMD) up -d --build
+	./test/integration/scripts/wait-master-status.sh
+	@set +e; \
+	  $(MVN) $(MVN_FLAGS) test -Dtest=EndpointRoundTripIT,EndpointFaultIT,EndpointMultiRegionIT -DfailIfNoTests=false; \
+	  status=$$?; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-endpoint-all.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
+
+# ---------------------------------------------------------------------------
+# Integration (TE53): deploy-IT - the coproc-jar produced by `hbasecop-build
+# package` (not the example pom) deploys and an endpoint round-trips on live HBase.
+# ---------------------------------------------------------------------------
+
+.PHONY: test-integration-endpoint-packaged
+test-integration-endpoint-packaged: endpoint-package-smoke ## TE53: deploy-IT - stage the hbasecop-build-packaged endpoint jar, round-trip an endpoint call, tear down.
+	@mkdir -p test/integration/coproc-jars
+	cp target/endpoint-packaged.jar $(ENDPOINT_COPROC_JAR_STAGED)
+	$(HBASE_COMPOSE_CMD) up -d --build
+	./test/integration/scripts/wait-master-status.sh
+	@set +e; \
+	  $(MVN) $(MVN_FLAGS) test -Dtest='EndpointRoundTripIT#clientEndpointCallRoundTripsToGo' -DfailIfNoTests=false; \
+	  status=$$?; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-endpoint-packaged.log 2>&1 || true; \
 	  $(HBASE_COMPOSE_CMD) down; \
 	  exit $$status
 
@@ -621,6 +737,21 @@ test-integration-master: master-policy-observer-jar ## T51: full IT - bring up H
 	  $(MVN) $(MVN_FLAGS) test -Dtest=MasterPolicyIT -DfailIfNoTests=false; \
 	  status=$$?; \
 	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-master.log 2>&1 || true; \
+	  $(HBASE_COMPOSE_CMD) down; \
+	  exit $$status
+
+.PHONY: test-integration-master-endpoint
+test-integration-master-endpoint: endpoint-observer-jar ## TE43/TE52: full IT - bring up HBase with the endpoint-observer registered as a MASTER coproc, run MasterEndpointIT (via AdminEndpointClient), tear down.
+	@mkdir -p test/integration/coproc-jars
+	cp $(ENDPOINT_OBSERVER_DIR)/target/endpoint-observer.jar $(ENDPOINT_COPROC_JAR_STAGED)
+	@set +e; \
+	  export HBASECOP_MASTER_COPROC_CLASS=com.virogg.hbasecop.bridge.entrypoint.GenericMasterObserver; \
+	  export HBASECOP_MASTER_COPROC_JAR=/coproc-jars/endpoint-observer.jar; \
+	  $(HBASE_COMPOSE_CMD) up -d --build; \
+	  ./test/integration/scripts/wait-master-status.sh; \
+	  $(MVN) $(MVN_FLAGS) test -Dtest=MasterEndpointIT -DfailIfNoTests=false; \
+	  status=$$?; \
+	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-master-endpoint.log 2>&1 || true; \
 	  $(HBASE_COMPOSE_CMD) down; \
 	  exit $$status
 

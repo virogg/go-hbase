@@ -51,6 +51,49 @@ func TestLoadShmemConfigFromEnv(t *testing.T) {
 		}
 	})
 
+	t.Run("bulk ring absent disables reverse path", func(t *testing.T) {
+		setShmemEnv(t, "/tmp/in", "/tmp/out", "16", "4096", "0")
+		t.Setenv("HBASECOP_SHMEM_BULK_PATH", "")
+		c, err := loadShmemConfigFromEnv()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if c.bulkPath != "" {
+			t.Fatalf("bulkPath = %q, want empty (reverse path off)", c.bulkPath)
+		}
+	})
+
+	t.Run("bulk ring defaults to control ring sizes", func(t *testing.T) {
+		setShmemEnv(t, "/tmp/in", "/tmp/out", "16", "4096", "0")
+		t.Setenv("HBASECOP_SHMEM_BULK_PATH", "/tmp/bulk")
+		t.Setenv("HBASECOP_BULK_RING_CAPACITY", "")
+		t.Setenv("HBASECOP_BULK_RING_MAX_OBJECT_SIZE", "")
+		c, err := loadShmemConfigFromEnv()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if c.bulkPath != "/tmp/bulk" {
+			t.Fatalf("bulkPath = %q, want /tmp/bulk", c.bulkPath)
+		}
+		if c.bulkCapacity != 16 || c.bulkMaxObjectSize != 4096 {
+			t.Fatalf("bulk sizes = %d/%d, want 16/4096 (control-ring fallback)", c.bulkCapacity, c.bulkMaxObjectSize)
+		}
+	})
+
+	t.Run("bulk ring explicit sizes", func(t *testing.T) {
+		setShmemEnv(t, "/tmp/in", "/tmp/out", "16", "4096", "0")
+		t.Setenv("HBASECOP_SHMEM_BULK_PATH", "/tmp/bulk")
+		t.Setenv("HBASECOP_BULK_RING_CAPACITY", "8")
+		t.Setenv("HBASECOP_BULK_RING_MAX_OBJECT_SIZE", "1048576")
+		c, err := loadShmemConfigFromEnv()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if c.bulkCapacity != 8 || c.bulkMaxObjectSize != 1048576 {
+			t.Fatalf("bulk sizes = %d/%d, want 8/1048576", c.bulkCapacity, c.bulkMaxObjectSize)
+		}
+	})
+
 	t.Run("missing/invalid", func(t *testing.T) {
 		cases := []struct {
 			name             string

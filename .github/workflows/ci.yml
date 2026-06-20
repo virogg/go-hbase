@@ -136,8 +136,12 @@ jobs:
         # version carries its official dist sha512 - the Dockerfile verifies
         # the tarball, so the digest must travel with the version.
         include:
-          - hbase: "2.5.0"
-            hbase_sha512: "1E0EBF9A457A8ED59A0E1EA06EAA6019F63575C317588175F18EE2506CF0E527516952CB026DB84D4AF890BE35F74C29F8E87C41E0DCF99393C09BD48668E16F"
+          # 2.5.6 is the lowest supported patch: it is the first 2.5.x on
+          # hbase-thirdparty 4.1.5 (shaded protobuf 3.25), the ABI our protoc-3.25
+          # gencode binds to. 2.5.0-2.5.5 ship thirdparty 4.1.1/4.1.4 (protobuf
+          # 3.21) and abort region-open on the bridge's protobuf serialization.
+          - hbase: "2.5.6"
+            hbase_sha512: "3CD87F8B6B03FC3EE46482B844C532266EF431ED4F16CB116D293D6898C8CE4516A2FD60C57B51D258818575DE9726AA4950C6E081A747FA09BF262E146D4AEA"
           - hbase: "2.5.11"
             hbase_sha512: "BAD94B693C2F3013F91FB50BF8678D48C749815A8CA335531E85C0B62BFC18D34DF253A43B50AA66B7ED5C1FF379E8EA0213B4A6F21441F93DD83EB21DEC473C"
     env:
@@ -177,6 +181,12 @@ jobs:
         run: make test-integration-rs
       - name: Fault-injection matrix IT (T36)
         run: make test-fault
+      - name: Endpoint round-trip + fault-matrix IT (TE54)
+        run: make test-integration-endpoint-all
+      - name: Master endpoint IT (TE43/TE52)
+        run: make test-integration-master-endpoint
+      - name: Endpoint packaged deploy IT (TE53)
+        run: make test-integration-endpoint-packaged
       - name: Upload HBase logs
         if: always()
         uses: actions/upload-artifact@v4

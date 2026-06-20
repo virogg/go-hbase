@@ -32,8 +32,23 @@ Ring buffer + protobuf вместо stdin/stdout + line-based, как в Hadoop 
 
 Endpoint coproc: **out of scope MVP** и не в активном roadmap. Go API спроектирован так, чтобы добавить позже без breaking change, если будет запрос.
 
+> **Update (Tier 2, post-v0.1.0):** endpoint-копроцессоры реализованы как отдельный
+> workstream поверх MVP (client-initiated серверные Go-RPC: stateless + реверс-чтения/
+> записи + master-endpoints). План: [`tasks/tier2-endpoints.md`](tasks/tier2-endpoints.md);
+> модель безопасности (ACL-bypass граница, reentry, handler-pinning):
+> [`docs/endpoint-security.md`](docs/endpoint-security.md). Запись (`MUTATE`) — за
+> `hbasecop.endpoint.allow-mutate`, off по умолчанию.
+
 ### Версия HBase / платформа
-HBase **2.5.x LTS**, Java 11. Hadoop 3.x. **Linux x86-64 only** (POSIX shm + mmap; arm64 не таргетируем).
+HBase **2.5.x LTS** (минимум **2.5.6**), Java 11. Hadoop 3.x. **Linux x86-64 only** (POSIX shm + mmap; arm64 не таргетируем).
+
+> **Минимум 2.5.6 (post-Tier-2):** мост сериализует внутренний wire-protobuf через
+> server-provided shaded `org.apache.hbase.thirdparty.com.google.protobuf` (см.
+> TE22 в [`tasks/tier2-endpoints.md`](tasks/tier2-endpoints.md)). Наш gencode —
+> protoc 3.25; он ABI-совместим только с hbase-thirdparty **4.1.5** (protobuf
+> 3.25). HBase 2.5.0–2.5.5 несут thirdparty 4.1.1/4.1.4 (protobuf 3.21) и падают
+> на region-open (`GeneratedMessageV3.getUnknownFields` → abort). 2.5.6 — первый
+> патч на 4.1.5. CI-матрица: 2.5.6 (floor) и 2.5.11 (latest).
 
 ### Лицензия
 **Apache 2.0** (как у HBase).

@@ -42,6 +42,12 @@ Upstream-библиотека не опубликована в Maven Central (е
 [`git submodule status third_party/java-go-shmem`](#). Источником истины
 является закреплённый SHA, а не то, что написано здесь.
 
+> **Последний bump (Tier 2):** `34f33cf` (java-go-shmem `main`, merge PR #5
+> *multi-ring-addressing*) — добавляет `channel_id` и адресацию нескольких
+> колец в одном процессе, что нужно endpoint-копроцессорам (TE01/TE02 →
+> 2-е J→G кольцо под bulk `RpcResponse` в E3). Синхронизирован с
+> `SHMEM_EXPECTED_SHA` в `Makefile`; предыдущий pin был `ef35ad6`.
+
 Расхождение upstream `viroge` против `virogg` в пути Go-модуля (и тот факт,
 что Go-модуль живёт в `/go/`, а не в корне репозитория) означает, что прямой
 `go get github.com/virogg/java-go-shmem/...` работать не будет; replace

@@ -3,10 +3,10 @@
 
 package com.virogg.hbasecop.bridge.observer;
 
-import com.google.protobuf.ByteString;
 import com.virogg.hbasecop.hbase.v1.ClientProtos;
 import java.io.IOException;
 import org.apache.hadoop.hbase.filter.Filter;
+import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
 
 /**
  * Maps an HBase {@link Filter} to its vendored proto envelope. The bridge ships (class-name,
