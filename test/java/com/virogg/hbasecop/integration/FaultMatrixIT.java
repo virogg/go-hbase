@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
@@ -34,6 +35,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -91,6 +93,11 @@ final class FaultMatrixIT {
 
   @ParameterizedTest(name = "{0} × {1}")
   @MethodSource("matrix")
+  // Per-case wall-clock bound: a supervisor-recovery regression (or a fault that takes the
+  // cluster down) must fail THIS case with a stack dump — not hang until the whole job is
+  // SIGTERM'd with no signal of which case wedged. SEPARATE_THREAD so the watcher can abort a
+  // test stuck in a blocking RPC. Healthy cases finish in ~15s; 90s is wide headroom.
+  @Timeout(value = 90, unit = TimeUnit.SECONDS, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
   void faultCase(String policy, String mode) throws Exception {
     Path jarOnHost = resolveJarOnHost();
     assertTrue(

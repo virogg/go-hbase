@@ -672,6 +672,13 @@ test-integration-shared: counter-observer-jar ## T63: full IT - bring up HBase, 
 # Integration (T36): fault-injection matrix on real HBase.
 # ---------------------------------------------------------------------------
 
+# Hard wall-clock bound on the fault IT. Fault cases deliberately crash/hang the
+# Go process, so a supervisor-recovery regression can wedge a case; the timeout
+# guarantees we still dump hbase-fault.log and tear the container down (rather
+# than the CI job timing out and SIGTERM'ing the step with no logs + a leaked
+# container). Happy-path runtime is ~3 min; the default leaves wide headroom.
+FAULT_TIMEOUT ?= 600
+
 .PHONY: test-fault
 test-fault: fault-observer-jar ## T36: full IT - bring up HBase, run FaultMatrixIT (10 cases), tear down.
 	@mkdir -p test/integration/coproc-jars
@@ -679,8 +686,9 @@ test-fault: fault-observer-jar ## T36: full IT - bring up HBase, run FaultMatrix
 	$(HBASE_COMPOSE_CMD) up -d --build
 	./test/integration/scripts/wait-master-status.sh
 	@set +e; \
-	  $(MVN) $(MVN_FLAGS) test -Dtest=FaultMatrixIT -DfailIfNoTests=false; \
+	  timeout -k 30 $(FAULT_TIMEOUT) $(MVN) $(MVN_FLAGS) test -Dtest=FaultMatrixIT -DfailIfNoTests=false; \
 	  status=$$?; \
+	  if [ $$status -eq 124 ]; then echo "ERROR: test-fault timed out after $(FAULT_TIMEOUT)s" >&2; fi; \
 	  $(HBASE_COMPOSE_CMD) logs hbase > test/integration/coproc-jars/hbase-fault.log 2>&1 || true; \
 	  $(HBASE_COMPOSE_CMD) down; \
 	  exit $$status
