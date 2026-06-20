@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Copyright 2026 The go-hbase Authors
+  SPDX-License-Identifier: Apache-2.0
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.virogg.hbasecop.examples</groupId>
+  <artifactId>native-coproc</artifactId>
+  <version>0.0.1-SNAPSHOT</version>
+  <packaging>jar</packaging>
+
+  <name>native-coproc (go-hbase comparison baseline)</name>
+  <description>
+    Pure-Java native coprocessors implementing the SAME logic as the Go example
+    observers/endpoints, for the native-vs-Go comparison harness (docs/bench/compare-*).
+    No bridge, no Go ELF: NativeSumEndpoint, NativeTtlObserver, NativeAuditObserver,
+    NativeFilterObserver run their logic directly on the RegionServer JVM.
+  </description>
+
+  <!--
+    Standalone example project (not in the bridge reactor). To produce the jar:
+      1. `mvn install -DskipTests` at repo root  (publishes hbasecop-bridge into ~/.m2,
+         carrying the generated GoEndpointService 2.5.0 Service this module reuses)
+      2. `mvn -f examples/native-coproc/pom.xml package`
+    `make native-coproc-jar` runs both. The native endpoint reuses the SAME
+    GoEndpointService surface as the Go arm so the client call path is identical;
+    only the server-side Service implementation differs (native Java vs Go-over-bridge).
+  -->
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.source>11</maven.compiler.source>
+    <maven.compiler.target>11</maven.compiler.target>
+    <maven.compiler.release>11</maven.compiler.release>
+
+    <bridge.version>0.0.1-SNAPSHOT</bridge.version>
+    <hbase.version>2.5.10</hbase.version>
+  </properties>
+
+  <dependencies>
+    <!--
+      We depend on the bridge ONLY for its generated endpoint Service classes
+      (com.virogg.hbasecop.bridge.endpoint.pb.GoEndpoint*). The shade filter below
+      bundles just those into this jar; the rest of the bridge (Go runtime, shmem,
+      wire codec) is filtered out — a native coprocessor needs none of it.
+    -->
+    <dependency>
+      <groupId>com.virogg</groupId>
+      <artifactId>hbasecop-bridge</artifactId>
+      <version>${bridge.version}</version>
+    </dependency>
+
+    <!-- HBase is provided at runtime by the RegionServer; never shaded. -->
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-server</artifactId>
+      <version>${hbase.version}</version>
+      <scope>provided</scope>
+    </dependency>
+
+    <!--
+      The endpoint Service binds the server's UNSHADED com.google.protobuf 2.5.0
+      (the getServices() contract). Provided, never shaded — bundling it re-creates
+      the classloader type-identity clash that aborts region-open at registration.
+    -->
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java</artifactId>
+      <version>2.5.0</version>
+      <scope>provided</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <finalName>native-coproc</finalName>
+
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.13.0</version>
+      </plugin>
+
+      <!-- Pin surefire (cached) so `mvn package` does not resolve Maven's ancient default. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.2.5</version>
+        <configuration>
+          <useModulePath>false</useModulePath>
+        </configuration>
+      </plugin>
+
+      <!--
+        Bundle ONLY the generated GoEndpoint* Service classes from the bridge so
+        the RegionServer can load the native endpoint Service from this jar.
+        Everything else (HBase, protobuf) is provided; the rest of the bridge
+        is excluded by the artifactSet + filter.
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>3.5.3</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals><goal>shade</goal></goals>
+            <configuration>
+              <createDependencyReducedPom>false</createDependencyReducedPom>
+              <shadedArtifactAttached>false</shadedArtifactAttached>
+              <minimizeJar>false</minimizeJar>
+              <artifactSet>
+                <includes>
+                  <include>com.virogg:hbasecop-bridge</include>
+                </includes>
+              </artifactSet>
+              <filters>
+                <filter>
+                  <artifact>*:*</artifact>
+                  <excludes>
+                    <exclude>META-INF/*.SF</exclude>
+                    <exclude>META-INF/*.DSA</exclude>
+                    <exclude>META-INF/*.RSA</exclude>
+                    <exclude>module-info.class</exclude>
+                  </excludes>
+                </filter>
+                <!-- From the bridge, keep ONLY the endpoint Service proto classes. -->
+                <filter>
+                  <artifact>com.virogg:hbasecop-bridge</artifact>
+                  <includes>
+                    <include>com/virogg/hbasecop/bridge/endpoint/pb/**</include>
+                  </includes>
+                </filter>
+              </filters>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>
