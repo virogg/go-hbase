@@ -17,28 +17,6 @@ import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.junit.jupiter.api.Test;
 
-/**
- * T52 integration test: exercises the RegionServerObserver {@code preRollWALWriterRequest} hook
- * end-to-end through the {@code rs-policy-observer} coproc-jar on a live HBase 2.5 standalone
- * cluster.
- *
- * <p>A RegionServerObserver is registered cluster-wide via {@code
- * hbase.coprocessor.regionserver.classes}; the docker entrypoint patches that into hbase-site.xml
- * when {@code make test-integration-rs} exports {@code HBASECOP_RS_COPROC_CLASS}. The Go observer
- * rejects every WAL-writer roll (the {@code veto_wal_roll} policy is enabled for this run) by
- * returning an error, which the strict-by-default {@code RegionServerObserverAdapter} surfaces as
- * an {@link java.io.IOException} back to the HBase admin client.
- *
- * <p>The {@code preStopRegionServer} hook named in T52's AC cannot be triggered without tearing
- * down the standalone cluster's only RegionServer, so this test drives the region-server surface
- * through {@code Admin#rollWALWriter(ServerName)} - a clean, idempotent admin operation that
- * invokes {@code preRollWALWriterRequest} on the live RegionServer.
- *
- * <p>The test asserts that {@code rollWALWriter} fails with an exception carrying the observer's
- * policy message.
- *
- * <p>Not part of {@code mvn test}; invoked by {@code make test-integration-rs}.
- */
 final class RegionServerPolicyIT {
 
   private static final String ZK_QUORUM = "localhost";
@@ -83,7 +61,6 @@ final class RegionServerPolicyIT {
     return servers.iterator().next();
   }
 
-  /** Flattens an exception chain into one searchable string (HBase wraps observer errors). */
   private static String rootMessage(Throwable t) {
     StringBuilder sb = new StringBuilder();
     for (Throwable c = t; c != null; c = c.getCause()) {

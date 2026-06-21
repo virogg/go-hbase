@@ -23,11 +23,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
-/**
- * TE31: the region lifecycle registers the live region under its wire region_id in a shared {@link
- * RegionRegistry}, so the reverse-RPC servicing pool can resolve a Go-initiated GET's target, and
- * drops it on close.
- */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class RegionObserverAdapterRegionRegistryTest {

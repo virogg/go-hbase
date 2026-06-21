@@ -38,26 +38,6 @@ import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.junit.jupiter.api.Test;
 
-/**
- * T43 integration test: read-path hooks (preGetOp, preScannerOpen, preScannerNext) end-to-end
- * through the {@code filter-observer} coproc-jar on a live HBase 2.5 standalone cluster (the T26
- * docker-compose target).
- *
- * <p>Observer bypasses every Get/Scan whose target row carries the blocked prefix {@code "block-"}.
- * Pre-populates {@code block-*} and {@code ok-*} rows, then asserts:
- *
- * <ul>
- *   <li>Get on a {@code block-} row returns an empty {@link Result} (observer bypassed the Get).
- *   <li>Get on an {@code ok-} row returns the stored value (observer allowed the Get).
- *   <li>Scan starting at {@code block-} yields 0 rows (observer bypassed scanner open).
- *   <li>Scan starting at {@code ok-} yields the full set of {@code ok-*} rows.
- *   <li>{@code preGetOp} and {@code preScannerOpen} log counts increment, proving the hooks fired.
- * </ul>
- *
- * <p>Not part of {@code mvn test} (name doesn't match Surefire's defaults); invoked by {@code make
- * test-integration-read}, which manages the cluster lifecycle and stages the coproc-jar into the
- * bind-mount the container reads.
- */
 final class ReadPathFilterIT {
 
   private static final String CONTAINER_NAME = "go-hbase-dev";
@@ -110,10 +90,6 @@ final class ReadPathFilterIT {
         dropTable(admin, tn);
       }
 
-      // Seed before attaching the coproc: the shared filter-observer also implements
-      // preBatchMutate (T44), which vetoes every block-* mutation. Attaching only after the
-      // 3 block-* and 3 ok-* rows are in place keeps the test on the read-path hooks instead
-      // of tripping the write-path block.
       createTablePlain(admin, tn);
       try {
         try (Table seed = conn.getTable(tn)) {
@@ -123,7 +99,6 @@ final class ReadPathFilterIT {
         attachCoproc(admin, tn);
 
         try (Table table = conn.getTable(tn)) {
-          // --- Get path --------------------------------------------------
           Result blockedGet =
               table.get(new Get((BLOCKED_PREFIX + "1").getBytes(StandardCharsets.UTF_8)));
           assertNotNull(blockedGet, "blocked Get must return a non-null (empty) Result");
@@ -138,7 +113,6 @@ final class ReadPathFilterIT {
           assertFalse(
               allowedGet.isEmpty(), "allowed Get must return the stored cell - got empty Result");
 
-          // --- Scan path -------------------------------------------------
           List<String> blockedRows = scanRowKeys(table, BLOCKED_PREFIX, BLOCKED_PREFIX + "~");
           assertEquals(
               0,
@@ -152,8 +126,6 @@ final class ReadPathFilterIT {
               allowedRows.size(),
               "allowed scan must return all " + N_PER_GROUP + " ok-* rows - got " + allowedRows);
 
-          // --- Hooks fired -----------------------------------------------
-          // Startup line proves the filter-observer ELF ran; runtime line proves hook traffic.
           waitForLog(baselinePreGet, 1, "filter-observer: starting", LOG_GRACE);
           long startupCount = countLogLines("filter-observer: starting") - baselinePreGet;
           assertTrue(
@@ -200,7 +172,6 @@ final class ReadPathFilterIT {
         "HBase cluster not ready within " + deadline + ": " + lastFailure, lastFailure);
   }
 
-  /** Create the bare table (no coprocessor) so the seed Puts are not observed. */
   private static void createTablePlain(Admin admin, TableName tn) throws IOException {
     TableDescriptor desc =
         TableDescriptorBuilder.newBuilder(tn)
@@ -209,10 +180,6 @@ final class ReadPathFilterIT {
     admin.createTable(desc);
   }
 
-  /**
-   * Attach the filter-observer coprocessor via the disable/modify/enable cycle. Run after seeding
-   * so the observer never sees the seed mutations.
-   */
   private static void attachCoproc(Admin admin, TableName tn) throws IOException {
     admin.disableTable(tn);
     TableDescriptor updated =
@@ -270,13 +237,9 @@ final class ReadPathFilterIT {
       }
       Thread.sleep(250);
     }
-    // Fall through on timeout; caller's assertion reports the exact delta.
   }
 
-  /** Runs {@code docker logs {container} 2>&1 | grep -c '<needle>'}. */
   private static long countLogLines(String needle) throws IOException, InterruptedException {
-    // Needle is hard-coded by callers (no shell-injection risk); quote defensively in
-    // case future callers parameterize.
     String safe = needle.replace("'", "'\\''");
     ProcessBuilder pb =
         new ProcessBuilder(

@@ -12,13 +12,6 @@ import (
 	"testing"
 )
 
-// TestBuild_PreservesDirectoryEntries pins the fix for the path.Clean jar
-// corruption: a bridge jar (as produced by maven-jar-plugin) carries explicit
-// directory entries whose names end in "/". The coproc-jar assembler must copy
-// those verbatim. path.Clean used to strip the trailing slash, demoting
-// "META-INF/" → "META-INF" (a zero-length file colliding with its own
-// directory path) and yielding a jar that `jar x`/unzip/the classloader cannot
-// extract. This test fails (entry renamed, mode not a dir) if the bug returns.
 func TestBuild_PreservesDirectoryEntries(t *testing.T) {
 	dir := t.TempDir()
 
@@ -52,8 +45,6 @@ func TestBuild_PreservesDirectoryEntries(t *testing.T) {
 		byName[f.Name] = f
 	}
 
-	// The directory entry must survive with its trailing slash AND be marked
-	// as a directory - not demoted to a "com" file.
 	d, ok := byName["com/"]
 	if !ok {
 		t.Fatalf("directory entry \"com/\" missing from output jar; entries=%v", names(zr))
@@ -64,7 +55,6 @@ func TestBuild_PreservesDirectoryEntries(t *testing.T) {
 	if _, bad := byName["com"]; bad {
 		t.Fatalf("directory was demoted to a plain file \"com\" (path.Clean regression)")
 	}
-	// The class under it must still be present and intact.
 	cf, ok := byName["com/example/Foo.class"]
 	if !ok {
 		t.Fatalf("class entry lost; entries=%v", names(zr))
@@ -80,9 +70,6 @@ func TestBuild_PreservesDirectoryEntries(t *testing.T) {
 	}
 }
 
-// writeJarWithDirEntries creates a jar containing an explicit directory entry
-// ("com/") plus a class beneath it and a manifest, mirroring what
-// maven-jar-plugin emits.
 func writeJarWithDirEntries(t *testing.T, path string) {
 	t.Helper()
 	f, err := os.Create(path)

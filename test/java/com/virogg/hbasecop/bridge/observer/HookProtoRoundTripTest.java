@@ -16,13 +16,6 @@ import org.apache.hbase.thirdparty.com.google.protobuf.DynamicMessage;
 import org.apache.hbase.thirdparty.com.google.protobuf.Message;
 import org.junit.jupiter.api.Test;
 
-/**
- * T42 Wave-5 "100% coverage" gate (Java side): every proto message under {@code virogg.hbasecop.v1}
- * round-trips via {@code Message → bytes → Message} at its default-instance shape and with a
- * synthetic value populated on every scalar field. Pairs with the Go-side counterpart {@code
- * internal/wire/hookpb/hooks_roundtrip_test.go}; both walk the proto registry so a new Request type
- * added to {@code proto/hooks.proto} flows into the gate automatically.
- */
 class HookProtoRoundTripTest {
 
   @Test
@@ -38,7 +31,6 @@ class HookProtoRoundTripTest {
     for (Descriptors.Descriptor d : messages) {
       Message defaultInstance = DynamicMessage.getDefaultInstance(d);
 
-      // Default-instance round-trip.
       byte[] bytes = defaultInstance.toByteArray();
       Message parsed = DynamicMessage.parseFrom(d, bytes);
       assertEquals(
@@ -47,8 +39,6 @@ class HookProtoRoundTripTest {
           "default-instance round-trip drift for " + d.getFullName());
       defaulted++;
 
-      // Mutated round-trip - populate every scalar field with a small
-      // typed default so the wire bytes are non-empty.
       DynamicMessage.Builder mb = DynamicMessage.newBuilder(d);
       boolean touched = false;
       for (Descriptors.FieldDescriptor fd : d.getFields()) {
@@ -63,7 +53,6 @@ class HookProtoRoundTripTest {
         touched = true;
       }
       if (!touched) {
-        // No scalars on this message - default-instance check above is the only path.
         continue;
       }
       Message mutatedMsg = mb.build();
@@ -113,7 +102,6 @@ class HookProtoRoundTripTest {
       case ENUM:
         return fd.getEnumType().getValues().get(0);
       case MESSAGE:
-        // Message fields are exercised by their own round-trip; leave default.
         return null;
       default:
         return null;

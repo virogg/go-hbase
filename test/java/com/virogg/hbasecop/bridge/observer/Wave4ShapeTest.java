@@ -25,10 +25,6 @@ import java.io.IOException;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.junit.jupiter.api.Test;
 
-/**
- * Wire-shape pins for the T42 Wave-4 hook payloads (lifecycle, compaction, WAL, bulk-load,
- * store-file). Asserts field numbering survives serialization round-trip.
- */
 class Wave4ShapeTest {
 
   @Test

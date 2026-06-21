@@ -16,8 +16,6 @@ import (
 	"github.com/virogg/go-hbase/internal/wire"
 )
 
-// startEchoResponder consumes outbound frames from out, builds a matching
-// TypeResponse and delivers it through m. Stops when stop closes.
 func startEchoResponder(t *testing.T, m *multiplex.Multiplexer, out <-chan *wire.Message, stop <-chan struct{}) <-chan struct{} {
 	t.Helper()
 	done := make(chan struct{})
@@ -45,9 +43,6 @@ func startEchoResponder(t *testing.T, m *multiplex.Multiplexer, out <-chan *wire
 	return done
 }
 
-// TestMultiplexer_ConcurrentCallsAllMatched is the T24 acceptance test: 1000
-// parallel Call invocations against a single Multiplexer must each observe
-// their own matching Response, never another caller's payload.
 func TestMultiplexer_ConcurrentCallsAllMatched(t *testing.T) {
 	out := make(chan *wire.Message, 1024)
 	send := func(msg *wire.Message) error {
@@ -98,8 +93,6 @@ func TestMultiplexer_ConcurrentCallsAllMatched(t *testing.T) {
 	}
 }
 
-// TestMultiplexer_AllocatesMonotonicReqIDs: req_id increases monotonically
-// across concurrent Call invocations.
 func TestMultiplexer_AllocatesMonotonicReqIDs(t *testing.T) {
 	var seen sync.Map // uint64 -> struct{}
 	var maxSeen atomic.Uint64
@@ -129,7 +122,6 @@ func TestMultiplexer_AllocatesMonotonicReqIDs(t *testing.T) {
 			defer wg.Done()
 			ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 			defer cancel()
-			// Expect ctx timeout; the responder isn't running.
 			_, _ = m.Call(ctx, &wire.Message{})
 		}()
 	}
@@ -140,8 +132,6 @@ func TestMultiplexer_AllocatesMonotonicReqIDs(t *testing.T) {
 	}
 }
 
-// TestMultiplexer_CloseFailsPending: outstanding Calls return
-// ErrChannelClosed when Close is invoked.
 func TestMultiplexer_CloseFailsPending(t *testing.T) {
 	send := func(*wire.Message) error { return nil }
 	m := multiplex.New(send)
@@ -154,7 +144,6 @@ func TestMultiplexer_CloseFailsPending(t *testing.T) {
 		}()
 	}
 
-	// Let the goroutines register before Close.
 	time.Sleep(20 * time.Millisecond)
 	m.Close()
 
@@ -170,8 +159,6 @@ func TestMultiplexer_CloseFailsPending(t *testing.T) {
 	}
 }
 
-// TestMultiplexer_CallAfterCloseRejected: Close is sticky; later Call
-// attempts also fail with ErrChannelClosed without invoking the sender.
 func TestMultiplexer_CallAfterCloseRejected(t *testing.T) {
 	var sends atomic.Int32
 	send := func(*wire.Message) error {
@@ -190,9 +177,6 @@ func TestMultiplexer_CallAfterCloseRejected(t *testing.T) {
 	}
 }
 
-// TestMultiplexer_ContextCancelReleasesSlot: a canceled Call must not leak
-// the pending entry; a subsequent Deliver for that req_id returns false
-// rather than blocking on a dead receiver.
 func TestMultiplexer_ContextCancelReleasesSlot(t *testing.T) {
 	captured := make(chan *wire.Message, 1)
 	send := func(msg *wire.Message) error {
@@ -225,8 +209,6 @@ func TestMultiplexer_ContextCancelReleasesSlot(t *testing.T) {
 	}
 }
 
-// TestMultiplexer_DeliverUnknownReqID: Deliver for a req_id that was never
-// issued (or already consumed) returns false without panic.
 func TestMultiplexer_DeliverUnknownReqID(t *testing.T) {
 	m := multiplex.New(func(*wire.Message) error { return nil })
 	if m.Deliver(&wire.Message{Type: wire.TypeResponse, ReqID: 42}) {
@@ -234,8 +216,6 @@ func TestMultiplexer_DeliverUnknownReqID(t *testing.T) {
 	}
 }
 
-// TestMultiplexer_SendErrorReleasesSlot: when the sender fails, Call returns
-// the sender's error and frees the pending slot immediately.
 func TestMultiplexer_SendErrorReleasesSlot(t *testing.T) {
 	wantErr := errors.New("send boom")
 	m := multiplex.New(func(*wire.Message) error { return wantErr })
@@ -245,6 +225,5 @@ func TestMultiplexer_SendErrorReleasesSlot(t *testing.T) {
 		t.Errorf("want %v, got %v", wantErr, err)
 	}
 
-	// Close must be idempotent and not block even though Call failed.
 	m.Close()
 }

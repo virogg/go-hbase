@@ -37,13 +37,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
-/**
- * T53 Wave B unit test for {@link WALObserverAdapter}: verifies the adapter encodes the WALKey
- * scalars / WAL-roll paths into the right proto Request, drives the injected {@link
- * HookDispatcher}, and translates {@code bypass=true} / strict-mode error responses into the
- * matching {@code ObserverContext#bypass()} / {@code IOException} reactions - mirrors the master
- * adapter's coverage on the WAL surface.
- */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class WALObserverAdapterTest {
@@ -130,8 +123,6 @@ class WALObserverAdapterTest {
     assertTrue(req.getOldPath().endsWith("/wal/old.1"), "old path not round-tripped");
     assertTrue(req.getNewPath().endsWith("/wal/new.2"), "new path not round-tripped");
   }
-
-  // --- helpers -------------------------------------------------------------
 
   private static PreWALWriteRequest parseWrite(byte[] bytes) {
     try {

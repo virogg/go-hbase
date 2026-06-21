@@ -39,23 +39,6 @@ import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.junit.jupiter.api.Test;
 
-/**
- * M3 (review T1) integration test: proves the endpoint's documented security boundary. An endpoint
- * runs with the RegionServer's authority but its invocation is gated by HBase's native {@code
- * AccessController.preEndpointInvocation} EXEC check (the go-hbase bridge does no auth itself).
- * With authorization + exec-permission checks on, a client granted EXEC on the table can invoke
- * {@code GoEndpointService.Call}, while a client without EXEC is denied — the only place this
- * boundary can be proven (it is enforced upstream of the Service, so a unit test cannot reach it).
- *
- * <p>The cluster is brought up with {@code HBASECOP_ENABLE_ACL=true} (the entrypoint registers the
- * AccessController on master/region/regionserver, turns on authorization + exec checks, and adds
- * {@code hbasecop_admin} as a superuser). Auth is SIMPLE, so the test selects each RPC identity by
- * binding a connection to a {@link User} via {@link
- * ConnectionFactory#createConnection(Configuration, User)} — the server trusts the supplied short
- * name.
- *
- * <p>Not part of {@code mvn test}; invoked by {@code make test-integration-endpoint-acl}.
- */
 final class EndpointAclIT {
 
   private static final String ZK_QUORUM = "localhost";
@@ -67,7 +50,6 @@ final class EndpointAclIT {
       "com.virogg.hbasecop.bridge.entrypoint.GenericRegionObserver";
   private static final byte[] CF = "cf".getBytes(StandardCharsets.UTF_8);
 
-  // Matches hbase.superuser injected by the entrypoint's ACL block.
   private static final String ADMIN = "hbasecop_admin";
   private static final String GRANTED_USER = "alice";
   private static final String DENIED_USER = "bob";
@@ -91,8 +73,6 @@ final class EndpointAclIT {
       grantExecWithRetry(adminConn, tn, GRANTED_USER, Duration.ofSeconds(60));
 
       try {
-        // Granted user: EXEC permission on the table → the endpoint invoke is allowed and
-        // round-trips to the Go handler.
         try (Connection grantedConn =
                 ConnectionFactory.createConnection(clientConfig(), grantedUser);
             Table table = grantedConn.getTable(tn)) {
@@ -103,8 +83,6 @@ final class EndpointAclIT {
               "a client with EXEC must be able to invoke the endpoint");
         }
 
-        // Denied user: no EXEC grant → AccessController.preEndpointInvocation rejects the invoke
-        // before it reaches the Service.
         try (Connection deniedConn =
                 ConnectionFactory.createConnection(clientConfig(), deniedUser);
             Table table = deniedConn.getTable(tn)) {

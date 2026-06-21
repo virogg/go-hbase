@@ -18,18 +18,6 @@ import org.apache.hadoop.hbase.client.CoprocessorDescriptorBuilder;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 
-/**
- * Registers, lists and removes hbasecop coprocessors on existing tables via the HBase Admin API -
- * the one-command "submit" path. Run it where HBase client jars are on the classpath, e.g. {@code
- * HBASE_CLASSPATH=hbasecop-bridge-all.jar hbase com.virogg.hbasecop.bridge.admin.DeployTool deploy
- * ...}; the hbasecop-build CLI assembles that invocation.
- *
- * <pre>
- *   deploy --table T --jar file:///coproc-jars/x.jar --class FQCN [--priority N] [--zk host] [--zk-port P]
- *   remove --table T --class FQCN [--zk host] [--zk-port P]
- *   list   [--table T] [--zk host] [--zk-port P]
- * </pre>
- */
 public final class DeployTool {
 
   private DeployTool() {}
@@ -105,13 +93,6 @@ public final class DeployTool {
     }
   }
 
-  /**
-   * Disable, swap the descriptor, re-enable - the registration cycle HBase requires. If {@code
-   * modifyTable} fails the original availability is restored (the prior descriptor is re-enabled)
-   * before rethrowing. If only the final {@code enableTable} fails - the typical symptom of a
-   * coprocessor that cannot load - the table is left disabled and a message points the operator at
-   * the manual recovery, since silently swallowing it would leave the table offline with no hint.
-   */
   private static void modifyInPlace(Admin admin, TableName tn, TableDescriptor next)
       throws IOException {
     boolean wasEnabled = admin.isTableEnabled(tn);
@@ -121,7 +102,6 @@ public final class DeployTool {
     try {
       admin.modifyTable(next);
     } catch (IOException modifyErr) {
-      // Modify failed: restore the prior availability before surfacing the cause.
       if (wasEnabled) {
         try {
           admin.enableTable(tn);
@@ -137,18 +117,11 @@ public final class DeployTool {
       try {
         admin.enableTable(tn);
       } catch (IOException enableErr) {
-        // Typical symptom of a coprocessor that cannot load: the descriptor is in
-        // place but regions won't open, so the table stays disabled.
         throw leftDisabled(tn, enableErr);
       }
     }
   }
 
-  /**
-   * IOException for the cases where the registration cycle leaves the table disabled and could not
-   * re-enable it, carrying {@code cause} and the manual recovery step so the operator is never left
-   * to discover an offline table from a bare stack trace.
-   */
   private static IOException leftDisabled(TableName tn, Throwable cause) {
     return new IOException(
         "table "
@@ -160,8 +133,6 @@ public final class DeployTool {
             + "'`.",
         cause);
   }
-
-  // ---- Pure descriptor helpers (unit-testable without a cluster) ----
 
   static TableDescriptor withCoprocessor(
       TableDescriptor base, String className, String jarPath, int priority) throws IOException {
@@ -181,8 +152,6 @@ public final class DeployTool {
     return desc.getCoprocessorDescriptors().stream()
         .anyMatch(cp -> cp.getClassName().equals(className));
   }
-
-  // ---- Arg parsing + connection config ----
 
   static Map<String, String> parseArgs(String[] args) {
     Map<String, String> f = new HashMap<>();

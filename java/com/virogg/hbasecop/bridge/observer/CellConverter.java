@@ -10,10 +10,6 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.PrivateCellUtil;
 import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
 
-/**
- * Converts an HBase {@link Cell} to the vendored {@link CellProtos.Cell} envelope. Used by the
- * read-path converters ({@link ResultConverter}) and by the per-mutation converters in T42 Wave 2+.
- */
 final class CellConverter {
 
   private CellConverter() {}
@@ -36,12 +32,6 @@ final class CellConverter {
     return b.build();
   }
 
-  /**
-   * Reverse of {@link #toProto}: build an HBase {@link Cell} (a {@link KeyValue}) from the vendored
-   * proto envelope. Used to materialize the substitute Result an observer supplies on a
-   * value-returning bypass (preAppend / preIncrement). Cell-level tags are not reconstructed -
-   * observer-authored substitute values do not carry server-side tags.
-   */
   static Cell fromProto(CellProtos.Cell c) {
     return new KeyValue(
         c.getRow().toByteArray(),
@@ -64,7 +54,6 @@ final class CellConverter {
         return KeyValue.Type.DeleteFamily;
       case PUT:
       default:
-        // Substitute Result cells are observer-authored values → Put.
         return KeyValue.Type.Put;
     }
   }
@@ -82,8 +71,6 @@ final class CellConverter {
       case DeleteFamily:
         return CellProtos.CellType.DELETE_FAMILY;
       default:
-        // HBase Cell.Type covers Put/Delete/*; treat anything else (Maximum/Minimum used as
-        // markers) as MINIMUM to keep the byte stable.
         return CellProtos.CellType.MINIMUM;
     }
   }

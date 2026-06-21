@@ -14,9 +14,6 @@ import (
 	"github.com/virogg/go-hbase/internal/wire"
 )
 
-// openBulkPair opens a producer/consumer pair on a fresh temp file for the
-// dedicated bulk ring: the producer (mock-Java) writes RpcResponse frames the
-// loop's bulk reader consumes.
 func openBulkPair(t *testing.T) (mockOut, loopIn *shmem.Channel) {
 	t.Helper()
 	file := filepath.Join(t.TempDir(), "bulk.mmap")
@@ -38,9 +35,6 @@ func openBulkPair(t *testing.T) (mockOut, loopIn *shmem.Channel) {
 	return mockOut, loopIn
 }
 
-// TE31: an RpcResponse arriving on the dedicated bulk ring is routed to the
-// ReverseResponseHandler — proving the second reader runs on its own ring,
-// isolated from the primary InCh.
 func TestLoopBulkReaderDeliversRpcResponse(t *testing.T) {
 	ch := openLoopChannels(t)
 	bulkMockOut, bulkIn := openBulkPair(t)

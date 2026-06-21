@@ -18,16 +18,6 @@ import (
 	"github.com/virogg/go-hbase/internal/wire/hbasepb"
 )
 
-// busyObserver burns a fixed amount of CPU per PrePut so the
-// throughput benchmark stays in the "work-bound" regime where parallel
-// dispatch can actually pay off. With a no-op observer the bench would
-// be dominated by ring/wire overhead, not by handler concurrency, and
-// "throughput scales with region count" would be unobservable.
-//
-// Tuned for ~30-60µs per call on a modern x86 core; the exact figure
-// does not matter for the test, only that one call is large enough
-// that GOMAXPROCS-1 other goroutines can do useful work in the same
-// wallclock.
 type busyObserver struct {
 	UnimplementedRegionObserver
 
@@ -40,32 +30,15 @@ func (o busyObserver) PrePut(_ context.Context, _ ObserverEnv, _ *hbasepb.Mutati
 		x = x*1103515245 + 12345 + uint64(i)
 	}
 	if x == 1 {
-		// Defeat the compiler's dead-store elimination without an
-		// observable side effect under any realistic spin count.
 		runtime.Gosched()
 	}
 	return HookResult{}, nil
 }
 
-// BenchmarkRegionConcurrencyThroughput is the T62 Wave-C artifact: it
-// measures PrePut throughput as the number of distinct region_ids
-// rotating through one Go runtime grows from 1 to 64. The handler is
-// CPU-bound (busyObserver), so a runtime that genuinely dispatches
-// across goroutines will show ns/op dropping toward
-// single_call_cost / min(N, GOMAXPROCS), while a regression that
-// serializes dispatch would flatline at single_call_cost.
-//
-// Run with `go test -bench=BenchmarkRegionConcurrencyThroughput
-// -benchmem -run='^$' ./pkg/hbasecop/` and capture the output as the
-// bench report; the artefact lives at docs/bench-region-concurrency.md.
 func BenchmarkRegionConcurrencyThroughput(b *testing.B) {
 	const (
 		ringCapacity = 1024
-		// ~50µs of CPU per call on a modern x86 core. Sized so the
-		// handler dominates dispatch overhead and parallel scaling
-		// across N regions is observable; with sub-µs work the wire
-		// codec floor masks any speed-up.
-		spinIters = 200_000
+		spinIters    = 200_000
 	)
 	for _, regions := range []int{1, 2, 4, 8, 16, 32, 64} {
 		b.Run(fmt.Sprintf("regions=%d", regions), func(b *testing.B) {
@@ -99,8 +72,6 @@ func runBenchRegionThroughput(b *testing.B, regions, ringCapacity, spinIters int
 		_ = loop.Run(ctx)
 	}()
 
-	// Pre-encode one frame per region so the sender loop stays cheap.
-	// The bench measures dispatch+handler throughput, not the encoder.
 	frames := make([][]byte, regions)
 	for r := range regions {
 		frames[r] = encodeBenchPrePut(b, uint32(r+1), uint64(r+1))
@@ -156,10 +127,6 @@ func runBenchRegionThroughput(b *testing.B, regions, ringCapacity, spinIters int
 	loopWG.Wait()
 }
 
-// openBenchHarness mirrors openLoopHarnessWith for *testing.B; sharing
-// one helper between Test and Benchmark would require a TB-typed shim
-// for every t.TempDir / t.Fatalf call site, which is more wiring than
-// it earns at two call sites.
 func openBenchHarness(b *testing.B, capacity int) *loopHarness {
 	b.Helper()
 	dir := b.TempDir()

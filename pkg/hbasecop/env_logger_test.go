@@ -17,8 +17,6 @@ import (
 	"github.com/virogg/go-hbase/internal/wire/hookpb"
 )
 
-// The runtime hands each hook a logger pre-tagged with hook + table, so
-// observers log through env.Logger() instead of reinventing one.
 func TestObserverEnvLoggerIsSetAndTagged(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
@@ -45,8 +43,6 @@ func TestObserverEnvLoggerIsSetAndTagged(t *testing.T) {
 	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &rec); err != nil {
 		t.Fatalf("log line not JSON: %v (%q)", err, buf.String())
 	}
-	// All four tags the runtime attaches must be present so a dropped tag is caught.
-	// req_id is a JSON number, so it round-trips as float64.
 	if rec["hook"] != "PrePut" || rec["table"] != "default:users" ||
 		rec["region"] != "reg-7" || rec["req_id"] != float64(7) {
 		t.Fatalf("logger not tagged with hook/table/region/req_id: %v", rec)
@@ -56,8 +52,6 @@ func TestObserverEnvLoggerIsSetAndTagged(t *testing.T) {
 	}
 }
 
-// A hand-constructed ObserverEnv (no runtime base logger) still yields a usable
-// logger rather than panicking, so direct unit-test calls are safe.
 func TestObserverEnvLoggerNilSafe(t *testing.T) {
 	if got := (ObserverEnv{TableName: "users"}).Logger(); got == nil {
 		t.Fatal("Logger() on a hand-built env must not be nil")

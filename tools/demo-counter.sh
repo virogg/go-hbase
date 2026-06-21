@@ -2,10 +2,7 @@
 # Copyright 2026 The go-hbase Authors
 # SPDX-License-Identifier: Apache-2.0
 #
-# CP-γ: public demo - drive N Puts through a live HBase coprocessor and
-# show the Go observer's log counter ticking up on each one. Invoked by
-# `make demo-counter`. Leaves the cluster running so reviewers can poke
-# around with `docker exec go-hbase-dev hbase shell` themselves.
+# Drive N Puts through a live HBase coprocessor and show the Go observer's log counter ticking up on each one.
 
 set -euo pipefail
 
@@ -24,7 +21,6 @@ make counter-observer-jar
 cp examples/counter-observer/target/counter-observer.jar \
    test/integration/coproc-jars/counter-observer.jar
 
-# Mark the boundary so the post-Put log scrape only counts THIS run.
 since=$(date -u +"%Y-%m-%dT%H:%M:%S.000000000Z")
 
 bold "3/4  create '${TABLE}' with CounterRegionObserver attached"

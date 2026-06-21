@@ -15,11 +15,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-/**
- * T34: {@link RestartController} state machine: exponential-backoff scheduling, consecutive-fail
- * counting, transition to {@code UNHEALTHY} after {@code maxConsecutiveFails}, then periodic
- * probing. Time and attempt outcomes driven deterministically.
- */
 final class RestartControllerTest {
 
   private static final RestartConfig CFG =
@@ -51,7 +46,7 @@ final class RestartControllerTest {
               Boolean next = outcomes.pollFirst();
               return next != null && next;
             },
-            () -> 0.5); // jitter 0.5 -> zero offset (2*0.5-1=0)
+            () -> 0.5);
   }
 
   @Test
@@ -67,12 +62,10 @@ final class RestartControllerTest {
     ctl.notifyDead();
     assertEquals(RestartController.State.AWAITING_RESTART, ctl.state());
 
-    // Just before the initial delay: no attempt yet.
     nowMs.addAndGet(199L);
     assertFalse(ctl.tick());
     assertEquals(0, attempts.get());
 
-    // At the deadline the attempt fires.
     nowMs.addAndGet(1L);
     outcomes.add(true);
     assertTrue(ctl.tick());
@@ -83,7 +76,6 @@ final class RestartControllerTest {
 
   @Test
   void backoffDelayDoublesUpToCap() {
-    // Pure delay math, jitter pinned to 0 via 0.5 supplier.
     assertEquals(200L, ctl.backoffDelayMs(0));
     assertEquals(400L, ctl.backoffDelayMs(1));
     assertEquals(800L, ctl.backoffDelayMs(2));
@@ -97,17 +89,15 @@ final class RestartControllerTest {
   @Test
   void jitterAppliedAtBothExtremes() {
     RestartController low = new RestartController(CFG, nowMs::get, () -> true, () -> 0.0); // -20%
-    RestartController high =
-        new RestartController(CFG, nowMs::get, () -> true, () -> 0.999999); // +20%
-    assertEquals(160L, low.backoffDelayMs(0)); // 200 * 0.8
-    assertEquals(239L, high.backoffDelayMs(0)); // 200 * 1.19999..., truncated
+    RestartController high = new RestartController(CFG, nowMs::get, () -> true, () -> 0.999999);
+    assertEquals(160L, low.backoffDelayMs(0));
+    assertEquals(239L, high.backoffDelayMs(0));
   }
 
   @Test
   void failuresUseExponentialBackoff() {
     ctl.notifyDead();
 
-    // Sequence: 5 failures, each at the scheduled deadline.
     long[] expectedDelays = {200L, 400L, 800L, 1_600L, 3_200L};
     for (int i = 0; i < expectedDelays.length; i++) {
       long due = ctl.nextAttemptDueMs();
@@ -118,7 +108,6 @@ final class RestartControllerTest {
       assertEquals(i + 1, attempts.get());
       assertEquals(i + 1, ctl.consecutiveFails());
     }
-    // 5 failures -> UNHEALTHY now.
     assertEquals(RestartController.State.UNHEALTHY, ctl.state());
   }
 
@@ -134,25 +123,20 @@ final class RestartControllerTest {
     long unhealthyAt = nowMs.get();
     assertEquals(unhealthyAt + 30_000L, ctl.nextAttemptDueMs());
 
-    // Within the probe interval: no attempt.
     nowMs.set(unhealthyAt + 29_999L);
     assertFalse(ctl.tick());
     assertEquals(5, attempts.get());
 
-    // At the probe interval the attempt fires.
     nowMs.set(unhealthyAt + 30_000L);
     outcomes.add(false);
     assertTrue(ctl.tick());
     assertEquals(6, attempts.get());
-    // Still unhealthy; fail counter unchanged (no ratcheting past the cap).
     assertEquals(RestartController.State.UNHEALTHY, ctl.state());
-    // Next probe is one probe-interval out.
     assertEquals(unhealthyAt + 30_000L + 30_000L, ctl.nextAttemptDueMs());
   }
 
   @Test
   void probeSuccessReturnsToHealthy() {
-    // Cross threshold to UNHEALTHY.
     ctl.notifyDead();
     for (int i = 0; i < 5; i++) {
       nowMs.set(ctl.nextAttemptDueMs());
@@ -161,7 +145,6 @@ final class RestartControllerTest {
     }
     assertEquals(RestartController.State.UNHEALTHY, ctl.state());
 
-    // Probe succeeds.
     nowMs.set(ctl.nextAttemptDueMs());
     outcomes.add(true);
     assertTrue(ctl.tick());
@@ -172,7 +155,6 @@ final class RestartControllerTest {
   @Test
   void successPartwayThroughResetsCounter() {
     ctl.notifyDead();
-    // 2 fails...
     nowMs.set(ctl.nextAttemptDueMs());
     outcomes.add(false);
     ctl.tick();
@@ -180,14 +162,12 @@ final class RestartControllerTest {
     outcomes.add(false);
     ctl.tick();
     assertEquals(2, ctl.consecutiveFails());
-    // ...then success.
     nowMs.set(ctl.nextAttemptDueMs());
     outcomes.add(true);
     ctl.tick();
     assertEquals(RestartController.State.HEALTHY, ctl.state());
     assertEquals(0, ctl.consecutiveFails());
 
-    // A subsequent crash starts the backoff at 200 again.
     ctl.notifyDead();
     assertEquals(nowMs.get() + 200L, ctl.nextAttemptDueMs());
   }
@@ -197,7 +177,7 @@ final class RestartControllerTest {
     ctl.notifyDead();
     long firstDue = ctl.nextAttemptDueMs();
     nowMs.addAndGet(50L);
-    ctl.notifyDead(); // duplicate signal
+    ctl.notifyDead();
     assertEquals(firstDue, ctl.nextAttemptDueMs(), "duplicate notifyDead must not reschedule");
     assertEquals(RestartController.State.AWAITING_RESTART, ctl.state());
   }
@@ -226,7 +206,6 @@ final class RestartControllerTest {
     assertFalse(ctl.tick());
     assertEquals(0, attempts.get());
 
-    // notifyDead in STOPPED is a no-op.
     ctl.notifyDead();
     assertEquals(RestartController.State.STOPPED, ctl.state());
   }

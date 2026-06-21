@@ -11,9 +11,6 @@ import (
 	"testing"
 )
 
-// aliasSmoke overrides non-Put hooks using the public alias types. It compiles
-// only if the aliases are identical to the internal *hookpb types the
-// interface is signed against, which the assertion below pins.
 type aliasSmoke struct{ UnimplementedRegionObserver }
 
 func (aliasSmoke) PreGetOp(context.Context, ObserverEnv, *PreGetOpRequest) (HookResult, error) {
@@ -33,8 +30,6 @@ var (
 	_ *Cell          = (*Cell)(nil) // payload alias is namable
 )
 
-// TestWireTypesUpToDate fails if wiretypes.go drifts from the generator output,
-// e.g. a new hookpb request type was added without re-running go generate.
 func TestWireTypesUpToDate(t *testing.T) {
 	tmp := filepath.Join(t.TempDir(), "wiretypes.go")
 	cmd := exec.Command("go", "run", "../../tools/gen-wiretypes",

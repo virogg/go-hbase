@@ -36,13 +36,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
-/**
- * T54 Wave B unit test for {@link BulkLoadObserverAdapter}: verifies the adapter encodes the
- * bulk-load target table/region into HookContext, drives the injected {@link HookDispatcher}, and
- * translates {@code bypass=true} / strict-mode error responses into the matching {@code
- * ObserverContext#bypass()} / {@code IOException} reactions - mirrors the master adapter's coverage
- * on the bulk-load surface.
- */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class BulkLoadObserverAdapterTest {
@@ -134,8 +127,6 @@ class BulkLoadObserverAdapterTest {
         .dispatchHook(
             anyInt(), eq(HookId.PRE_CLEANUP_BULK_LOAD.value()), any(), any(Duration.class));
   }
-
-  // --- helpers -------------------------------------------------------------
 
   private static PrePrepareBulkLoadRequest parsePrepare(byte[] bytes) {
     try {

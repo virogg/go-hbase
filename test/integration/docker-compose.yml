@@ -1,11 +1,9 @@
 name: go-hbase-dev
 
-# T26: HBase 2.5 standalone dev cluster.
-# - One container runs Master + RegionServer + embedded ZooKeeper in a single
-#   JVM (HBase standalone mode). Sufficient for coproc integration tests.
+# HBase 2.5 standalone dev cluster.
+# - One container runs Master + RegionServer + embedded ZooKeeper in a single JVM (HBase standalone mode).
 # - Image is built locally from ./hbase/Dockerfile, pinned to HBase ${HBASE_VERSION}.
-# - The host bind-mount ./coproc-jars/ is where the integration test (T27)
-#   drops the example coproc-jar before invoking `disable/alterTable/enable`.
+# - The host bind-mount ./coproc-jars/ is where the integration test drops the example coproc-jar before invoking `disable/alterTable/enable`.
 
 services:
   hbase:
@@ -13,44 +11,27 @@ services:
       context: ./hbase
       args:
         HBASE_VERSION: "${HBASE_VERSION:-2.5.11}"
-        # Must match HBASE_VERSION; default pairs with 2.5.11. CI matrix legs
-        # export both (see ci.yml integration job).
         HBASE_SHA512: "${HBASE_SHA512:-BAD94B693C2F3013F91FB50BF8678D48C749815A8CA335531E85C0B62BFC18D34DF253A43B50AA66B7ED5C1FF379E8EA0213B4A6F21441F93DD83EB21DEC473C}"
     image: "go-hbase/hbase-dev:${HBASE_VERSION:-2.5.11}"
     container_name: go-hbase-dev
     hostname: hbase-dev
-    # We use explicit port forwards (not network_mode=host) so this works under
-    # Docker Desktop, where host-mode shares the Hyper-V VM's network namespace
-    # instead of the WSL2 host's. The RegionServer advertises itself as
-    # `localhost` (see hbase-site.xml `hbase.*.hostname`), so the host-side
-    # client can connect back via these mapped ports.
     ports:
       - "16010:16010"   # master web UI
       - "16030:16030"   # regionserver web UI
-      - "2181:2182"     # zookeeper client (host 2181 -> in-container socat relay :2182 -> ZK 127.0.0.1:2181; see hbase/entrypoint.sh)
+      - "2181:2182"     # zookeeper client
       - "16000:16000"   # master RPC
       - "16020:16020"   # regionserver RPC
     volumes:
       - ./coproc-jars:/coproc-jars
-    # T51: master coprocessors must be registered cluster-wide at startup.
-    # These pass through from the host shell (empty for every non-master IT,
-    # so the entrypoint's injection is a no-op); `make test-integration-master`
-    # exports them before `docker compose up`.
     environment:
       HBASECOP_MASTER_COPROC_CLASS: "${HBASECOP_MASTER_COPROC_CLASS:-}"
       HBASECOP_MASTER_COPROC_JAR: "${HBASECOP_MASTER_COPROC_JAR:-}"
       HBASECOP_POLICY_BLOCKED_PREFIX: "${HBASECOP_POLICY_BLOCKED_PREFIX:-}"
-      # T52: region-server coprocessor registration; `make test-integration-rs`
-      # exports these, empty (no-op) for every other IT.
       HBASECOP_RS_COPROC_CLASS: "${HBASECOP_RS_COPROC_CLASS:-}"
       HBASECOP_RS_COPROC_JAR: "${HBASECOP_RS_COPROC_JAR:-}"
       HBASECOP_RS_POLICY_VETO_WAL_ROLL: "${HBASECOP_RS_POLICY_VETO_WAL_ROLL:-}"
-      # T82: WAL coprocessor registration; `make bench-wal` exports these for
-      # its coproc leg, empty (no-op) everywhere else.
       HBASECOP_WAL_COPROC_CLASS: "${HBASECOP_WAL_COPROC_CLASS:-}"
       HBASECOP_WAL_COPROC_JAR: "${HBASECOP_WAL_COPROC_JAR:-}"
-      # M3: enable HBase AccessController for the endpoint EXEC-boundary IT;
-      # `make test-integration-endpoint-acl` exports "true", no-op elsewhere.
       HBASECOP_ENABLE_ACL: "${HBASECOP_ENABLE_ACL:-}"
     healthcheck:
       test:

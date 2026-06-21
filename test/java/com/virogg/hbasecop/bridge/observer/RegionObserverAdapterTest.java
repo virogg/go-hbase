@@ -53,14 +53,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
-/**
- * T23 + T32 acceptance. {@code RegionObserverAdapter} converts an HBase {@code Put} into a {@code
- * PrePutRequest} and dispatches it through the injected {@link HookDispatcher}. Under strict
- * policy, {@code bypass=true} maps to {@code ObserverContext#bypass()} and an observer-error
- * response maps to {@code IOException}. Best-effort policy swallows Go-side failures (error
- * response, timeout, transport error) as no-ops with a WARN log instead of propagating an
- * IOException.
- */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class RegionObserverAdapterTest {
@@ -121,12 +113,10 @@ class RegionObserverAdapterTest {
         1_700_000_000_000L,
         decoded.getMutation().getColumnValue(0).getQualifierValue(0).getTimestamp());
 
-    // HookContext carries the table+region scope.
     assertEquals("default", decoded.getCtx().getTableName().getNamespace().toStringUtf8());
     assertEquals("users", decoded.getCtx().getTableName().getQualifier().toStringUtf8());
     assertEquals("abc1234", decoded.getCtx().getRegionName().toStringUtf8());
 
-    // Clean response: no bypass, no exception.
     verify(ctx, never()).bypass();
   }
 
@@ -142,8 +132,6 @@ class RegionObserverAdapterTest {
 
   @Test
   void preAppendBypassReturnsSubstituteResultFromHookResponseCells() throws Exception {
-    // H12 full fix: a value-returning bypass on preAppend carries the observer's substitute cells
-    // in HookResponse.result; the adapter returns them as a Result, bypassing the Append.
     CellProtos.Cell cell =
         CellProtos.Cell.newBuilder()
             .setRow(ByteString.copyFromUtf8("row-9"))
@@ -232,11 +220,8 @@ class RegionObserverAdapterTest {
             () -> adapter.prePut(ctx, samplePut(), walEdit, Durability.USE_DEFAULT));
     assertTrue(ex.getMessage().toLowerCase().contains("interrupt"));
     assertTrue(Thread.currentThread().isInterrupted(), "interrupt flag must be re-set");
-    // Reset so subsequent tests are not affected.
     Thread.interrupted();
   }
-
-  // ---------- T32: best-effort policy swallows Go-side failures ----------
 
   @Test
   void postPutErrorResponseSwallowedUnderDefaultBestEffort() throws Exception {
@@ -247,7 +232,6 @@ class RegionObserverAdapterTest {
                 .build()
                 .toByteArray());
 
-    // Default post* policy is best-effort: no IOException, operation continues.
     adapter.postPut(ctx, samplePut(), walEdit, Durability.USE_DEFAULT);
 
     verify(ctx, never()).bypass();
@@ -329,8 +313,6 @@ class RegionObserverAdapterTest {
             anyInt(), eq(RegionObserverAdapter.HOOK_PRE_PUT), any(), eq(Duration.ofMillis(250)));
   }
 
-  // ---------- T61: region_id routing through dispatch ----------
-
   @Test
   void prePutDispatchesAllocatedRegionIdFromEnv() throws Exception {
     RegionIdAllocator allocator = new RegionIdAllocator();
@@ -338,7 +320,6 @@ class RegionObserverAdapterTest {
         new RegionObserverAdapter(
             dispatcher, new PolicyConfig(new Configuration(false)), allocator);
 
-    // Region "abc1234" already stubbed in @BeforeEach.
     when(regionInfo.getEncodedName()).thenReturn("abc1234");
     adapter.start(env);
 
@@ -363,14 +344,10 @@ class RegionObserverAdapterTest {
     when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any()))
         .thenReturn(HookResponse.newBuilder().build().toByteArray());
 
-    // First region.
     when(regionInfo.getEncodedName()).thenReturn("region-a");
     adapter.start(env);
     adapter.prePut(ctx, samplePut(), walEdit, Durability.USE_DEFAULT);
 
-    // Second region: same adapter instance, different env scope. T63 holds one adapter per
-    // RegionObserver registration, so distinct regions get distinct adapters in practice; reusing
-    // one adapter across both here keeps the test focused on the allocator contract.
     RegionInfo regionInfo2 = org.mockito.Mockito.mock(RegionInfo.class);
     Region region2 = org.mockito.Mockito.mock(Region.class);
     RegionCoprocessorEnvironment env2 =
@@ -423,30 +400,19 @@ class RegionObserverAdapterTest {
     when(regionInfo.getEncodedName()).thenReturn("never-started");
     adapter.prePut(ctx, samplePut(), walEdit, Durability.USE_DEFAULT);
 
-    // No start(env): allocator empty, idFor=0, so wire region_id=0. Matches the Phase-2 wire shape
-    // so hooks issued before lifecycle wiring kicks in still reach the Go side, just without region
-    // scope.
     verify(dispatcher).dispatchHook(eq(0), eq(RegionObserverAdapter.HOOK_PRE_PUT), any(), any());
   }
 
-  // ---------- bypass() safety on non-bypassable hooks ----------
-
   @Test
   void bypassRequestOnNonBypassableHookDoesNotPropagate() throws Exception {
-    // HBase 2.5 makes ObserverContext#bypass() throw UnsupportedOperationException
-    // on non-bypassable hooks; uncaught, that aborts the whole RegionServer. An
-    // over-eager observer must never be able to do that.
     doThrow(new UnsupportedOperationException("This method does not support 'bypass'."))
         .when(ctx)
         .bypass();
     when(dispatcher.dispatchHook(anyInt(), anyByte(), any(), any()))
         .thenReturn(HookResponse.newBuilder().setBypass(true).build().toByteArray());
 
-    // Must complete normally: the rejected bypass is downgraded to a WARN.
     adapter.prePut(ctx, samplePut(), walEdit, Durability.USE_DEFAULT);
   }
-
-  // ---------- preScannerOpen bypass to empty Scan (HBase 2.5) ----------
 
   @Test
   void preScannerOpenBypassConstrainsScanToEmptyRange() throws Exception {
@@ -456,9 +422,6 @@ class RegionObserverAdapterTest {
     Scan scan = new Scan();
     adapter.preScannerOpen(ctx, scan);
 
-    // preScannerOpen is not bypassable in HBase 2.5, so the adapter must NOT call
-    // ObserverContext#bypass(); instead it neuters the Scan to an empty half-open row interval
-    // [sentinel, sentinel).
     verify(ctx, never()).bypass();
     assertArrayEquals(new byte[] {0}, scan.getStartRow());
     assertArrayEquals(new byte[] {0}, scan.getStopRow());

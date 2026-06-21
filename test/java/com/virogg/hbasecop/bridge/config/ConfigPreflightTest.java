@@ -106,7 +106,6 @@ final class ConfigPreflightTest {
 
   @Test
   void unknownKeyAndUnknownHookAreWarnNotError() {
-    // Unknown hbasecop.* key and an unknown per-hook suffix must not fail start.
     Configuration c =
         conf(
             "hbasecop.bogus.key", "whatever",
@@ -116,11 +115,6 @@ final class ConfigPreflightTest {
 
   @Test
   void observerAppKeysInPolicyTimeoutNamespaceDoNotAbortStart() {
-    // Regression: an observer's own hbasecop.policy.* / hbasecop.timeout.* config keys carry a
-    // suffix that is NOT a hook and a value that is NOT strict|best-effort / a duration. The
-    // framework must WARN, never throw — a thrown coprocessor.start() aborts a cluster-wide
-    // master/RS coprocessor and takes the whole HMaster/RegionServer down. These are the exact
-    // keys the master-policy / rs-policy example observers set.
     Configuration c =
         conf(
             "hbasecop.policy.blocked_prefix", "forbidden-",

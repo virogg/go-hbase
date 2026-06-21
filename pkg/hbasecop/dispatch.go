@@ -19,9 +19,6 @@ import (
 	"github.com/virogg/go-hbase/internal/wire/wirepb"
 )
 
-// HookError codes carried in wirepb.Error / hookpb.HookError payloads.
-// The values are stable so the Java adapter can branch on them; the
-// production hook-error taxonomy lands in T31.
 const (
 	errCodeInvalidWireRequest uint32 = 1
 	errCodeUnknownHook        uint32 = 2
@@ -29,13 +26,6 @@ const (
 	errCodeEndpointFailed     uint32 = 4
 )
 
-// dispatcher routes inbound wire-level Request frames to the
-// appropriate RegionObserver method via the canonical hookTable (T41).
-// It is the only place where the SDK crosses between the wire encoding
-// and the user-facing API.
-// dispatcher holds one slice of observers per surface; multiple observers on a
-// surface are chained (see foldObservers), and several surfaces may be set so
-// one process serves Region+Master+... over a single shmem pair.
 type dispatcher struct {
 	observers     []RegionObserver
 	masters       []MasterObserver
@@ -45,9 +35,6 @@ type dispatcher struct {
 	endpoint      Endpoint
 	logger        *slog.Logger
 
-	// reverse is the Go-initiated reverse-RPC client (Tier 2, TE31), set when
-	// the supervisor provisioned the bulk ring. It lets an endpoint Call read
-	// region-local data; nil when the reverse path is disabled.
 	reverse *cpruntime.ReverseClient
 }
 
@@ -78,14 +65,6 @@ func orDefaultLogger(logger *slog.Logger) *slog.Logger {
 	return logger
 }
 
-// foldObservers runs invoke for each observer in registration order, folding
-// their HookResults: Bypass is OR-ed, BlockedIndices concatenated (duplicates
-// are tolerated Java-side), and ResultCells follow last-non-empty-wins, so a
-// later observer's substitute Result overrides an earlier one's. The first
-// non-nil error (or recovered panic) short-circuits the chain; the erroring
-// observer's own result is still folded in before returning, so a single
-// observer (the common case) yields exactly the (result, err) pair the old
-// single-observer dispatch did.
 func foldObservers[O any](d *dispatcher, hookName string, reqID uint64, observers []O, invoke func(O) (HookResult, error)) (HookResult, error) {
 	var fold HookResult
 	for _, obs := range observers {
@@ -108,13 +87,6 @@ func foldObservers[O any](d *dispatcher, hookName string, reqID uint64, observer
 	return fold, nil
 }
 
-// dispatch decodes one Request frame, looks up the hook in the
-// canonical dispatch table, invokes the matching observer method and
-// returns the frame to send back. Returning a TypeError frame signals
-// a protocol-level failure (malformed Request, unknown hook id,
-// marshal error); observer-level failures travel inside a TypeResponse
-// with HookResponse.error populated, so the Java adapter can apply the
-// configured failure policy uniformly (T31/T32).
 func (d *dispatcher) dispatch(ctx context.Context, req *wire.Message) *wire.Message {
 	var wireReq wirepb.Request
 	if err := proto.Unmarshal(req.Payload, &wireReq); err != nil {
@@ -154,13 +126,6 @@ func (d *dispatcher) dispatch(ctx context.Context, req *wire.Message) *wire.Mess
 	return d.errorFrame(req, errCodeUnknownHook, "unknown hook")
 }
 
-// recoverInvoke runs one observer-method invocation and converts a panic
-// from user callback code into an error. SPEC §6 requires that a panic in
-// a user observer never escape to crash the long-lived per-RegionServer Go
-// process - it must become an Error travelling back to the Java side, which
-// then applies the configured failure policy (strict → IOException to the
-// client; best-effort → WARN + no-op). The recovered error flows through
-// responseFrame as HookResponse.error.
 func recoverInvoke(logger *slog.Logger, hookName string, reqID uint64, fn func() (HookResult, error)) (result HookResult, err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -247,11 +212,6 @@ func (d *dispatcher) dispatchBulkLoad(ctx context.Context, req *wire.Message, wi
 	return d.responseFrame(req, result, callErr)
 }
 
-// extractHookCtx pulls the shared HookContext out of any per-hook
-// Request type. Every T41 stub message embeds HookContext at field 1
-// (see proto/hooks.proto); the generated Go code therefore exposes
-// GetCtx() on each. We rely on the structural interface so the
-// dispatch table can stay request-type-agnostic.
 type hookContextGetter interface {
 	GetCtx() *hookpb.HookContext
 }
@@ -312,10 +272,6 @@ func (d *dispatcher) responseFrame(req *wire.Message, result HookResult, callErr
 func (d *dispatcher) errorFrame(req *wire.Message, code uint32, msg string) *wire.Message {
 	payload, err := proto.Marshal(&wirepb.Error{Code: code, Message: msg})
 	if err != nil {
-		// Marshalling a fixed wirepb.Error effectively never fails, but if it
-		// did, returning nil sends no reply and the client blocks until the
-		// Java-side timeout. Hand-encode a minimal Error so the client always
-		// gets a prompt failure frame instead of a silent hang.
 		d.logger.Error("hbasecop: marshal wirepb.Error failed", "err", err, "req_id", req.ReqID)
 		payload = encodeMinimalError(code, msg)
 	}
@@ -328,9 +284,6 @@ func (d *dispatcher) errorFrame(req *wire.Message, code uint32, msg string) *wir
 	}
 }
 
-// encodeMinimalError hand-encodes a wirepb.Error (code=field 1 varint,
-// message=field 2 length-delimited) without proto.Marshal, as the fallback
-// when Marshal fails so an Error frame is always deliverable.
 func encodeMinimalError(code uint32, msg string) []byte {
 	b := make([]byte, 0, len(msg)+12)
 	b = append(b, 0x08) // field 1 (code), wire type 0 (varint)

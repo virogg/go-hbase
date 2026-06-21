@@ -23,14 +23,6 @@ import (
 	"github.com/virogg/go-hbase/internal/wire/wirepb"
 )
 
-// barrierObserver records the region_id of every PrePut and forces all
-// concurrently-dispatched invocations to rendezvous before any of them
-// returns. If the runtime dispatched requests serially, the second
-// invocation would never start until the first returned, but the
-// first cannot return until the barrier releases, which only happens
-// once `want` invocations have arrived. A serial dispatcher therefore
-// deadlocks and the test fails on its 2s deadline; only genuinely
-// parallel handling lets all `want` PrePuts pass the barrier.
 type barrierObserver struct {
 	UnimplementedRegionObserver
 
@@ -65,13 +57,6 @@ func (o *barrierObserver) seenRegions() []uint32 {
 	return out
 }
 
-// TestMultiRegionParallelRouting is the T61 Wave-C acceptance: a single
-// Go runtime serving N regions sees a distinct region_id per region in
-// ObserverEnv and processes their hook invocations concurrently. It
-// drives N PrePut frames carrying distinct wire region_ids through the
-// real cpruntime.Loop and asserts (a) every response echoes its
-// region_id, (b) the observer saw exactly the N distinct ids, and (c)
-// all N handlers ran in parallel (enforced by the barrier observer).
 func TestMultiRegionParallelRouting(t *testing.T) {
 	const nRegions = 4
 
@@ -101,9 +86,6 @@ func TestMultiRegionParallelRouting(t *testing.T) {
 
 	deadline := time.Now().Add(2 * time.Second)
 
-	// Fire one PrePut per region, each on a distinct region_id. region_id
-	// r uses req_id r so responses can be correlated independently of
-	// region_id.
 	for r := 1; r <= nRegions; r++ {
 		regionID := uint32(r)
 		frame := encodeMultiRegionPrePut(t, regionID, uint64(r))
@@ -119,8 +101,6 @@ func TestMultiRegionParallelRouting(t *testing.T) {
 		}
 	}
 
-	// Collect nRegions responses. Each response frame echoes the
-	// region_id of the request that produced it.
 	gotRegions := make([]uint32, 0, nRegions)
 	gotReqIDs := make(map[uint64]uint32)
 	for len(gotRegions) < nRegions {
@@ -152,8 +132,6 @@ func TestMultiRegionParallelRouting(t *testing.T) {
 		t.Fatalf("response region_ids = %v, want [1 2 3 4]", gotRegions)
 	}
 
-	// req_id r must have come back tagged with region_id r; confirms
-	// the runtime does not cross-wire region scope between requests.
 	for r := 1; r <= nRegions; r++ {
 		if got := gotReqIDs[uint64(r)]; got != uint32(r) {
 			t.Fatalf("req_id %d returned region_id %d, want %d", r, got, r)

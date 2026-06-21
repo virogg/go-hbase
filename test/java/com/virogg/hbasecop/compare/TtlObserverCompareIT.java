@@ -24,20 +24,6 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Table;
 import org.junit.jupiter.api.Test;
 
-/**
- * Native-vs-Go comparison for a VALIDATING pre-hook OBSERVER (write path). Both arms reject any Put
- * whose cell value lacks the {@code ttl=<seconds>;} envelope:
- *
- * <ul>
- *   <li>native arm: {@code NativeTtlObserver.prePut} validates in the RegionServer JVM;
- *   <li>Go arm: {@code TtlValidatorRegionObserver} forwards prePut over the bridge to the Go {@code
- *       ttl-validator} process.
- * </ul>
- *
- * <p>Equivalence: for a fixed corpus of valid and invalid values, both arms must make the IDENTICAL
- * accept/reject decision (and leave identical table state). Performance: per-arm write throughput
- * for accepted Puts, interleaved A/B, reported (not gated).
- */
 final class TtlObserverCompareIT {
 
   private static final byte[] Q = "q".getBytes(StandardCharsets.UTF_8);
@@ -45,7 +31,6 @@ final class TtlObserverCompareIT {
   private static final int PERF_ROUNDS = 20;
   private static final int PERF_WARMUP = 3;
 
-  /** One equivalence case: a cell value and whether the TTL envelope should be accepted. */
   private static final class Case {
     final String label;
     final byte[] value;
@@ -94,7 +79,6 @@ final class TtlObserverCompareIT {
       try (Table nativeTable = conn.getTable(nativeTn);
           Table goTable = conn.getTable(goTn)) {
 
-        // --- Equivalence (hard pass/fail) ---------------------------------
         for (Case c : CORPUS) {
           byte[] row = ("case-" + c.label).getBytes(StandardCharsets.UTF_8);
           boolean nativeAccepted = tryPut(nativeTable, row, c.value);
@@ -105,12 +89,10 @@ final class TtlObserverCompareIT {
               nativeAccepted,
               goAccepted,
               "Go TTL decision must match native for case " + c.label + " (equivalence)");
-          // Table state must agree with the decision on both arms.
           assertEquals(nativeAccepted, !nativeTable.get(new Get(row)).isEmpty(), c.label);
           assertEquals(goAccepted, !goTable.get(new Get(row)).isEmpty(), c.label);
         }
 
-        // --- Performance (report-only): accepted-Put write throughput -----
         List<Long> nativeSamples = new ArrayList<>();
         List<Long> goSamples = new ArrayList<>();
         for (int r = 0; r < PERF_WARMUP + PERF_ROUNDS; r++) {
@@ -144,17 +126,15 @@ final class TtlObserverCompareIT {
     }
   }
 
-  /** Attempts one Put; returns true if accepted, false if the observer rejected it. */
   private static boolean tryPut(Table table, byte[] row, byte[] value) {
     try {
       table.put(new Put(row).addColumn(CF, Q, value));
       return true;
     } catch (Exception e) {
-      return false; // strict pre-hook rejection surfaces as an exception
+      return false;
     }
   }
 
-  /** A batch of PERF_BATCH valid (ttl=<sec>;...) Puts with distinct rows. */
   private static List<Put> validBatch(String prefix) {
     List<Put> puts = new ArrayList<>(PERF_BATCH);
     for (int i = 0; i < PERF_BATCH; i++) {

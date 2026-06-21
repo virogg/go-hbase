@@ -47,11 +47,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
-/**
- * {@link ReverseRpcServicer} acceptance: resolves the region and runs GET (TE31) / pull-scan
- * (TE33), replying OK; fail-closed (an ERROR reply, not a block) on an unknown region, unknown
- * scanner, or a saturated pool.
- */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class ReverseRpcServicerTest {
@@ -153,18 +148,15 @@ class ReverseRpcServicerTest {
               return Result.EMPTY_RESULT;
             });
 
-    // pool size 1 + queue depth 1: the 3rd concurrent request has nowhere to go.
     servicer =
         new ReverseRpcServicer(
             registry, new ScannerRegistry(), replies::add, SLOT, 1, 1, Duration.ofSeconds(5));
     try {
-      servicer.accept(getRequest(1, 7, "row-1")); // occupies the single thread, then blocks
+      servicer.accept(getRequest(1, 7, "row-1"));
       assertTrue(started.await(2, TimeUnit.SECONDS), "first task did not start");
-      servicer.accept(getRequest(2, 7, "row-2")); // fills the bounded queue
-      servicer.accept(getRequest(3, 7, "row-3")); // rejected -> fail-closed ERROR
+      servicer.accept(getRequest(2, 7, "row-2"));
+      servicer.accept(getRequest(3, 7, "row-3"));
 
-      // The only reply while the workers are blocked is the rejected request's ERROR — proving
-      // accept() did not block the (reader) thread.
       RpcResponse resp = poll();
       assertEquals(RpcResponse.Status.ERROR, resp.getStatus());
       assertTrue(
@@ -190,9 +182,6 @@ class ReverseRpcServicerTest {
               return Result.EMPTY_RESULT;
             });
 
-    // A reply sink that blocks (simulates a momentarily full bulk ring whose send spins to the
-    // deadline). If the reject path replied inline on the calling (reader) thread, accept() would
-    // block here — the very stall that can starve heartbeats and trip a false watchdog kill (A-1).
     CountDownLatch sinkBlock = new CountDownLatch(1);
     Consumer<Message> blockingSink =
         m -> {
@@ -208,11 +197,9 @@ class ReverseRpcServicerTest {
         new ReverseRpcServicer(
             registry, new ScannerRegistry(), blockingSink, SLOT, 1, 1, Duration.ofSeconds(5));
     try {
-      servicer.accept(getRequest(1, 7, "r1")); // occupies the single worker, blocks in region.get
+      servicer.accept(getRequest(1, 7, "r1"));
       assertTrue(started.await(2, TimeUnit.SECONDS), "first task did not start");
-      servicer.accept(getRequest(2, 7, "r2")); // fills the bounded queue
-      // The 3rd is rejected; its ERROR reply is handed to the overflow thread (which blocks on the
-      // sink), so accept() must return promptly rather than block inline on the reply send.
+      servicer.accept(getRequest(2, 7, "r2"));
       long t0 = System.nanoTime();
       servicer.accept(getRequest(3, 7, "r3"));
       long ms = (System.nanoTime() - t0) / 1_000_000L;
@@ -271,7 +258,6 @@ class ReverseRpcServicerTest {
         () -> "error detail: " + resp.getPayload().toStringUtf8());
   }
 
-  // Each single-arg nextRaw adds one row "rN" with cf:q="vN" and reports more rows remain.
   private void stubOneRowPerNext() throws Exception {
     when(scanner.nextRaw(anyList()))
         .thenAnswer(
@@ -285,7 +271,7 @@ class ReverseRpcServicerTest {
                       Bytes.toBytes("q"),
                       1L,
                       Bytes.toBytes("v" + i)));
-              return true; // more rows remain
+              return true;
             });
   }
 
@@ -300,7 +286,6 @@ class ReverseRpcServicerTest {
     long sid = scanners.register(100, scanner);
     stubOneRowPerNext();
 
-    // max-rows-per-next = 1: the batch stops after one row with has_more=true.
     servicer =
         new ReverseRpcServicer(
             regions, scanners, replies::add, SLOT, 4, 16, Duration.ofSeconds(5), false, SLOT, 1);
@@ -315,14 +300,13 @@ class ReverseRpcServicerTest {
     verify(region).closeRegionOperation();
   }
 
-  // TE42 max-rows-per-next: a SCAN_NEXT batch stops at the row cap with has_more=true.
   @Test
   void scanNextStopsAtMaxRowsPerNext() throws Exception {
     RegionRegistry regions = new RegionRegistry();
     regions.register(7, region);
     ScannerRegistry scanners = new ScannerRegistry();
     long sid = scanners.register(100, scanner);
-    stubOneRowPerNext(); // unbounded supply of rows
+    stubOneRowPerNext();
 
     servicer =
         new ReverseRpcServicer(
@@ -337,14 +321,13 @@ class ReverseRpcServicerTest {
     assertEquals(3, batch.getCellCount(), "row cap of 3 yields exactly 3 rows (one cell each)");
   }
 
-  // TE42 max-bytes-per-resp: a tiny byte ceiling stops the batch after one row, has_more=true.
   @Test
   void scanNextStopsAtMaxBytesPerResp() throws Exception {
     RegionRegistry regions = new RegionRegistry();
     regions.register(7, region);
     ScannerRegistry scanners = new ScannerRegistry();
     long sid = scanners.register(100, scanner);
-    stubOneRowPerNext(); // unbounded supply of rows
+    stubOneRowPerNext();
 
     servicer =
         new ReverseRpcServicer(
@@ -381,16 +364,12 @@ class ReverseRpcServicerTest {
     assertTrue(resp.getPayload().toStringUtf8().contains("unknown scanner"));
   }
 
-  // T2: a single row whose encoded size exceeds one ring slot must reply a clean ERROR and close +
-  // deregister the scanner (no crash loop, no pinned read point). Fast-feedback unit twin of the
-  // EndpointFaultIT oversized-row case, which the default `mvn verify` does not run.
   @Test
   void scanNextOversizedRowRepliesErrorAndClosesScanner() throws Exception {
     RegionRegistry regions = new RegionRegistry();
     regions.register(7, region);
     ScannerRegistry scanners = new ScannerRegistry();
     long sid = scanners.register(100, scanner);
-    // One row whose value alone dwarfs the (slot - headroom) ceiling.
     byte[] big = new byte[4096];
     when(scanner.nextRaw(anyList()))
         .thenAnswer(
@@ -399,10 +378,9 @@ class ReverseRpcServicerTest {
               out.add(
                   new KeyValue(
                       Bytes.toBytes("r"), Bytes.toBytes("cf"), Bytes.toBytes("q"), 1L, big));
-              return false; // scanner exhausted after this one row
+              return false;
             });
 
-    // SLOT_HEADROOM is 64 KiB; size the slot so max = slot - headroom = 1 KiB, below the 4 KiB row.
     int slot = 64 * 1024 + 1024;
     servicer =
         new ReverseRpcServicer(
@@ -447,7 +425,6 @@ class ReverseRpcServicerTest {
   void mutateDisabledRepliesErrorWithoutWriting() throws Exception {
     RegionRegistry registry = new RegionRegistry();
     registry.register(7, region);
-    // 7-arg constructor: allowMutate defaults false (read-only servicer).
     servicer =
         new ReverseRpcServicer(
             registry, new ScannerRegistry(), replies::add, SLOT, 4, 16, Duration.ofSeconds(5));
@@ -522,7 +499,6 @@ class ReverseRpcServicerTest {
     assertTrue(resp.getPayload().toStringUtf8().contains("no region"));
   }
 
-  // Stub the invoking region's table descriptor with the per-table allow-mutate coproc property.
   private void stubTableAllowMutate(String value) {
     CoprocessorDescriptor cd = mock(CoprocessorDescriptor.class);
     when(cd.getProperties())
@@ -532,14 +508,11 @@ class ReverseRpcServicerTest {
     when(region.getTableDescriptor()).thenReturn(td);
   }
 
-  // TE42 per-table gate: a table opting in (property=true) is allowed even when the cluster-wide
-  // baked default is off.
   @Test
   void mutateAllowedWhenTablePropertyOnEvenIfClusterOff() throws Exception {
     RegionRegistry registry = new RegionRegistry();
     registry.register(7, region);
     stubTableAllowMutate("true");
-    // 7-arg ctor: baked allowMutate=false (cluster default off).
     servicer =
         new ReverseRpcServicer(
             registry, new ScannerRegistry(), replies::add, SLOT, 4, 16, Duration.ofSeconds(5));
@@ -549,14 +522,11 @@ class ReverseRpcServicerTest {
     verify(region).put(any(Put.class));
   }
 
-  // TE42 per-table gate: a table opting out (property=false) is denied even when the cluster-wide
-  // baked default is on.
   @Test
   void mutateDeniedWhenTablePropertyOffEvenIfClusterOn() throws Exception {
     RegionRegistry registry = new RegionRegistry();
     registry.register(7, region);
     stubTableAllowMutate("false");
-    // 8-arg ctor: baked allowMutate=true (cluster default on).
     servicer =
         new ReverseRpcServicer(
             registry,

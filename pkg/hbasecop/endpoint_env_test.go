@@ -23,9 +23,6 @@ func revCell(family, qualifier, value string) *hbasepb.Cell {
 	}
 }
 
-// serveReverse stands up a fake bridge servicer: it drains reverse GET requests
-// off the client's writer, looks the row up in rows, and delivers the matching
-// Result. An absent row yields an empty Result. Returns a stop func.
 func serveReverse(
 	t *testing.T, rc *cpruntime.ReverseClient, out <-chan *wire.Message, rows map[string][]*hbasepb.Cell,
 ) func() {
@@ -72,7 +69,6 @@ func newTestEnv(t *testing.T, rows map[string][]*hbasepb.Cell) (*EndpointEnv, fu
 	return &EndpointEnv{rc: rc, regionID: 1}, stop
 }
 
-// TE32: env.Get reads a row's cells from the invoking region.
 func TestEndpointEnvGet(t *testing.T) {
 	env, stop := newTestEnv(t, map[string][]*hbasepb.Cell{
 		"row-1": {revCell("cf", "q", "hello")},
@@ -89,8 +85,6 @@ func TestEndpointEnvGet(t *testing.T) {
 	}
 }
 
-// TE32: the canonical data-dependent pattern — read A, then read B by a key from
-// A — works because each Get is an independent correlated round-trip.
 func TestEndpointEnvGetDataDependent(t *testing.T) {
 	env, stop := newTestEnv(t, map[string][]*hbasepb.Cell{
 		"a": {revCell("cf", "next", "b")},
@@ -116,7 +110,6 @@ func TestEndpointEnvGetDataDependent(t *testing.T) {
 	}
 }
 
-// A missing row is an empty (non-nil) Result, not an error.
 func TestEndpointEnvGetMissingRow(t *testing.T) {
 	env, stop := newTestEnv(t, map[string][]*hbasepb.Cell{})
 	defer stop()
@@ -130,7 +123,6 @@ func TestEndpointEnvGetMissingRow(t *testing.T) {
 	}
 }
 
-// With the reverse path disabled (nil client), Get fails cleanly.
 func TestEndpointEnvGetUnavailable(t *testing.T) {
 	var env EndpointEnv // rc == nil
 	if _, err := env.Get(context.Background(), []byte("x")); err == nil {
@@ -138,9 +130,6 @@ func TestEndpointEnvGetUnavailable(t *testing.T) {
 	}
 }
 
-// serveScan fakes the bridge's scanner servicing: SCAN_OPEN -> scanner_id 1;
-// each SCAN_NEXT returns the next batch with has_more set while batches remain;
-// SCAN_CLOSE -> OK. It asserts NEXT/CLOSE echo the assigned scanner_id.
 func serveScan(t *testing.T, rc *cpruntime.ReverseClient, out <-chan *wire.Message, batches [][]*hbasepb.Cell) func() {
 	t.Helper()
 	done := make(chan struct{})
@@ -184,8 +173,6 @@ func serveScan(t *testing.T, rc *cpruntime.ReverseClient, out <-chan *wire.Messa
 	return func() { close(done) }
 }
 
-// TE33: OpenScanner -> Next (until !hasMore) -> Close drives a server-side pull
-// scan, accumulating cells across batches.
 func TestEndpointEnvScanner(t *testing.T) {
 	out := make(chan *wire.Message, 8)
 	rc := cpruntime.NewReverseClient(nil)
@@ -222,7 +209,6 @@ func TestEndpointEnvScanner(t *testing.T) {
 		t.Fatalf("scanned values = %v, want [v1 v2]", got)
 	}
 
-	// Close is idempotent; Next after Close errors.
 	if err := sc.Close(context.Background()); err != nil {
 		t.Fatalf("second Close should be nil, got %v", err)
 	}
@@ -231,7 +217,6 @@ func TestEndpointEnvScanner(t *testing.T) {
 	}
 }
 
-// OpenScanner on a disabled reverse path fails cleanly.
 func TestEndpointEnvOpenScannerUnavailable(t *testing.T) {
 	var env EndpointEnv // rc == nil
 	if _, err := env.OpenScanner(context.Background(), &Scan{}); err == nil {
@@ -239,8 +224,6 @@ func TestEndpointEnvOpenScannerUnavailable(t *testing.T) {
 	}
 }
 
-// serveMutate fakes the bridge's MUTATE servicing: it records each applied
-// MutationProto on applied and replies OK. Asserts the op is MUTATE.
 func serveMutate(t *testing.T, rc *cpruntime.ReverseClient, out <-chan *wire.Message, applied chan<- *hbasepb.MutationProto) func() {
 	t.Helper()
 	done := make(chan struct{})
@@ -271,8 +254,6 @@ func serveMutate(t *testing.T, rc *cpruntime.ReverseClient, out <-chan *wire.Mes
 	return func() { close(done) }
 }
 
-// TE41: env.Put sends a reverse MUTATE to the invoking region, stamping
-// MutateType=PUT; the bridge receives the marshalled MutationProto and replies OK.
 func TestEndpointEnvPut(t *testing.T) {
 	out := make(chan *wire.Message, 8)
 	rc := cpruntime.NewReverseClient(nil)
@@ -291,7 +272,6 @@ func TestEndpointEnvPut(t *testing.T) {
 	}
 }
 
-// TE41: env.Delete stamps MutateType=DELETE.
 func TestEndpointEnvDelete(t *testing.T) {
 	out := make(chan *wire.Message, 8)
 	rc := cpruntime.NewReverseClient(nil)
@@ -310,7 +290,6 @@ func TestEndpointEnvDelete(t *testing.T) {
 	}
 }
 
-// With the reverse path disabled (nil client), Put fails cleanly.
 func TestEndpointEnvPutUnavailable(t *testing.T) {
 	var env EndpointEnv // rc == nil
 	if err := env.Put(context.Background(), &MutationProto{}); err == nil {
@@ -318,8 +297,6 @@ func TestEndpointEnvPutUnavailable(t *testing.T) {
 	}
 }
 
-// A nil mutation returns a clean error rather than panicking — the guards run
-// before MutateType is stamped on m.
 func TestEndpointEnvPutNilMutation(t *testing.T) {
 	out := make(chan *wire.Message, 1)
 	rc := cpruntime.NewReverseClient(nil)

@@ -10,17 +10,6 @@ import com.jgshmem.utils.Builder;
 import java.util.Objects;
 import java.util.Optional;
 
-/**
- * Thin typed wrapper over {@code com.jgshmem.ring.WaitingRingProducer / WaitingRingConsumer}. One
- * {@code Channel} is a single-direction endpoint over one shared-memory ring.
- *
- * <p>Mirrors {@code internal/shmem.Channel} on the Go side, including the {@link Role}-based
- * read/write asymmetry and the sentinel-style "no data" / "ring full" semantics. The wrapper is
- * payload-agnostic: framing and serialization are the caller's responsibility (see {@code
- * com.virogg.hbasecop.bridge.wire}).
- *
- * <p>Instances are not thread-safe - pair each Channel with a single owning thread.
- */
 public final class Channel implements AutoCloseable {
 
   private final Role role;
@@ -39,10 +28,6 @@ public final class Channel implements AutoCloseable {
     this.consumer = consumer;
   }
 
-  /**
-   * Opens one endpoint of a shmem ring. The underlying region is auto-created on first open and is
-   * shared with the peer endpoint opened against the same {@code filename}/{@code shmName}.
-   */
   public static Channel open(Config cfg) {
     validate(cfg);
 
@@ -66,18 +51,10 @@ public final class Channel implements AutoCloseable {
     return new Channel(Role.CONSUMER, maxPayload, null, c);
   }
 
-  /** Capacity of the underlying ring in slots. */
   public int capacity() {
     return role == Role.PRODUCER ? producer.getCapacity() : consumer.getCapacity();
   }
 
-  /**
-   * Publish one frame.
-   *
-   * @throws IllegalStateException if this Channel is not a producer
-   * @throws FrameTooLargeException if {@code frame.length > maxObjectSize - 4}
-   * @throws RingFullException if the consumer has not yet caught up
-   */
   public void send(byte[] frame) throws ShmemException {
     if (role != Role.PRODUCER) {
       throw new IllegalStateException("shmem: send on " + role + " channel");
@@ -100,12 +77,6 @@ public final class Channel implements AutoCloseable {
     producer.flush();
   }
 
-  /**
-   * Fetch the next available frame.
-   *
-   * @return the frame as a fresh byte[] copy, or {@link Optional#empty()} if the ring is empty
-   * @throws IllegalStateException if this Channel is not a consumer
-   */
   public Optional<byte[]> recv() {
     if (role != Role.CONSUMER) {
       throw new IllegalStateException("shmem: recv on " + role + " channel");
@@ -125,10 +96,6 @@ public final class Channel implements AutoCloseable {
     return Optional.of(out);
   }
 
-  /**
-   * Releases the mmap/shm region for this endpoint. The underlying file or shm object is left in
-   * place; the supervisor (T18) decides when to unlink. Idempotent.
-   */
   @Override
   public void close() {
     if (producer != null) {

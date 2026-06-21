@@ -18,11 +18,6 @@ import java.io.IOException;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.junit.jupiter.api.Test;
 
-/**
- * Wire-shape pins for the T42 Wave-3 hook payloads (CheckAnd* + Batch). Mostly default-instance
- * assertions on field numbering; full round-trip with real values is exercised through the adapter
- * integration tests where HBase native objects are available.
- */
 class CheckAndBatchConverterTest {
 
   @Test

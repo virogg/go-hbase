@@ -49,14 +49,6 @@ import org.apache.hadoop.hbase.master.RegionPlan;
 import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
 import org.apache.hbase.thirdparty.com.google.protobuf.InvalidProtocolBufferException;
 
-/**
- * T51 MasterObserver bridge. Routes every MasterObserver hook the SDK exposes (T51 Wave A - 20
- * master hooks across table lifecycle, enable/disable, region placement and balance) through the
- * shared {@link HookDispatcher} mux. Mirrors {@link RegionObserverAdapter}'s policy / dispatch /
- * bypass plumbing exactly: the same {@link PolicyConfig} resolves per-hook strict-vs-best-effort
- * behaviour by method name (e.g. {@code hbasecop.policy.preCreateTable}), so failure semantics stay
- * symmetric across the region and master surfaces.
- */
 public final class MasterObserverAdapter implements MasterObserver {
 
   private static final Logger LOG = System.getLogger(MasterObserverAdapter.class.getName());
@@ -68,8 +60,6 @@ public final class MasterObserverAdapter implements MasterObserver {
     this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
     this.policyConfig = Objects.requireNonNull(policyConfig, "policyConfig");
   }
-
-  // --- Table lifecycle -----------------------------------------------------
 
   @Override
   public void preCreateTable(
@@ -138,9 +128,6 @@ public final class MasterObserverAdapter implements MasterObserver {
             .build();
     HookResponse resp = dispatch(HookId.PRE_MODIFY_TABLE.value(), req.toByteArray());
     applyBypass(c, resp);
-    // The 4-arg preModifyTable hook lets observers replace the candidate
-    // descriptor before the modify commits; we always pass it through
-    // unchanged (modification policy is not exposed on the wire today).
     return newDescriptor;
   }
 
@@ -185,8 +172,6 @@ public final class MasterObserverAdapter implements MasterObserver {
     HookResponse resp = dispatch(HookId.POST_TRUNCATE_TABLE.value(), req.toByteArray());
     applyBypass(c, resp);
   }
-
-  // --- Enable / disable ----------------------------------------------------
 
   @Override
   public void preEnableTable(ObserverContext<MasterCoprocessorEnvironment> c, TableName tn)
@@ -235,8 +220,6 @@ public final class MasterObserverAdapter implements MasterObserver {
     HookResponse resp = dispatch(HookId.POST_DISABLE_TABLE.value(), req.toByteArray());
     applyBypass(c, resp);
   }
-
-  // --- Region placement ----------------------------------------------------
 
   @Override
   public void preMove(
@@ -313,8 +296,6 @@ public final class MasterObserverAdapter implements MasterObserver {
     applyBypass(c, resp);
   }
 
-  // --- Cluster balance -----------------------------------------------------
-
   @Override
   public void preBalance(ObserverContext<MasterCoprocessorEnvironment> c, BalanceRequest request)
       throws IOException {
@@ -343,12 +324,6 @@ public final class MasterObserverAdapter implements MasterObserver {
     applyBypass(c, resp);
   }
 
-  // --- Helpers -------------------------------------------------------------
-
-  /**
-   * HookContext on the master surface carries no table/region context (the per-hook payload does),
-   * so we send an empty envelope. RequestId is filled in by the mux.
-   */
   private static HookContext emptyCtx() {
     return HookContext.getDefaultInstance();
   }
@@ -389,7 +364,6 @@ public final class MasterObserverAdapter implements MasterObserver {
     return ByteString.copyFrom(RegionInfo.toByteArray(ri));
   }
 
-  /** Pulls each region's endKey (skipping the last, which always ends at +inf) as a split key. */
   private static void addSplitKeys(
       java.util.function.Consumer<ByteString> add, RegionInfo[] regions) {
     if (regions == null || regions.length <= 1) {
@@ -404,12 +378,6 @@ public final class MasterObserverAdapter implements MasterObserver {
     }
   }
 
-  /**
-   * Packs the two boolean knobs on HBase 2.5's {@link BalanceRequest} into the {@code balance_mode}
-   * int32 the proto carries (bit 0 = dryRun, bit 1 = ignoreRegionsInTransition). HBase 2.5's
-   * BalanceRequest doesn't expose a single "mode" enum - earlier versions of this adapter assumed
-   * it did and failed to compile.
-   */
   private static int balanceMode(BalanceRequest request) {
     if (request == null) {
       return 0;
@@ -424,10 +392,6 @@ public final class MasterObserverAdapter implements MasterObserver {
     return mode;
   }
 
-  /**
-   * Drive one hook call. Mirrors {@link RegionObserverAdapter#dispatch} exactly so policy
-   * resolution and STRICT-vs-best-effort behaviour stay symmetric across the two adapters.
-   */
   private HookResponse dispatch(byte hookId, byte[] reqBytes) throws IOException {
     HookPolicy pol = policyConfig.forHook(hookId);
     final byte[] respBytes;

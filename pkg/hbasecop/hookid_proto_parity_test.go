@@ -10,22 +10,11 @@ import (
 	"github.com/virogg/go-hbase/internal/wire/hookpb"
 )
 
-// normalizeHookName collapses a hook identifier to a casing/separator-free
-// form so the Go camelCase method name ("preWALWrite") and the proto
-// SCREAMING_SNAKE enum tail ("PRE_WAL_WRITE") compare equal regardless of
-// how acronyms are split.
 func normalizeHookName(s string) string {
 	return strings.ToLower(strings.ReplaceAll(s, "_", ""))
 }
 
-// TestHookIDMatchesProtoEnum is the parity guard that hooks.go's doc
-// comment has long promised but that never existed: it pins every Go
-// HookID constant used by the five dispatch tables to the numeric value
-// of its proto.HookId enumerator. hook_id is the on-wire dispatch key, so
-// drift between the Go constants and the proto enum would silently
-// mis-route hooks across the language boundary with no other test failing.
 func TestHookIDMatchesProtoEnum(t *testing.T) {
-	// normalized(proto enum tail) -> enum value, from the generated map.
 	protoByNorm := make(map[string]int32, len(hookpb.HookId_value))
 	for name, val := range hookpb.HookId_value {
 		tail := strings.TrimPrefix(name, "HOOK_ID_")
@@ -59,9 +48,6 @@ func TestHookIDMatchesProtoEnum(t *testing.T) {
 		t.Fatal("no hook tables populated")
 	}
 
-	// A HookID must be unique across ALL surfaces: the wire frame carries a
-	// single hook_id byte with no observer-class qualifier, so a collision
-	// would route one byte to two different hooks.
 	seen := make(map[HookID]string, len(all))
 	for _, r := range all {
 		if prev, dup := seen[r.id]; dup {

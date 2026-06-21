@@ -14,8 +14,6 @@ import (
 	"github.com/virogg/go-hbase/internal/wire/hookpb"
 )
 
-// appendBypassObserver bypasses preAppend and supplies a substitute Result
-// (one cell), exercising the H12 value-returning-bypass path.
 type appendBypassObserver struct {
 	UnimplementedRegionObserver
 }
@@ -35,9 +33,6 @@ func (appendBypassObserver) PreAppend(_ context.Context, _ ObserverEnv, _ *hookp
 	}, nil
 }
 
-// TestDispatchPreAppendResultBypass pins the H12 full fix: a value-returning
-// bypass on preAppend carries the observer's substitute cells back in
-// HookResponse.result so the Java adapter can return them to the client.
 func TestDispatchPreAppendResultBypass(t *testing.T) {
 	d := newDispatcher(appendBypassObserver{}, nil)
 
@@ -66,8 +61,6 @@ func TestDispatchPreAppendResultBypass(t *testing.T) {
 	}
 }
 
-// TestDispatchPreAppendNoBypassNoResult confirms the non-bypass path carries no
-// substitute cells (HBase proceeds normally).
 func TestDispatchPreAppendNoBypassNoResult(t *testing.T) {
 	d := newDispatcher(UnimplementedRegionObserver{}, nil) // default PreAppend: no bypass
 

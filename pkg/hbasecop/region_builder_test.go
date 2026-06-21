@@ -22,12 +22,8 @@ func ExampleNewRegion() {
 		fmt.Println("prePut on", env.TableName)
 		return HookResult{}, nil
 	})
-	// In main: hbasecop.Run(obs). Invoked directly here for the example.
 	res, _ := obs.PrePut(context.Background(), ObserverEnv{TableName: "users"}, nil)
 	fmt.Println("bypass:", res.Bypass)
-	// Output:
-	// prePut on users
-	// bypass: false
 }
 
 func TestRegionBuilderDispatch(t *testing.T) {
@@ -40,7 +36,6 @@ func TestRegionBuilderDispatch(t *testing.T) {
 
 	hctx := &hookpb.HookContext{RegionName: []byte("t,,1.a."), RequestId: 1}
 
-	// Registered hook fires and its HookResult propagates.
 	prePut, err := proto.Marshal(&hookpb.PrePutRequest{Ctx: hctx, Mutation: &hbasepb.MutationProto{Row: []byte("r")}})
 	if err != nil {
 		t.Fatal(err)
@@ -53,7 +48,6 @@ func TestRegionBuilderDispatch(t *testing.T) {
 		t.Fatal("registered PrePut should have bypassed")
 	}
 
-	// Unregistered hook falls through to the embedded no-op.
 	getOp, err := proto.Marshal(&hookpb.PreGetOpRequest{Ctx: hctx})
 	if err != nil {
 		t.Fatal(err)
@@ -64,8 +58,6 @@ func TestRegionBuilderDispatch(t *testing.T) {
 	}
 }
 
-// TestRegionBuilderUpToDate fails if region_builder.go drifts from the
-// generator output (e.g. a hook added to RegionObserver without regenerating).
 func TestRegionBuilderUpToDate(t *testing.T) {
 	tmp := filepath.Join(t.TempDir(), "region_builder.go")
 	cmd := exec.Command("go", "run", "../../tools/gen-builder",

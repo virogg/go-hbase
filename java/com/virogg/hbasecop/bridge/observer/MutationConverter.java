@@ -20,11 +20,6 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
 
-/**
- * Converts an HBase {@link Mutation} (Put/Delete/Append/Increment) to {@link MutationProto}. The
- * four subtypes share the same wire shape; {@code mutate_type} discriminates and the per-cell
- * {@code delete_type} field carries the Delete sub-flavour.
- */
 final class MutationConverter {
 
   private MutationConverter() {}
@@ -86,12 +81,6 @@ final class MutationConverter {
     return b;
   }
 
-  // Carry mutation-level attributes across the wire. In HBase 2.5 CellVisibility
-  // (setCellVisibility), per-cell ACL (setACL) and TTL (setTTL) are all stored as
-  // entries in the mutation's attribute map, alongside any custom operation
-  // attributes. Dropping them meant a Go validation/audit/security observer
-  // decided on incomplete data; emitting the full map (deterministically ordered
-  // for stable wire bytes) lets the observer see exactly what the client attached.
   private static void appendAttributes(MutationProto.Builder b, Mutation m) {
     Map<String, byte[]> attrs = m.getAttributesMap();
     if (attrs.isEmpty()) {

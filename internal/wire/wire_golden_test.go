@@ -14,14 +14,6 @@ import (
 	"github.com/virogg/go-hbase/internal/wiregolden"
 )
 
-// TestGoldenCorpus is the Go half of the T13 cross-language verification.
-// For every fixture in test/golden/wire/v1/fixtures.tsv we check that:
-//
-//  1. Encoding the logical Message produces byte-identical bytes to <name>.bin.
-//  2. Decoding <name>.bin yields a Message equal to the logical Message.
-//
-// The Java half (WireGoldenTest) makes the same assertions against the same
-// .bin files, so the corpus proves Go encode ↔ Java decode bit-for-bit.
 func TestGoldenCorpus(t *testing.T) {
 	dir := goldenDir(t)
 	tsv, err := os.Open(filepath.Join(dir, "fixtures.tsv"))
@@ -75,9 +67,6 @@ func TestGoldenCorpus(t *testing.T) {
 	}
 }
 
-// goldenDir resolves the repo-rooted test/golden/wire/v1 directory from
-// this test's source location. Runtime.Caller(0) is used because go test
-// runs with the package directory as cwd, not the repo root.
 func goldenDir(t *testing.T) string {
 	t.Helper()
 	_, file, _, ok := runtime.Caller(0)
@@ -87,8 +76,6 @@ func goldenDir(t *testing.T) string {
 	return filepath.Join(filepath.Dir(file), "..", "..", "test", "golden", "wire", "v1")
 }
 
-// normalizePayload accounts for the Decoder always returning a non-nil
-// (possibly empty) byte slice even when the encoded payload was nil.
 func normalizePayload(p []byte) []byte {
 	if p == nil {
 		return []byte{}

@@ -10,58 +10,15 @@ import (
 	"github.com/virogg/go-hbase/internal/wire/hookpb"
 )
 
-// MutationProto is the on-wire HBase mutation (Put/Delete/Append/etc.)
-// vendored under proto/hbase/Client.proto. Re-exported so coprocessor
-// authors need not depend on internal packages.
-//
-// Phase 2 wires the Put-shaped hooks (PrePut/PostPut) end-to-end. Remaining
-// T41 hooks carry only HookContext today; T42 grows their per-hook payload.
 type MutationProto = hbasepb.MutationProto
 
-// HookResult is the per-call decision the observer relays back to the Java
-// adapter. Bypass=true makes the adapter call ObserverContext.bypass() so
-// HBase skips its own hook implementation. Post-hooks ignore Bypass; the
-// RegionObserver method docs say which hooks honour it.
-//
-// BlockedIndices is honored only by batch-shaped hooks (PreBatchMutate
-// today). Each value is a zero-based index into the inbound
-// MutationOperation list; the Java adapter applies
-// MiniBatchOperationInProgress.setOperationStatus(i, SANITY_CHECK_FAILURE)
-// per listed index, failing that mutation while the rest of the batch
-// proceeds. Out-of-range or duplicate indices are silently ignored
-// Java-side. Non-batch hooks ignore this field; return Bypass to
-// short-circuit a non-batch call.
 type HookResult struct {
 	Bypass         bool
 	BlockedIndices []uint32
 
-	// ResultCells is the substitute Result for value-returning bypass
-	// hooks: PreAppend / PreIncrement and their *AfterRowLock variants.
-	// When Bypass is true on one of those, these cells return to the client
-	// as the operation's Result (nil/empty slice yields an empty Result).
-	// Ignored by every other hook. Cells use the vendored [hbasepb.Cell]
-	// type (same package as [MutationProto]).
 	ResultCells []*hbasepb.Cell
 }
 
-// RegionObserver is the public SDK contract for region-scoped HBase
-// coprocessors. The runtime invokes one method per HBase hook; calls may
-// be concurrent across regions, so implementations must be concurrency-safe.
-//
-// Mirrors every method on
-// org.apache.hadoop.hbase.coprocessor.RegionObserver (HBase 2.5), giving
-// the Go side a 1:1 dispatch target per Java hook. New observers embed
-// [UnimplementedRegionObserver] and override only the hooks they need;
-// implementing every method by hand works but is uncommon.
-//
-// Frozen contract: PrePut and PostPut keep their Phase-2 signatures
-// (taking *MutationProto directly). Other T41 hooks take their per-hook
-// *hookpb.<Hook>Request envelope; T42 grows each envelope with concrete
-// HBase types (Cell, Get, Scan, ...) without breaking the method shape.
-//
-// A non-nil error from a Pre-hook surfaces as IOException Java-side under
-// strict policy (T32); best-effort policy downgrades to a WARN log and
-// proceeds with HBase's own behaviour.
 type RegionObserver interface {
 	// Lifecycle.
 	PreOpen(ctx context.Context, env ObserverEnv, req *hookpb.PreOpenRequest) (HookResult, error)

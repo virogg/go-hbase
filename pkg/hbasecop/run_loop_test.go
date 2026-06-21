@@ -61,12 +61,6 @@ func openLoopHarness(t *testing.T) *loopHarness {
 	}
 }
 
-// TestRunDispatchesPrePutThroughLoop drives the full SDK→runtime path:
-// a PrePut wire frame entering the loop's inbound ring is routed
-// through the dispatcher onto the user's RegionObserver and the
-// resulting HookResponse comes back on the outbound ring. This is the
-// T22 acceptance verify ("send PrePut frame → handler called with
-// expected Mutation → response correctly serialized").
 func TestRunDispatchesPrePutThroughLoop(t *testing.T) {
 	h := openLoopHarness(t)
 	obs := &capturingObserver{prePutResult: HookResult{Bypass: true}}

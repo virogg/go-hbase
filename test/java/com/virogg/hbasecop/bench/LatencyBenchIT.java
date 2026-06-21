@@ -27,26 +27,6 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-/**
- * T81 latency bench: p50/p95/p99 of prePut/postPut through the full bridge (adapter, proto
- * conversion, wire encode, shmem ring, Go no-op observer, response) vs the Java-only baseline (same
- * calls against a default-method no-op {@link RegionObserver}). The delta of the two distributions
- * is the per-hook overhead go-hbase adds over a native Java coprocessor. SPEC §7.6 / plan T81 gate:
- * &lt;100µs p50 on prePut.
- *
- * <p>Batch size N models how HBase delivers hooks: a client batch of N mutations reaches the region
- * as N back-to-back prePut invocations on one handler thread. batch=1 runs continuous serial round
- * trips (same methodology as the T19 ping-pong baseline, and the regime the SPEC target describes:
- * under load the rings stay warm, an idle system does not care about µs). It carries the gate.
- * batch=100/1000 issue bursts separated by a 1ms idle gap. A fourth, non-gated "sparse" leg (single
- * calls each preceded by 1ms idle) reports the cold-resume cost after the spin-wait readers have
- * been descheduled: scheduler-dominated and noisy on WSL2/shared runners, hence informational only.
- *
- * <p>Excluded from {@code mvn verify} by the *IT suffix; run via {@code make bench-latency}, which
- * first stages the no-op Go ELF (see test/bench/noop-observer). Knobs: {@code -Dbench.ops} (per
- * leg, default 10000), {@code -Dbench.warmup} (default 2000), {@code -Dbench.prePut.p50.max.us}
- * (gate, default 100).
- */
 class LatencyBenchIT {
 
   private static final int[] BATCH_SIZES = {1, 100, 1000};
@@ -59,7 +39,6 @@ class LatencyBenchIT {
   private static RegionObserver bridgeObserver;
   private static ObserverContext<RegionCoprocessorEnvironment> ctx;
 
-  /** The Java-only baseline: every RegionObserver method is an interface default no-op. */
   private static final RegionObserver JAVA_ONLY = new RegionObserver() {};
 
   @BeforeAll
@@ -108,14 +87,11 @@ class LatencyBenchIT {
 
   @Test
   void prePutP50OverheadUnderTarget() throws Exception {
-    // Warm up both legs (JIT + ring/reader steady state) before any timing.
     runLeg(bridgeObserver, true, WARMUP, WARMUP, false);
     runLeg(JAVA_ONLY, true, WARMUP, WARMUP, false);
 
     long gatedOverheadUs = -1;
     for (int batch : BATCH_SIZES) {
-      // batch=1 is continuous serial (the gated steady state); larger batches
-      // are bursts separated by a 1ms idle gap.
       boolean gapped = batch > 1;
       long[] bridgePre = runLeg(bridgeObserver, true, OPS, batch, gapped);
       long[] basePre = runLeg(JAVA_ONLY, true, OPS, batch, gapped);
@@ -138,8 +114,6 @@ class LatencyBenchIT {
       }
     }
 
-    // Non-gated sparse leg: one call per 1ms idle window, i.e. the
-    // cold-resume cost once the spin-wait readers have been descheduled.
     long[] sparse = runLeg(bridgeObserver, true, OPS / 4, 1, true);
     System.out.printf(
         Locale.ROOT,
@@ -158,11 +132,6 @@ class LatencyBenchIT {
             P50_MAX_US));
   }
 
-  /**
-   * Issues {@code ops} timed hook calls in bursts of {@code batch}, returning per-call latencies in
-   * nanoseconds. With {@code gapBetweenBursts}, bursts are separated by a 1ms idle window so the
-   * spin-wait reader threads go cold between them; without it the stream is continuous.
-   */
   private static long[] runLeg(
       RegionObserver observer, boolean pre, int ops, int batch, boolean gapBetweenBursts)
       throws Exception {

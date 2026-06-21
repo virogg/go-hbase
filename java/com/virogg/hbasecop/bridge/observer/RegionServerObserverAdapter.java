@@ -30,18 +30,6 @@ import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionServerObserver;
 import org.apache.hbase.thirdparty.com.google.protobuf.InvalidProtocolBufferException;
 
-/**
- * T52 RegionServerObserver bridge. Routes every RegionServerObserver hook the SDK exposes (T52 Wave
- * A - 9 server-scoped hooks: stop, WAL-writer roll, replication, compaction-queue clearing and
- * procedure execution) through the shared {@link HookDispatcher} mux. Mirrors {@link
- * MasterObserverAdapter}'s policy / dispatch / bypass plumbing exactly: the same {@link
- * PolicyConfig} resolves per-hook strict-vs-best-effort behaviour by method name (e.g. {@code
- * hbasecop.policy.preStopRegionServer}), so failure semantics stay symmetric across the region,
- * master and region-server surfaces.
- *
- * <p>RegionServerObserver hooks carry no table/region context - the affected RegionServer is
- * identified by the {@code server} field, taken from {@code env.getServerName()}.
- */
 public final class RegionServerObserverAdapter implements RegionServerObserver {
 
   private static final Logger LOG = System.getLogger(RegionServerObserverAdapter.class.getName());
@@ -54,8 +42,6 @@ public final class RegionServerObserverAdapter implements RegionServerObserver {
     this.policyConfig = Objects.requireNonNull(policyConfig, "policyConfig");
   }
 
-  // --- Server lifecycle ----------------------------------------------------
-
   @Override
   public void preStopRegionServer(ObserverContext<RegionServerCoprocessorEnvironment> c)
       throws IOException {
@@ -64,8 +50,6 @@ public final class RegionServerObserverAdapter implements RegionServerObserver {
     HookResponse resp = dispatch(HookId.PRE_STOP_REGION_SERVER.value(), req.toByteArray());
     applyBypass(c, resp);
   }
-
-  // --- WAL writer roll -----------------------------------------------------
 
   @Override
   public void preRollWALWriterRequest(ObserverContext<RegionServerCoprocessorEnvironment> c)
@@ -91,8 +75,6 @@ public final class RegionServerObserverAdapter implements RegionServerObserver {
     applyBypass(c, resp);
   }
 
-  // --- Replication log entries ---------------------------------------------
-
   @Override
   public void preReplicateLogEntries(ObserverContext<RegionServerCoprocessorEnvironment> c)
       throws IOException {
@@ -116,8 +98,6 @@ public final class RegionServerObserverAdapter implements RegionServerObserver {
     HookResponse resp = dispatch(HookId.POST_REPLICATE_LOG_ENTRIES.value(), req.toByteArray());
     applyBypass(c, resp);
   }
-
-  // --- Compaction queue clearing -------------------------------------------
 
   @Override
   public void preClearCompactionQueues(ObserverContext<RegionServerCoprocessorEnvironment> c)
@@ -143,8 +123,6 @@ public final class RegionServerObserverAdapter implements RegionServerObserver {
     applyBypass(c, resp);
   }
 
-  // --- Procedure execution -------------------------------------------------
-
   @Override
   public void preExecuteProcedures(ObserverContext<RegionServerCoprocessorEnvironment> c)
       throws IOException {
@@ -163,12 +141,6 @@ public final class RegionServerObserverAdapter implements RegionServerObserver {
     applyBypass(c, resp);
   }
 
-  // --- Helpers -------------------------------------------------------------
-
-  /**
-   * HookContext on the region-server surface carries no table/region context (the {@code server}
-   * field does), so we send an empty envelope. RequestId is filled in by the mux.
-   */
   private static HookContext emptyCtx() {
     return HookContext.getDefaultInstance();
   }
@@ -191,10 +163,6 @@ public final class RegionServerObserverAdapter implements RegionServerObserver {
         .build();
   }
 
-  /**
-   * Drive one hook call. Mirrors {@link MasterObserverAdapter#dispatch} exactly so policy
-   * resolution and STRICT-vs-best-effort behaviour stay symmetric across the three adapters.
-   */
   private HookResponse dispatch(byte hookId, byte[] reqBytes) throws IOException {
     HookPolicy pol = policyConfig.forHook(hookId);
     final byte[] respBytes;

@@ -31,16 +31,6 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 
-/**
- * Shared scaffolding for the native-vs-Go coprocessor comparison ITs (docs/bench/compare-*). Each
- * comparison registers the SAME logic two ways on a live HBase cluster — a hand-written native Java
- * coprocessor ({@code native-coproc.jar}) and the Go bridge example — runs an identical workload
- * against both, asserts the results are equivalent, and prints machine-readable {@code
- * COMPARE_RESULT} / {@code COMPARE_SUMMARY} lines for the perf report (report-only, never gated).
- *
- * <p>Not part of {@code mvn test} (the {@code *CompareIT} suffix is excluded by Surefire's
- * default); run via {@code make compare-*}, which boots the cluster and stages the jars.
- */
 final class CompareSupport {
 
   static final String CONTAINER_NAME = "go-hbase-dev";
@@ -48,7 +38,6 @@ final class CompareSupport {
   static final String ZK_PORT = "2181";
   static final byte[] CF = "cf".getBytes(StandardCharsets.UTF_8);
 
-  /** The native-coproc jar staged into the container bind-mount, and its coprocessor FQCNs. */
   static final String NATIVE_JAR = "file:///coproc-jars/native-coproc.jar";
 
   static final String NATIVE_JAR_HOST = "test/integration/coproc-jars/native-coproc.jar";
@@ -61,21 +50,15 @@ final class CompareSupport {
   static final String NATIVE_FILTER_FQCN =
       "com.virogg.hbasecop.examples.nativecoproc.NativeFilterObserver";
 
-  /** The stock Go-bridge region entrypoint (exposes the Go endpoint Service). */
   static final String GENERIC_FQCN = "com.virogg.hbasecop.bridge.entrypoint.GenericRegionObserver";
 
   private CompareSupport() {}
-
-  // -- cluster client ---------------------------------------------------------
 
   static Configuration clientConfig() {
     Configuration cfg = HBaseConfiguration.create();
     cfg.set("hbase.zookeeper.quorum", ZK_QUORUM);
     cfg.set("hbase.zookeeper.property.clientPort", ZK_PORT);
     cfg.set("zookeeper.recovery.retry", "2");
-    // Comparison runs on a healthy local standalone cluster; keep retries low so the TTL
-    // equivalence cases that are SUPPOSED to be rejected fail fast instead of burning the full
-    // retry/backoff budget (which otherwise dominates the run).
     cfg.set("hbase.client.retries.number", "2");
     cfg.set("hbase.client.pause", "200");
     cfg.set("hbase.rpc.timeout", "30000");
@@ -119,9 +102,6 @@ final class CompareSupport {
     return Paths.get(hostRelativePath).toAbsolutePath();
   }
 
-  // -- table lifecycle --------------------------------------------------------
-
-  /** Creates a single-region table with one column family and no coprocessor. */
   static void createPlainTable(Admin admin, TableName tn) throws IOException {
     admin.createTable(
         TableDescriptorBuilder.newBuilder(tn)
@@ -129,7 +109,6 @@ final class CompareSupport {
             .build());
   }
 
-  /** Creates a single-region table with one column family and the given coprocessor attached. */
   static void createTableWithCoproc(Admin admin, TableName tn, String fqcn, String jarInContainer)
       throws IOException {
     admin.createTable(
@@ -143,10 +122,6 @@ final class CompareSupport {
             .build());
   }
 
-  /**
-   * Attaches a coprocessor to an existing (already-seeded) table via the disable/modify/enable
-   * cycle. Used by the filter comparison so the seed Puts never traverse the read-path observer.
-   */
   static void attachCoproc(Admin admin, TableName tn, String fqcn, String jarInContainer)
       throws IOException {
     admin.disableTable(tn);
@@ -172,13 +147,6 @@ final class CompareSupport {
     admin.deleteTable(tn);
   }
 
-  // -- endpoint invocation (identical client path for both arms) --------------
-
-  /**
-   * Invokes the {@code sum} endpoint over every region of {@code table} and reduces the per-region
-   * partials into one total — the same {@link EndpointClient} client path for both the native and
-   * the Go arm; only the server-side Service implementation differs.
-   */
   static long sumEndpoint(Table table, byte[] qualifier) throws Throwable {
     return EndpointClient.callAndReduce(
         table,
@@ -188,9 +156,6 @@ final class CompareSupport {
         (acc, partial) -> acc + Long.parseLong(new String(partial, StandardCharsets.UTF_8)));
   }
 
-  // -- log scraping (audit equivalence) ---------------------------------------
-
-  /** Returns the whole {@code docker logs} output of the HBase container. */
   static String dockerLogs() throws IOException, InterruptedException {
     ProcessBuilder pb = new ProcessBuilder("sh", "-c", "docker logs " + CONTAINER_NAME + " 2>&1");
     pb.redirectErrorStream(true);
@@ -210,9 +175,6 @@ final class CompareSupport {
     return sb.toString();
   }
 
-  // -- perf reporting ---------------------------------------------------------
-
-  /** Times one call in nanoseconds. */
   static long timeNanos(ThrowingRunnable r) throws Throwable {
     long t0 = System.nanoTime();
     r.run();
@@ -248,7 +210,6 @@ final class CompareSupport {
     return nanos / 1_000.0;
   }
 
-  /** Prints one machine-readable per-arm result line. */
   static void printResult(String bench, String arm, List<Long> samples) {
     System.out.printf(
         Locale.ROOT,
@@ -261,7 +222,6 @@ final class CompareSupport {
         samples.size());
   }
 
-  /** Prints the comparison summary line (native vs Go medians + ratio). */
   static void printSummary(
       String bench, List<Long> nativeSamples, List<Long> goSamples, boolean equivalent) {
     double nat = us(medianNanos(nativeSamples));
@@ -278,7 +238,6 @@ final class CompareSupport {
         equivalent);
   }
 
-  /** Convenience: build a list of distinct row keys with a prefix. */
   static List<byte[]> rowKeys(String prefix, int from, int count) {
     List<byte[]> out = new ArrayList<>(count);
     for (int i = from; i < from + count; i++) {
@@ -287,7 +246,6 @@ final class CompareSupport {
     return out;
   }
 
-  /** Drops every table whose name is in {@code names}, ignoring absent ones. */
   static void dropAll(Admin admin, Map<String, TableName> names) throws IOException {
     for (TableName tn : names.values()) {
       dropTable(admin, tn);

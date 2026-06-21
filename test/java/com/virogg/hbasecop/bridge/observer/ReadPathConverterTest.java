@@ -19,14 +19,6 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.PrefixFilter;
 import org.junit.jupiter.api.Test;
 
-/**
- * Round-trip checks for the T42 Wave-1 read-path converters: every shippable HBase native type used
- * by preGetOp / preExists / preScanner* is mapped to its proto twin and (where applicable) back.
- *
- * <p>The proto envelope is the wire contract; "round-trip" here is HBase→proto→bytes→proto and an
- * equals check on the proto side, because reconstructing the HBase native object on the Go side is
- * the Go runtime's job. Tests assert each populated field survives the encode step intact.
- */
 class ReadPathConverterTest {
 
   @Test
@@ -102,8 +94,6 @@ class ReadPathConverterTest {
     assertEquals(0L, redecoded.getTimeRange().getFrom());
     assertEquals(999L, redecoded.getTimeRange().getTo());
     assertEquals(1, redecoded.getColumnCount());
-    // The Scan API "addFamily(cf)" registers the family with no
-    // qualifiers; proto must reflect that.
     assertEquals(0, redecoded.getColumn(0).getQualifierCount());
   }
 

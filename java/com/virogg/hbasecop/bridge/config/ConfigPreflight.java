@@ -13,14 +13,8 @@ import java.util.Set;
 import java.util.regex.Pattern;
 import org.apache.hadoop.conf.Configuration;
 
-/**
- * Validates {@code hbasecop.*} configuration at coprocessor start so a typo'd key or malformed
- * value fails fast at region-open instead of lazily on the first hook of a live write path.
- * Malformed values throw; unknown keys and unknown per-hook suffixes log a WARN.
- */
 public final class ConfigPreflight {
 
-  // Exact keys whose value is a Hadoop duration (a unit is required).
   private static final Set<String> DURATION_KEYS =
       Set.of(
           "hbasecop.heartbeat.period",
@@ -34,7 +28,6 @@ public final class ConfigPreflight {
           "hbasecop.endpoint.scanner-idle-lease",
           PolicyConfig.KEY_TIMEOUT_DEFAULT);
 
-  // Exact keys whose value must be a positive integer.
   private static final Set<String> POSITIVE_INT_KEYS =
       Set.of(
           "hbasecop.heartbeat.miss-threshold",
@@ -50,17 +43,12 @@ public final class ConfigPreflight {
           "hbasecop.endpoint.max-bytes-per-resp",
           "hbasecop.endpoint.max-rows-per-next");
 
-  // Exact keys whose value must be a boolean.
   private static final Set<String> BOOLEAN_KEYS = Set.of("hbasecop.endpoint.allow-mutate");
 
   private static final Pattern DURATION = Pattern.compile("\\d+\\s*(ns|us|ms|s|m|h|d)");
 
   private ConfigPreflight() {}
 
-  /**
-   * Validate every {@code hbasecop.*} entry in conf. Throws IllegalArgumentException listing all
-   * malformed values; logs a WARN per unknown key or unknown per-hook suffix.
-   */
   public static void validate(Configuration conf, Logger log) {
     if (conf == null) {
       return;
@@ -73,10 +61,6 @@ public final class ConfigPreflight {
       }
       String val = e.getValue();
       if (key.startsWith(PolicyConfig.KEY_POLICY_PREFIX)) {
-        // Only a known hook suffix is a framework failure-policy key; value-check just those.
-        // An unknown suffix (e.g. an observer's own hbasecop.policy.* app key) is a WARN, never
-        // an error — else a stray key would abort coprocessor start and, for a cluster-wide
-        // master/RS coprocessor, take the whole HMaster/RegionServer down with it.
         if (knownHookKey(key, PolicyConfig.KEY_POLICY_PREFIX, log)
             && !val.equals("strict")
             && !val.equals("best-effort")) {
@@ -104,11 +88,6 @@ public final class ConfigPreflight {
     }
   }
 
-  /**
-   * True iff {@code key}'s per-hook suffix names a known hook, so its value is a framework
-   * policy/timeout key worth validating. Otherwise WARNs (an observer may read it as its own
-   * config) and returns false so the caller skips the value check.
-   */
   private static boolean knownHookKey(String key, String prefix, Logger log) {
     String hook = key.substring(prefix.length());
     if (!hook.isEmpty() && HookId.byMethodName(hook) != null) {

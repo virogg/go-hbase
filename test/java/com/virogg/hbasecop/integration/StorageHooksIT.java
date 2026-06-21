@@ -30,19 +30,6 @@ import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.junit.jupiter.api.Test;
 
-/**
- * T45 integration test: exercises the storage hooks (preFlush/postFlush, preCompactSelection,
- * preCompact/postCompact) end-to-end through the {@code filter-observer} coproc-jar on a live HBase
- * 2.5 standalone cluster.
- *
- * <p>The observer's flush/compact handlers are passive recorders - they emit a uniquely-tagged
- * {@code "filter-observer: <hook>"} slog line per invocation. The IT pre-populates the table,
- * drives {@code admin.flush(tn)} twice (to materialise two HFiles), and then {@code
- * admin.majorCompact(tn)}, waiting for the compaction state to return to NONE. It then greps the
- * docker logs for the expected lines, proving the hooks fired end-to-end through the bridge.
- *
- * <p>Not part of {@code mvn test}; invoked by {@code make test-integration-storage}.
- */
 final class StorageHooksIT {
 
   private static final String CONTAINER_NAME = "go-hbase-dev";
@@ -97,7 +84,6 @@ final class StorageHooksIT {
 
       createTableWithCoproc(admin, tn);
       try (Table table = conn.getTable(tn)) {
-        // First batch + flush - materialises HFile #1.
         populate(table, "row-a-", N_PER_FLUSH);
         admin.flush(tn);
         waitForLog(
@@ -109,8 +95,6 @@ final class StorageHooksIT {
             LOG_GRACE,
             "postFlush after flush #1");
 
-        // Second batch + flush - materialises HFile #2 so a major compaction
-        // has at least two store-files to merge (otherwise HBase may no-op).
         populate(table, "row-b-", N_PER_FLUSH);
         admin.flush(tn);
         waitForLog(
@@ -200,10 +184,6 @@ final class StorageHooksIT {
     }
   }
 
-  /**
-   * Polls {@link Admin#getCompactionState(TableName)} until it returns to NONE or the deadline
-   * elapses. HBase major-compaction is asynchronous on the server.
-   */
   private static void waitForCompaction(Admin admin, TableName tn, Duration deadline)
       throws Exception {
     Instant cutoff = Instant.now().plus(deadline);
@@ -233,7 +213,6 @@ final class StorageHooksIT {
         label + ": expected ≥ " + expectedDelta + " new '" + needle + "' lines, got " + actual);
   }
 
-  /** Runs {@code docker logs {container} 2>&1 | grep -c '<needle>'}. */
   private static long countLogLines(String needle) throws IOException, InterruptedException {
     String safe = needle.replace("'", "'\\''");
     ProcessBuilder pb =

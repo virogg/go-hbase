@@ -17,9 +17,6 @@ import (
 	"github.com/virogg/go-hbase/internal/wire/wirepb"
 )
 
-// preWALWriteFrame builds a representative inbound preWALWrite Request
-// frame: a WALEdit carrying cellCount cells, the shape the WAL append
-// hot path serialises on every edit.
 func preWALWriteFrame(b *testing.B, cellCount int) *wire.Message {
 	b.Helper()
 	edit := &hookpb.WalEditProto{}
@@ -53,11 +50,6 @@ func preWALWriteFrame(b *testing.B, cellCount int) *wire.Message {
 	}
 }
 
-// BenchmarkWALDispatchPreWALWrite measures the per-call cost the
-// WALObserver bridge adds on the WAL append hot path: decode the inbound
-// frame, invoke a no-op observer, encode the response frame. preWALWrite
-// is latency-critical (T53), so this guards the in-process dispatch
-// overhead independently of a live HBase WAL-throughput run (T82).
 func BenchmarkWALDispatchPreWALWrite(b *testing.B) {
 	d := newWALDispatcher(UnimplementedWALObserver{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	ctx := context.Background()

@@ -30,14 +30,6 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.junit.jupiter.api.Test;
 
-/**
- * T72 integration test: 25 Puts + 25 Deletes through the audit-observer coproc on a live HBase 2.5
- * standalone cluster → exactly 50 JSON audit records in the RegionServer log, none of them leaking
- * the raw row key (SPEC §8).
- *
- * <p>Invoked by {@code make test-integration-audit}, which stages {@code audit-observer.jar} into
- * the container bind-mount and manages the cluster lifecycle. Not part of {@code mvn test}.
- */
 final class AuditObserverIT {
 
   private static final String CONTAINER_NAME = "go-hbase-dev";
@@ -107,7 +99,6 @@ final class AuditObserverIT {
             delta,
             () -> "expected exactly " + expected + " audit records this run, got " + delta);
 
-        // SPEC §8: audit records must not leak raw row keys.
         assertEquals(
             0L,
             countLogMatches(AUDIT_MARKER + ".*row-0\""),
@@ -170,7 +161,6 @@ final class AuditObserverIT {
     return countLogMatches(AUDIT_MARKER);
   }
 
-  /** Runs `docker logs {container} 2>&1 | grep -cE '{pattern}'`. */
   private static long countLogMatches(String pattern) throws IOException, InterruptedException {
     ProcessBuilder pb =
         new ProcessBuilder(
@@ -192,7 +182,7 @@ final class AuditObserverIT {
       throw new IOException("docker logs grep timed out");
     }
     int code = proc.exitValue();
-    if (code != 0 && code != 1) { // grep -c exits 1 on zero matches
+    if (code != 0 && code != 1) {
       throw new IOException("docker logs grep exited " + code);
     }
     return Long.parseLong(out);

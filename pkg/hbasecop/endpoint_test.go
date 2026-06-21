@@ -98,9 +98,6 @@ func TestDispatchEndpointNilEndpointIsError(t *testing.T) {
 	}
 }
 
-// TestDispatchEndpointPropagatesContextAndMethod pins the single-handler
-// contract: the caller's context reaches the handler, and an arbitrary/unknown
-// method name is passed through verbatim (routing by name is the user's job).
 func TestDispatchEndpointPropagatesContextAndMethod(t *testing.T) {
 	type ctxKey struct{}
 	ctx := context.WithValue(context.Background(), ctxKey{}, "deadline-owner")
@@ -128,9 +125,6 @@ func TestDispatchEndpointPropagatesContextAndMethod(t *testing.T) {
 	}
 }
 
-// TestEncodeMinimalErrorRoundTrips verifies the hand-encoded fallback used when
-// proto.Marshal of a wirepb.Error fails: it must still decode to the same Error
-// so the client gets a prompt failure instead of a silent hang (E2GO-4).
 func TestEncodeMinimalErrorRoundTrips(t *testing.T) {
 	raw := encodeMinimalError(errCodeMarshalResponse, "boom detail")
 	var werr wirepb.Error

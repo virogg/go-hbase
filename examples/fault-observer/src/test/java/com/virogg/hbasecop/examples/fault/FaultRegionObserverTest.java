@@ -12,12 +12,6 @@ import java.util.Map;
 import org.apache.hadoop.conf.Configuration;
 import org.junit.jupiter.api.Test;
 
-/**
- * Unit-level checks for the {@code hbasecop.fault.mode} → {@code HBASECOP_FAULT_MODE} mapping.
- * Driving a real {@link FaultRegionObserver} through its RegionCoprocessor lifecycle requires a
- * live RegionServer; here we exercise the pure {@code envFromConfig} helper that the lifecycle
- * code calls when populating {@code CoprocessorRuntime.Config.extraEnv}.
- */
 final class FaultRegionObserverTest {
 
   @Test

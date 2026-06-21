@@ -19,10 +19,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
-/** Mirror of internal/wire/wire_test.go on the Go side; same scenarios, same assertions. */
 class WireRoundTripTest {
-
-  // --- Single-chunk round-trip --------------------------------------------
 
   static Stream<Arguments> singleChunkCases() {
     return Stream.of(
@@ -55,8 +52,6 @@ class WireRoundTripTest {
     Message decoded = new Decoder().decode(encoded);
     assertMessageEquals(msg, decoded);
   }
-
-  // --- Tier 2 (wire v2) endpoint / reverse-RPC frame types ----------------
 
   static Stream<Arguments> endpointTypeCases() {
     return Stream.of(
@@ -98,15 +93,13 @@ class WireRoundTripTest {
     assertMessageEquals(msg, decoded);
   }
 
-  // --- Multi-chunk round-trip ---------------------------------------------
-
   @Test
   @DisplayName("default 64KiB chunk: 2/3 chunks via real payload sizes")
   void roundTripMultiChunk() throws IOException {
     int[] sizes = {
-      WireFormat.MAX_PAYLOAD_BYTES + 1, // 2 chunks
-      WireFormat.MAX_PAYLOAD_BYTES * 2 + 5, // 3 chunks
-      WireFormat.MAX_PAYLOAD_BYTES * 2 // exactly 2 chunks
+      WireFormat.MAX_PAYLOAD_BYTES + 1,
+      WireFormat.MAX_PAYLOAD_BYTES * 2 + 5,
+      WireFormat.MAX_PAYLOAD_BYTES * 2
     };
     for (int sz : sizes) {
       byte[] payload = ascending(sz);
@@ -130,7 +123,6 @@ class WireRoundTripTest {
   @Test
   @DisplayName("out-of-order chunk arrival reassembles by chunk_idx")
   void decodeOutOfOrderChunks() throws IOException {
-    // Build 3 chunks for req_id=11 in arrival order [2, 0, 1].
     ByteBuffer buf = ByteBuffer.allocate(1024).order(ByteOrder.BIG_ENDIAN);
     writeRaw(buf, FrameType.REQUEST.value(), 11L, 4, (byte) 2, 2, 3, "ccc".getBytes());
     writeRaw(buf, FrameType.REQUEST.value(), 11L, 4, (byte) 2, 0, 3, "aaa".getBytes());
@@ -141,8 +133,6 @@ class WireRoundTripTest {
     Message want = new Message(FrameType.REQUEST, 11L, 4, (byte) 2, "aaabbbccc".getBytes());
     assertMessageEquals(want, decoded);
   }
-
-  // --- Error paths ---------------------------------------------------------
 
   @Test
   void decodeRejectsOversizedLen() {
@@ -155,7 +145,7 @@ class WireRoundTripTest {
   @Test
   void decodeRejectsShorterThanHeader() {
     ByteBuffer buf = ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN);
-    buf.putInt(10); // shorter than 23-byte header
+    buf.putInt(10);
     buf.flip();
     assertThrows(FrameTooLargeException.class, () -> new Decoder().decode(buf));
   }
@@ -171,7 +161,7 @@ class WireRoundTripTest {
   @Test
   @DisplayName("type byte one past RPC_RESPONSE is rejected (lockstep with Go)")
   void decodeRejectsTypeOnePastCeiling() {
-    byte past = (byte) (FrameType.RPC_RESPONSE.value() + 1); // 11: a future v3 type
+    byte past = (byte) (FrameType.RPC_RESPONSE.value() + 1);
     assertEquals(FrameType.UNKNOWN, FrameType.fromByte(past));
     ByteBuffer buf = ByteBuffer.allocate(64).order(ByteOrder.BIG_ENDIAN);
     writeRaw(buf, past, 1L, 0, (byte) 0, 0, 1, new byte[] {'x'});
@@ -269,8 +259,6 @@ class WireRoundTripTest {
     assertNull(dec.decode(buf));
   }
 
-  // --- helpers -------------------------------------------------------------
-
   private static void assertMessageEquals(Message want, Message got) {
     assertEquals(want.type(), got.type(), "type");
     assertEquals(want.reqId(), got.reqId(), "reqId");
@@ -293,9 +281,6 @@ class WireRoundTripTest {
     return out;
   }
 
-  // Hand-crafts a chunk frame (length-prefixed, no chunking) for tests that
-  // need to inject bytes the Encoder would never produce: out-of-order
-  // chunks, illegal type bytes, duplicate chunk_idx, etc.
   private static void writeRaw(
       ByteBuffer buf,
       byte type,
@@ -311,7 +296,7 @@ class WireRoundTripTest {
     buf.putLong(reqId);
     buf.putInt(regionId);
     buf.put(hookId);
-    buf.put((byte) 0); // chunk_flags reserved
+    buf.put((byte) 0);
     buf.putInt(chunkIdx);
     buf.putInt(chunkTotal);
     buf.put(payload);

@@ -20,39 +20,16 @@ import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 
-/**
- * T36 fault-injection RegionCoprocessor. Acquires a shared {@link CoprocessorRuntime} via {@link
- * SharedRuntime} keyed on this class - the embedded Go binary is the {@code fault-observer} ELF
- * which dispatches a configurable fault on every prePut. The fault mode is selected by the {@code
- * HBASECOP_FAULT_MODE} env var on the Go side, propagated via {@link
- * CoprocessorRuntime.Config#extraEnv()} from the per-table {@link #KEY_FAULT_MODE} config.
- *
- * <p>Heartbeats and the restart controller (T33-T35) are wired with aggressive defaults so the
- * fault matrix observes the supervisor's recovery within the test's time budget.
- */
 public final class FaultRegionObserver implements RegionCoprocessor {
 
   private static final Logger LOG = System.getLogger(FaultRegionObserver.class.getName());
 
-  /**
-   * Configuration key (per-table or per-coprocessor) selecting the fault mode. The value is
-   * forwarded verbatim to the spawned Go process via the {@code HBASECOP_FAULT_MODE} environment
-   * variable, where the {@code fault.ParseMode} parser validates it. Valid tokens: {@code none},
-   * {@code kill-9}, {@code hang}, {@code exit-1}, {@code protocol-error}, {@code oom}.
-   */
   public static final String KEY_FAULT_MODE = "hbasecop.fault.mode";
 
   private static final String SHARED_KEY = FaultRegionObserver.class.getName();
 
   private SharedRuntime.Handle handle;
 
-  /**
-   * Maps the {@link #KEY_FAULT_MODE} value in {@code conf} to the env-var map consumed by {@link
-   * CoprocessorRuntime.Config#extraEnv()}. A missing or blank value returns the empty map.
-   *
-   * <p>Visible-for-testing as a pure helper so the mapping can be exercised without driving a
-   * RegionCoprocessor lifecycle.
-   */
   public static Map<String, String> envFromConfig(Configuration conf) {
     Objects.requireNonNull(conf, "conf");
     String mode = conf.get(KEY_FAULT_MODE);

@@ -43,12 +43,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
-/**
- * Coverage for the RegionObserverAdapter hooks that serialize their HBase arguments through the
- * per-type converters (Get/Put/Delete/Increment/Append/CheckAndMutate, before-WAL cell pairs). Real
- * HBase objects are used so the converters run for real; each invocation must reach {@code
- * dispatcher.dispatchHook}. Companion to {@link RegionObserverAdapterStubHooksTest}.
- */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class RegionObserverAdapterPayloadHooksTest {

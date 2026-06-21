@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-// setEnv sets the shmem env vars the Run* entrypoints read; unset values are
-// cleared (t.Setenv restores them after the test).
 func setShmemEnv(t *testing.T, in, out, capacity, maxObj, hb string) {
 	t.Helper()
 	t.Setenv("HBASECOP_SHMEM_IN_PATH", in)
@@ -176,9 +174,6 @@ func TestEnvIntHelpers(t *testing.T) {
 	}
 }
 
-// TestRunSurfaceGuards covers the no-observer guard at the top of every Run*
-// entrypoint without standing up a shmem channel. Multiple observers are now
-// valid (chained); see TestDispatchRegionChain.
 func TestRunSurfaceGuards(t *testing.T) {
 	guards := []struct {
 		name string
@@ -200,9 +195,6 @@ func TestRunSurfaceGuards(t *testing.T) {
 	}
 }
 
-// TestRunSurfaceConfigError drives each Run* past its guards into
-// loadShmemConfigFromEnv with a missing env, exercising the config-load
-// failure path of every surface entrypoint.
 func TestRunSurfaceConfigError(t *testing.T) {
 	t.Setenv("HBASECOP_SHMEM_IN_PATH", "") // force loadShmemConfigFromEnv to fail
 	runs := []struct {

@@ -16,8 +16,6 @@ import (
 	"time"
 )
 
-// surfaceDelegate maps a --surface value to the stock generic entrypoint class
-// shipped in the bridge jar, so authors deploy without hand-writing Java.
 var surfaceDelegate = map[string]string{
 	"region":       "com.virogg.hbasecop.bridge.entrypoint.GenericRegionObserver",
 	"master":       "com.virogg.hbasecop.bridge.entrypoint.GenericMasterObserver",
@@ -34,9 +32,6 @@ type packageOptions struct {
 	PolicyConfig  string
 }
 
-// runPackage is the one-shot pipeline: cross-compile the Go observer for
-// linux/amd64, pick the stock delegate for the surface, resolve the bridge jar,
-// then shade+embed+SHA-256 via Build. No Java, no hand-pasted ~/.m2 path.
 func runPackage(args []string) error {
 	opts, err := parsePackageFlags(args)
 	if err != nil {
@@ -111,9 +106,6 @@ func crossCompile(srcPath, outELF string) error {
 	return cmd.Run()
 }
 
-// checkLinuxAmd64ELF fails fast if path is not a 64-bit little-endian x86-64
-// ELF, catching a host-arch binary before it is embedded and rejected at
-// RegionServer start.
 func checkLinuxAmd64ELF(path string) error {
 	f, err := os.Open(path)
 	if err != nil {
@@ -136,8 +128,6 @@ func checkLinuxAmd64ELF(path string) error {
 	return nil
 }
 
-// resolveBridgeJar returns flagVal when set, else the newest installed bridge
-// jar under the local Maven repository.
 func resolveBridgeJar(flagVal string) (string, error) {
 	if flagVal != "" {
 		return flagVal, nil
@@ -146,8 +136,6 @@ func resolveBridgeJar(flagVal string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// Prefer the uber jar (classifier "all"): the thin module jar lacks the
-	// runtime deps (protobuf, jgshmem) and yields a coproc-jar that fails to load.
 	glob := filepath.Join(home, ".m2", "repository", "com", "virogg", "hbasecop-bridge", "*", "hbasecop-bridge-*-all.jar")
 	matches, err := filepath.Glob(glob)
 	if err != nil {
@@ -156,9 +144,6 @@ func resolveBridgeJar(flagVal string) (string, error) {
 	if len(matches) == 0 {
 		return "", fmt.Errorf("no uber bridge jar (hbasecop-bridge-*-all.jar) under %s; run `mvn install` or pass --bridge-jar", filepath.Dir(filepath.Dir(glob)))
 	}
-	// Stat each once up front: a jar vanishing between Glob and the sort would
-	// otherwise nil-deref in the comparator. A missing/unreadable entry sorts
-	// oldest (zero time), so it never wins "newest".
 	modTimes := make(map[string]time.Time, len(matches))
 	for _, m := range matches {
 		if fi, statErr := os.Stat(m); statErr == nil {

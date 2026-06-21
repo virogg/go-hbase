@@ -52,14 +52,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
-/**
- * Coverage for the RegionObserverAdapter hooks that route context-only (no per-arg serialization):
- * lifecycle, flush, compaction, scanner, storage-file, WAL-replay/restore, bulk-load and before-WAL
- * passthrough hooks. Each invocation must reach {@code dispatcher.dispatchHook}; the
- * value-returning passthrough hooks must hand back their input argument unchanged on an empty
- * response. The arg-serializing hooks (Get/Put/Delete/CheckAndMutate/...) are covered separately in
- * {@link RegionObserverAdapterPayloadHooksTest}.
- */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class RegionObserverAdapterStubHooksTest {
@@ -178,8 +170,6 @@ class RegionObserverAdapterStubHooksTest {
 
   @Test
   void walReplayAndRestoreHooksDispatch() throws Exception {
-    // preReplayWALs/preWALRestore serialize the RegionInfo argument, so use a
-    // real one (a bare mock returns null from every getter).
     RegionInfo info = RegionInfoBuilder.newBuilder(TableName.valueOf("default", "t")).build();
     Path edits = new Path("/wal/edits");
     WALKey key = mock(WALKey.class);

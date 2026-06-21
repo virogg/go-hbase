@@ -12,10 +12,6 @@ import (
 	"strings"
 )
 
-// surfaceScaffold maps a --surface to the scaffold pieces: an optional top-level
-// declaration (decl), the in-main construction snippet (body), the Run*
-// entrypoint (run), whether the body/decl uses context, and any extra stdlib
-// imports beyond log/slog + os.
 var surfaceScaffold = map[string]struct {
 	decl, body, run string
 	ctx             bool
@@ -34,9 +30,6 @@ var surfaceScaffold = map[string]struct {
 	"regionserver": {body: embedded("RegionServer"), run: "hbasecop.RunRegionServer(obs)"},
 	"wal":          {body: embedded("WAL"), run: "hbasecop.RunWAL(obs)"},
 	"bulkload":     {body: embedded("BulkLoad"), run: "hbasecop.RunBulkLoad(obs)"},
-	// An endpoint is a client-initiated server RPC, not an event observer; it is
-	// hosted by the stock GenericRegionObserver, so RunAll registers it alongside
-	// a no-op region observer (a region coprocessor needs an observer to attach).
 	"endpoint": {
 		decl: `// endpoint is a server-side endpoint coprocessor: a client invokes it via the
 // generic GoEndpointService and the bridge dispatches the call here. Replace the
@@ -53,15 +46,12 @@ func (endpoint) Call(_ context.Context, env *hbasecop.EndpointEnv, method string
 	},
 }
 
-// embedded returns a skeleton that embeds the no-op observer for surfaces
-// without a builder; the author overrides the hooks they need.
 func embedded(surface string) string {
 	return fmt.Sprintf(`var obs struct {
 		hbasecop.Unimplemented%sObserver // embed defaults; override the hooks you need
 	}`, surface)
 }
 
-// runInit scaffolds a buildable Go observer/endpoint (main.go + README) for the surface.
 func runInit(args []string) error {
 	fs := flag.NewFlagSet("hbasecop-build init", flag.ContinueOnError)
 	surface := fs.String("surface", "region", "surface: region|master|regionserver|wal|bulkload|endpoint")
@@ -85,7 +75,6 @@ func runInit(args []string) error {
 		return err
 	}
 
-	// Assemble the import set: log/slog + os always, context if used, plus any extras, sorted.
 	std := []string{"log/slog", "os"}
 	if sc.ctx {
 		std = append(std, "context")
@@ -122,7 +111,6 @@ func main() {
 }
 `, name, surfaceLabel(*surface), imports.String(), declBlock, bodyLine, sc.run)
 
-	// An endpoint is hosted by GenericRegionObserver, so it packages with --surface region.
 	pkgSurface := *surface
 	if pkgSurface == "endpoint" {
 		pkgSurface = "region"
@@ -147,7 +135,6 @@ func main() {
 	return nil
 }
 
-// surfaceLabel is the human description used in the scaffold comment and README.
 func surfaceLabel(surface string) string {
 	if surface == "endpoint" {
 		return "endpoint coprocessor"
@@ -168,7 +155,6 @@ func delegateFor(surface string) string {
 	return "com.virogg.hbasecop.bridge.entrypoint." + cls
 }
 
-// writeNew writes content, refusing to clobber an existing file.
 func writeNew(path, content string) error {
 	if _, err := os.Stat(path); err == nil {
 		return fmt.Errorf("%s already exists", path)

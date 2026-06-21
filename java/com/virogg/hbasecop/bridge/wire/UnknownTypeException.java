@@ -3,7 +3,6 @@
 
 package com.virogg.hbasecop.bridge.wire;
 
-/** The on-wire type byte is 0 or above {@link FrameType#LOG}. */
 public final class UnknownTypeException extends WireException {
   private static final long serialVersionUID = 1L;
 

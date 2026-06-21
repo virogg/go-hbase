@@ -32,18 +32,6 @@ import org.apache.hadoop.hbase.wal.WALKey;
 import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
 import org.apache.hbase.thirdparty.com.google.protobuf.InvalidProtocolBufferException;
 
-/**
- * T53 WALObserver bridge. Routes every WALObserver hook the SDK exposes (T53 Wave A, 4 hooks:
- * preWALWrite / postWALWrite on the latency-critical WAL append path and preWALRoll / postWALRoll
- * on file rotation) through the shared {@link HookDispatcher} mux. Mirrors {@link
- * MasterObserverAdapter}'s policy / dispatch / bypass plumbing exactly: the same {@link
- * PolicyConfig} resolves per-hook strict-vs-best-effort behaviour by method name (e.g. {@code
- * hbasecop.policy.preWALWrite}), so failure semantics stay symmetric across every observer surface.
- *
- * <p>preWALWrite / postWALWrite sit on the WAL hot path; the {@code WALKey} / {@code WALEdit} slim
- * envelopes carry only the shippable scalars + the cell array, keeping per-call serialization cost
- * bounded.
- */
 public final class WALObserverAdapter implements WALObserver {
 
   private static final Logger LOG = System.getLogger(WALObserverAdapter.class.getName());
@@ -55,8 +43,6 @@ public final class WALObserverAdapter implements WALObserver {
     this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
     this.policyConfig = Objects.requireNonNull(policyConfig, "policyConfig");
   }
-
-  // --- WAL write: latency-critical hot path --------------------------------
 
   @Override
   public void preWALWrite(
@@ -100,8 +86,6 @@ public final class WALObserverAdapter implements WALObserver {
     applyBypass(c, resp);
   }
 
-  // --- WAL roll ------------------------------------------------------------
-
   @Override
   public void preWALRoll(
       ObserverContext<? extends WALCoprocessorEnvironment> c, Path oldPath, Path newPath)
@@ -130,13 +114,6 @@ public final class WALObserverAdapter implements WALObserver {
     applyBypass(c, resp);
   }
 
-  // --- Helpers -------------------------------------------------------------
-
-  /**
-   * HookContext on the WAL surface carries no table/region context (the per-hook payload's {@code
-   * region_info} / {@code log_key} does), so we send an empty envelope. RequestId is filled in by
-   * the mux.
-   */
   private static HookContext emptyCtx() {
     return HookContext.getDefaultInstance();
   }
@@ -190,10 +167,6 @@ public final class WALObserverAdapter implements WALObserver {
     return b.build();
   }
 
-  /**
-   * Drive one hook call. Mirrors {@link MasterObserverAdapter#dispatch} exactly so policy
-   * resolution and STRICT-vs-best-effort behaviour stay symmetric across every adapter.
-   */
   private HookResponse dispatch(byte hookId, byte[] reqBytes) throws IOException {
     HookPolicy pol = policyConfig.forHook(hookId);
     final byte[] respBytes;

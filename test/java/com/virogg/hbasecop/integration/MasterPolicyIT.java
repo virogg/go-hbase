@@ -20,26 +20,6 @@ import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.junit.jupiter.api.Test;
 
-/**
- * T51 integration test for the MasterObserver {@code preCreateTable} hook, end-to-end through the
- * {@code master-policy-observer} coproc-jar on a live HBase 2.5 standalone cluster.
- *
- * <p>The observer is registered cluster-wide via {@code hbase.coprocessor.master.classes}; the
- * docker entrypoint patches hbase-site.xml when {@code make test-integration-master} exports {@code
- * HBASECOP_MASTER_COPROC_CLASS}. The Go observer returns an error for any table qualifier starting
- * with {@code "forbidden-"}; the strict-by-default {@code MasterObserverAdapter} surfaces that as
- * an {@link IOException} to the admin client.
- *
- * <p>Asserts:
- *
- * <ul>
- *   <li>{@code createTable("forbidden-...")} fails with an IOException carrying the policy message,
- *       and the table is absent afterwards.
- *   <li>{@code createTable("ok-...")} succeeds.
- * </ul>
- *
- * <p>Not part of {@code mvn test}; invoked by {@code make test-integration-master}.
- */
 final class MasterPolicyIT {
 
   private static final String ZK_QUORUM = "localhost";
@@ -71,7 +51,6 @@ final class MasterPolicyIT {
       dropQuietly(admin, blocked);
       dropQuietly(admin, allowed);
 
-      // Blocked create: observer must reject it.
       IOException rejected =
           assertThrows(
               IOException.class,
@@ -84,7 +63,6 @@ final class MasterPolicyIT {
       assertTrue(
           !admin.tableExists(blocked), "forbidden- table must not exist after a rejected create");
 
-      // Allowed create: observer must let it through.
       try {
         admin.createTable(descriptor(allowed));
         assertTrue(admin.tableExists(allowed), "ok- table must exist after an allowed create");
@@ -100,7 +78,6 @@ final class MasterPolicyIT {
         .build();
   }
 
-  /** Flattens an exception chain into one searchable string (HBase wraps observer errors). */
   private static String rootMessage(Throwable t) {
     StringBuilder sb = new StringBuilder();
     for (Throwable c = t; c != null; c = c.getCause()) {

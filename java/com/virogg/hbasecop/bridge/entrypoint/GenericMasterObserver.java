@@ -11,10 +11,6 @@ import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.MasterCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.MasterObserver;
 
-/**
- * Stock master-side entrypoint: name it in {@code setCoprocessor} to deploy a Go MasterObserver
- * with no hand-written Java. See {@link GenericCoprocessor} for config and keying.
- */
 public final class GenericMasterObserver implements MasterCoprocessor {
 
   private static final String FALLBACK_KEY = GenericMasterObserver.class.getName();
@@ -41,7 +37,6 @@ public final class GenericMasterObserver implements MasterCoprocessor {
     return handle == null ? Optional.empty() : Optional.ofNullable(handle.getMasterObserver());
   }
 
-  /** Exposes the generic Go endpoint Service (Tier 2) alongside the master observer. */
   @Override
   public Iterable<Service> getServices() {
     return GenericCoprocessor.endpointServices(() -> handle);

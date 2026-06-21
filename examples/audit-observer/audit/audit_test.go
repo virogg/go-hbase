@@ -62,8 +62,6 @@ func TestNewRecord(t *testing.T) {
 	}
 }
 
-// TestRowDigestNeverLeaksKey pins the SPEC §8 privacy contract: the digest is
-// 16 hex chars, deterministic per key, and never contains the raw key.
 func TestRowDigestNeverLeaksKey(t *testing.T) {
 	key := "secret-customer-id-42"
 	d1, d2 := RowDigest([]byte(key)), RowDigest([]byte(key))
@@ -81,9 +79,6 @@ func TestRowDigestNeverLeaksKey(t *testing.T) {
 	}
 }
 
-// TestObserverEmitsOneAuditLinePerOp drives PostPut/PostDelete through the
-// Observer and asserts exactly one JSON record per operation, carrying the
-// marker, no raw row key, and a monotonic seq.
 func TestObserverEmitsOneAuditLinePerOp(t *testing.T) {
 	var buf bytes.Buffer
 	o := New()

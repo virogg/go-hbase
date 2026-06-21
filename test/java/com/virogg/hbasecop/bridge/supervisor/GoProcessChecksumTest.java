@@ -19,27 +19,12 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/**
- * Wave B of T71 - checksum-validation surface on the supervisor side:
- *
- * <ul>
- *   <li>{@link GoProcess#computeSha256Hex(Path)} returns canonical 64-hex digest of any file.
- *   <li>{@link GoProcess#verifyChecksum(Path, String)} succeeds on match, throws on mismatch with a
- *       message that names both expected and actual digests.
- *   <li>When {@link GoProcessConfig#expectedBinarySha256()} is set and does not match the extracted
- *       ELF, {@link GoProcess#start()} fails fast - process never enters {@code Runtime.exec}.
- * </ul>
- */
 final class GoProcessChecksumTest {
 
-  // SHA-256 of the empty string - fixed by the standard, makes the test self-checking.
   private static final String SHA256_EMPTY =
       "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
-
-  // SHA-256 of UTF-8 "abc"
   private static final String SHA256_ABC =
       "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
-
   private static final int CAPACITY = 16;
   private static final int MAX_OBJECT_SIZE = 4096;
 
@@ -62,7 +47,6 @@ final class GoProcessChecksumTest {
     Path f = dir.resolve("abc");
     Files.write(f, "abc".getBytes(StandardCharsets.UTF_8));
     assertDoesNotThrow(() -> GoProcess.verifyChecksum(f, SHA256_ABC));
-    // case-insensitive on input
     assertDoesNotThrow(() -> GoProcess.verifyChecksum(f, SHA256_ABC.toUpperCase()));
   }
 
@@ -85,7 +69,7 @@ final class GoProcessChecksumTest {
     try (Channel javaToGo = openChannel(inFile, Role.PRODUCER);
         Channel goToJava = openChannel(outFile, Role.CONSUMER)) {
 
-      String wrong = "f".repeat(64); // valid shape, wrong content
+      String wrong = "f".repeat(64);
       GoProcessConfig cfg =
           GoProcessConfig.builder()
               .binaryResourcePath("bin/linux-amd64/hbasecop-runtime")
@@ -106,7 +90,6 @@ final class GoProcessChecksumTest {
                 + ")");
         assertFalse(go.isAlive(), "Go process must not have spawned on bad checksum");
       }
-      // suppress unused-resource warning on goToJava
       assertTrue(goToJava != null);
     }
   }

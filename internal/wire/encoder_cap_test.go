@@ -9,15 +9,10 @@ import (
 	"testing"
 )
 
-// TestEncodeRejectsMessageExceedingMaxChunks pins the producer-side cap:
-// a payload that would split into more than MaxChunks chunks is rejected
-// with ErrMessageTooLarge and NOTHING is written, rather than emitting a
-// frame stream carrying chunk_total > MaxChunks that the matching Decoder
-// is required to reject with ErrTooManyChunks (self-undecodable output).
 func TestEncodeRejectsMessageExceedingMaxChunks(t *testing.T) {
 	var buf bytes.Buffer
-	enc := NewEncoder(&buf, WithChunkSize(1)) // 1 byte per chunk
-	payload := make([]byte, MaxChunks+1)      // needs MaxChunks+1 chunks
+	enc := NewEncoder(&buf, WithChunkSize(1))
+	payload := make([]byte, MaxChunks+1)
 
 	err := enc.Encode(&Message{Type: TypeRequest, ReqID: 1, Payload: payload})
 	if !errors.Is(err, ErrMessageTooLarge) {
@@ -28,9 +23,6 @@ func TestEncodeRejectsMessageExceedingMaxChunks(t *testing.T) {
 	}
 }
 
-// TestEncodeAllowsExactlyMaxChunks confirms the cap is inclusive: a
-// payload that splits into exactly MaxChunks chunks encodes and decodes
-// cleanly (boundary just below the reject).
 func TestEncodeAllowsExactlyMaxChunks(t *testing.T) {
 	var buf bytes.Buffer
 	enc := NewEncoder(&buf, WithChunkSize(1))

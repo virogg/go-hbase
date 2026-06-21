@@ -30,17 +30,6 @@ import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.junit.jupiter.api.Test;
 
-/**
- * TE51 integration test: the canonical fan-out + reduce. A 4-way pre-split table holds a numeric
- * {@code cf:n} column; the server-side "sum" endpoint runs once per region and returns that
- * region's partial sum, and {@link EndpointClient} fans the call out over all four regions and
- * reduces the partials into the table-wide total — one client call, the aggregation split across
- * the regions.
- *
- * <p>Proves the helper genuinely fans out (four distinct per-region results, none equal to the
- * total) and reduces correctly. Driven by {@code make test-integration-endpoint-multiregion}, which
- * brings up the cluster and stages the endpoint-observer coproc-jar.
- */
 final class EndpointMultiRegionIT {
 
   private static final String ZK_QUORUM = "localhost";
@@ -54,8 +43,6 @@ final class EndpointMultiRegionIT {
   private static final byte[] N = "n".getBytes(UTF_8);
   private static final int N_REGIONS = 4;
 
-  // Two rows per region (split keys at row-100/200/300), values 1..8 → table total 36, with per-
-  // region partials {3, 7, 11, 15}: none equals the total, so the reduce must combine all regions.
   private static final String[] ROWS = {
     "row-010", "row-020", // region 0
     "row-110", "row-120", // region 1
@@ -85,7 +72,6 @@ final class EndpointMultiRegionIT {
                     .addColumn(CF, N, Long.toString(v).getBytes(UTF_8)));
           }
 
-          // Fan-out: one partial sum per region.
           Map<byte[], byte[]> perRegion = EndpointClient.callAllRegions(table, "sum", N);
           assertEquals(
               N_REGIONS,
@@ -101,7 +87,6 @@ final class EndpointMultiRegionIT {
           }
           assertEquals(TOTAL, sumOfPartials, "the per-region partials must add up to the total");
 
-          // Reduce: one client call returns the table-wide total.
           long reduced =
               EndpointClient.callAndReduce(
                   table,

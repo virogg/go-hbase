@@ -10,17 +10,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.InputStream;
 import org.junit.jupiter.api.Test;
 
-/**
- * T25 packaging contract for the counter-observer coproc-jar. Verifies that the Maven build stages
- * the Linux x86-64 Go runtime ELF under the resource path the bridge supervisor extracts from
- * ({@code bin/linux-amd64/hbasecop-runtime}, see {@code GoProcessConfig.Builder.binaryResourcePath}
- * default).
- */
 final class CounterCoprocJarTest {
 
   private static final String RESOURCE_PATH = "bin/linux-amd64/hbasecop-runtime";
 
-  /** ELF magic: 0x7F 'E' 'L' 'F'. */
   private static final byte[] ELF_MAGIC = new byte[] {0x7F, 'E', 'L', 'F'};
 
   @Test

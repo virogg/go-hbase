@@ -17,11 +17,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// capturingObserver records the most recent invocation so tests can
-// inspect the mutation/env the dispatcher decoded. The mutex makes
-// concurrent calls safe - the race detector cannot see the
-// happens-before edge across the shmem ring used by the loop test, so
-// observer state must be guarded explicitly.
 type capturingObserver struct {
 	UnimplementedRegionObserver
 
@@ -190,9 +185,6 @@ func TestDispatchPrePutObserverError(t *testing.T) {
 	}
 }
 
-// batchObserver overrides only PreBatchMutate so the dispatch-level test
-// can assert HookResult.BlockedIndices round-trips into HookResponse
-// without coupling to the broader capturingObserver fixture.
 type batchObserver struct {
 	UnimplementedRegionObserver
 
@@ -312,7 +304,7 @@ func TestDispatchPostPut(t *testing.T) {
 	if !bytes.Equal(obs.lastMut.GetRow(), []byte("row-x")) {
 		t.Fatalf("PostPut row = %q, want %q", obs.lastMut.GetRow(), "row-x")
 	}
-	// Namespace empty → qualifier-only.
+
 	if obs.lastEnv.TableName != "t1" {
 		t.Fatalf("env.TableName = %q, want %q", obs.lastEnv.TableName, "t1")
 	}
@@ -336,10 +328,6 @@ func TestDispatchUnknownHookReturnsError(t *testing.T) {
 	}
 }
 
-// TestDispatchExposesRegionID is the T61 SDK guard: the wire-level
-// region_id allocated by the Java supervisor must surface in
-// ObserverEnv so user code can shard state per region without having
-// to parse the (opaque) encoded region name.
 func TestDispatchExposesRegionID(t *testing.T) {
 	obs := &regionIDRecorder{}
 	d := newDispatcher(obs, nil)
@@ -371,8 +359,6 @@ func TestDispatchExposesRegionID(t *testing.T) {
 	}
 }
 
-// regionIDRecorder captures only env.RegionID from PrePut. Keeping the
-// fixture minimal isolates the assertion from unrelated env fields.
 type regionIDRecorder struct {
 	UnimplementedRegionObserver
 

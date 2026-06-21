@@ -147,9 +147,6 @@ func TestNewMixedDispatcher(t *testing.T) {
 	}
 }
 
-// dualSurfaceObs satisfies both RegionObserver and MasterObserver from one
-// value - the headline RunAll case: a single observer fanned out to every
-// surface it implements.
 type dualSurfaceObs struct {
 	UnimplementedRegionObserver
 	UnimplementedMasterObserver
@@ -190,9 +187,6 @@ func TestNewMixedDispatcherFansOutOneValueToEverySurface(t *testing.T) {
 	}
 }
 
-// allSurfaceObs satisfies every Observer surface, pinning each independent
-// type-assertion branch in newMixedDispatcher against an else-if regression that
-// would route a value to only the first surface it matches.
 type allSurfaceObs struct {
 	UnimplementedRegionObserver
 	UnimplementedMasterObserver
@@ -223,8 +217,6 @@ func TestNewMixedDispatcherRegistersOnAllSurfaces(t *testing.T) {
 	}
 }
 
-// regionEndpointObs satisfies both RegionObserver and Endpoint from one value:
-// the TE23 case of an endpoint registered via RunAll alongside observers.
 type regionEndpointObs struct {
 	UnimplementedRegionObserver
 }

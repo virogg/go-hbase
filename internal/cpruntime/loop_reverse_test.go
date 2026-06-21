@@ -13,9 +13,6 @@ import (
 	"github.com/virogg/go-hbase/internal/wire"
 )
 
-// TE12: an inbound RpcResponse frame (the reply to a Go-initiated reverse RPC)
-// is routed to the ReverseResponseHandler stub, keyed by the wire-header
-// req_id, without the reader unmarshalling the protobuf payload.
 func TestLoopRoutesRpcResponseToReverseHandler(t *testing.T) {
 	ch := openLoopChannels(t)
 
@@ -58,9 +55,6 @@ func TestLoopRoutesRpcResponseToReverseHandler(t *testing.T) {
 	<-done
 }
 
-// TE22: an inbound EndpointInvoke frame is routed to the EndpointHandler (not
-// the observer Handler), and the result the handler returns is sent back out
-// correlated by the same req_id.
 func TestLoopRoutesEndpointInvokeToEndpointHandler(t *testing.T) {
 	ch := openLoopChannels(t)
 

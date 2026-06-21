@@ -17,23 +17,10 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.wal.WALEdit;
 
-/**
- * Native (pure-Java) twin of the Go {@code examples/ttl-validator} observer. {@code prePut}
- * inspects every cell value and rejects the whole Put unless each value carries the {@code
- * ttl=<seconds>;} envelope — the first violation throws an {@link IOException}, which reaches the
- * HBase client and aborts the write, exactly as the Go strict pre-hook policy does.
- *
- * <p>The validation logic in {@link #validateSeconds(byte[])} mirrors {@code
- * examples/ttl-validator/ttl/ttl.go} {@code Validate} byte-for-byte (same min length, same
- * digit-by-digit parse, same {@code maxDigits=9} bound, same {@code seconds>0} rule), so the
- * accept/reject decision is identical across both arms for any input.
- */
 public final class NativeTtlObserver implements RegionCoprocessor, RegionObserver {
 
-  /** The TTL envelope prefix; matches the Go arm's {@code prefix}. */
   private static final byte[] PREFIX = {'t', 't', 'l', '='};
 
-  /** Caps the seconds field at 9 digits (≈31.7 years); matches the Go arm's {@code maxDigits}. */
   private static final int MAX_DIGITS = 9;
 
   private final AtomicLong accepted = new AtomicLong();
@@ -56,7 +43,6 @@ public final class NativeTtlObserver implements RegionCoprocessor, RegionObserve
           validateSeconds(CellUtil.cloneValue(cell));
         } catch (IOException e) {
           rejected.incrementAndGet();
-          // Error text names column coordinates (schema, not payload) — never the value bytes.
           throw new IOException(
               "native-ttl: "
                   + new String(CellUtil.cloneFamily(cell), java.nio.charset.StandardCharsets.UTF_8)
@@ -72,14 +58,8 @@ public final class NativeTtlObserver implements RegionCoprocessor, RegionObserve
     accepted.incrementAndGet();
   }
 
-  /**
-   * Validates that {@code value} carries the {@code ttl=<seconds>;} envelope and returns the
-   * declared seconds. Throws {@link IOException} on any violation. Never echoes the value bytes.
-   *
-   * <p>This is the line-for-line Java port of the Go {@code ttl.Validate}.
-   */
   static long validateSeconds(byte[] value) throws IOException {
-    if (value.length < PREFIX.length + 2) { // "ttl=" + at least one digit + ';'
+    if (value.length < PREFIX.length + 2) {
       throw new IOException("value lacks the \"ttl=\" TTL envelope");
     }
     for (int j = 0; j < PREFIX.length; j++) {

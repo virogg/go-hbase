@@ -10,11 +10,6 @@ import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionServerObserver;
 
-/**
- * Stock region-server entrypoint: name it in {@code setCoprocessor} to deploy a Go
- * RegionServerObserver with no hand-written Java. See {@link GenericCoprocessor} for config and
- * keying.
- */
 public final class GenericRegionServerObserver implements RegionServerCoprocessor {
 
   private static final String FALLBACK_KEY = GenericRegionServerObserver.class.getName();

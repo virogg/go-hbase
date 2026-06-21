@@ -39,13 +39,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
-/**
- * T51 Wave B unit test for {@link MasterObserverAdapter}: verifies the adapter encodes the HBase
- * descriptor / table-name arguments into the right proto Request, drives the injected {@link
- * HookDispatcher}, and translates {@code bypass=true} / strict-mode error responses into the
- * matching {@code ObserverContext#bypass()} / {@code IOException} reactions; mirrors the Region
- * adapter's coverage on a representative slice of the master surface.
- */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class MasterObserverAdapterTest {
@@ -174,8 +167,6 @@ class MasterObserverAdapterTest {
         next, result, "preModifyTable must pass the candidate descriptor through unchanged");
     assertFalse(result == current, "preModifyTable must not substitute the current descriptor");
   }
-
-  // --- helpers -----------------------------------------------------------
 
   private static PreCreateTableRequest parseCreate(byte[] bytes) {
     try {

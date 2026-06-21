@@ -3,10 +3,6 @@
 
 package com.virogg.hbasecop.bridge.shmem;
 
-/**
- * Direction of a {@link Channel} endpoint. Each shmem ring is one-way: exactly one PRODUCER and one
- * CONSUMER per file/shmName.
- */
 public enum Role {
   PRODUCER,
   CONSUMER

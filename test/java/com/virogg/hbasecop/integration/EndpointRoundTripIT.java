@@ -44,17 +44,6 @@ import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.junit.jupiter.api.Test;
 
-/**
- * TE22 integration test: a client invokes the generic {@code GoEndpointService} exposed by the
- * stock {@code GenericRegionObserver} via {@code Table.coprocessorService}, and the call
- * round-trips to a Go {@code Endpoint} (the endpoint-observer example, which upper-cases its
- * payload) and back.
- *
- * <p>Exercises the UNSHADED {@code com.google.protobuf} endpoint path end-to-end: an unshaded
- * {@link ServerRpcController} + an unshaded {@link RpcCallback}, matching HBase's {@code
- * Coprocessor.getServices()} contract. Not in {@code mvn test}; run via {@code make
- * test-integration-endpoint}, which manages the cluster and stages the coproc-jar.
- */
 final class EndpointRoundTripIT {
 
   private static final String ZK_QUORUM = "localhost";
@@ -89,11 +78,6 @@ final class EndpointRoundTripIT {
     }
   }
 
-  /**
-   * TE31: a client invokes the endpoint method "get", whose Go handler issues a reverse-RPC GET
-   * back into the region for the row named by the payload and returns the cell value. Proves the
-   * reverse channel end to end on a live cluster: seed a row, reverse-GET it, assert the value.
-   */
   @Test
   void clientReverseGetRoundTrips() throws Throwable {
     requireStagedJar();
@@ -122,11 +106,6 @@ final class EndpointRoundTripIT {
     }
   }
 
-  /**
-   * TE32: data-dependent reverse reads. The "follow" endpoint reads row A, takes its cf:next cell
-   * as a pointer to row B, reads B, and returns B's cf:val — proving "read A → read B by a key from
-   * A" over two correlated reverse round-trips within one endpoint call.
-   */
   @Test
   void clientReverseGetDataDependent() throws Throwable {
     requireStagedJar();
@@ -158,11 +137,6 @@ final class EndpointRoundTripIT {
     }
   }
 
-  /**
-   * TE33: a client invokes "scan", whose Go handler opens a server-side scanner over the region and
-   * counts the cells across SCAN_NEXT batches. Seeds N rows, scans, asserts the count — proving the
-   * pull-scan SCAN_OPEN/NEXT/CLOSE round-trip end to end.
-   */
   @Test
   void clientReverseScanCountsRows() throws Throwable {
     requireStagedJar();
@@ -194,11 +168,6 @@ final class EndpointRoundTripIT {
     }
   }
 
-  /**
-   * TE34 / CP-E3 capstone: the canonical server-side aggregation. Seeds rows with a numeric column,
-   * invokes "sum", and asserts the total — the scan + sum runs inside the region (region-local
-   * data), returning one number instead of every row.
-   */
   @Test
   void clientServerSideSum() throws Throwable {
     requireStagedJar();
@@ -232,11 +201,6 @@ final class EndpointRoundTripIT {
     }
   }
 
-  /**
-   * TE41: reverse MUTATE is gated off by default. With no allow-mutate property the "put"
-   * endpoint's env.Put is rejected by the bridge; the error surfaces to the client and the row
-   * stays unwritten.
-   */
   @Test
   void clientReverseMutateRejectedWhenDisabled() throws Throwable {
     requireStagedJar();
@@ -266,12 +230,6 @@ final class EndpointRoundTripIT {
     }
   }
 
-  /**
-   * TE41: with hbasecop.endpoint.allow-mutate=true (set here as a coprocessor property; the shared
-   * runtime reads it once per coproc-id, not per-table — fine here as each test owns its runtime),
-   * the "put" endpoint reads then writes cf:val on the invoking region; a normal client Get sees
-   * the write.
-   */
   @Test
   void clientReverseMutateWritesWhenEnabled() throws Throwable {
     requireStagedJar();
@@ -300,11 +258,6 @@ final class EndpointRoundTripIT {
     }
   }
 
-  /**
-   * TE41 re-entry: many endpoint calls run concurrently, each a read-then-write on the SAME region
-   * it was invoked on. Proves an endpoint mutating its own region does not self-deadlock under
-   * concurrency (the servicing pool is never the blocked RS handler thread); every write must land.
-   */
   @Test
   void clientReverseMutateReentryStress() throws Throwable {
     requireStagedJar();
@@ -346,12 +299,6 @@ final class EndpointRoundTripIT {
     }
   }
 
-  /**
-   * TE42 per-table gate: two tables share one coproc-jar (so one Go runtime), one with
-   * allow-mutate=true and one with =false, both open at once. The bridge must gate each on its own
-   * table descriptor — the mutate-on table writes, the mutate-off table is rejected — not on a
-   * single runtime-wide flag (which "first table to open" would otherwise win).
-   */
   @Test
   void clientReverseMutatePerTableGate() throws Throwable {
     requireStagedJar();
@@ -370,7 +317,6 @@ final class EndpointRoundTripIT {
       createTableWithCoproc(admin, off, false);
       try (Table tOn = conn.getTable(on);
           Table tOff = conn.getTable(off)) {
-        // mutate-on table: the write lands.
         assertEquals(
             "ok",
             new String(
@@ -381,7 +327,6 @@ final class EndpointRoundTripIT {
             new String(tOn.get(new Get(row)).getValue(CF, val), StandardCharsets.UTF_8),
             "mutate-on table must accept the reverse write");
 
-        // mutate-off table sharing the same runtime: rejected, row unwritten.
         Throwable err =
             assertThrows(
                 Throwable.class,
@@ -436,9 +381,6 @@ final class EndpointRoundTripIT {
     return cfg;
   }
 
-  /**
-   * Invokes GoEndpointService.Call(method, payload) over every region, returning the sole result.
-   */
   private static byte[] callEndpoint(Table table, String method, ByteString payload)
       throws Throwable {
     GoEndpointRequest request =
@@ -450,8 +392,6 @@ final class EndpointRoundTripIT {
             null,
             null,
             instance -> {
-              // Unshaded controller + callback: HBase's BlockingRpcCallback is shaded and would
-              // not bind to the unshaded com.google.protobuf.Service generated stub.
               ServerRpcController controller = new ServerRpcController();
               AtomicReference<GoEndpointResponse> out = new AtomicReference<>();
               RpcCallback<GoEndpointResponse> done = out::set;
@@ -512,9 +452,6 @@ final class EndpointRoundTripIT {
         CoprocessorDescriptorBuilder.newBuilder(COPROC_CLASSNAME)
             .setJarPath(COPROC_JAR_IN_CONTAINER)
             .setPriority(0);
-    // Per-table gating (TE42): set the coprocessor property explicitly to true OR false so the
-    // bridge's per-table gate reads this table's own value rather than falling back to the shared
-    // runtime's baked default — essential when two tables share one coproc-jar (one Go runtime).
     coproc.setProperty("hbasecop.endpoint.allow-mutate", String.valueOf(allowMutate));
     TableDescriptor desc =
         TableDescriptorBuilder.newBuilder(tn)

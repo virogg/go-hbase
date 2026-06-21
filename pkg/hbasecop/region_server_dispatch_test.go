@@ -15,8 +15,6 @@ import (
 	"github.com/virogg/go-hbase/internal/wire/hookpb"
 )
 
-// capturingRegionServer records region-server hook invocations for
-// round-trip dispatch tests (T52 Wave A).
 type capturingRegionServer struct {
 	UnimplementedRegionServerObserver
 
@@ -121,7 +119,6 @@ func TestDispatchRegionServerUnknownHookReturnsError(t *testing.T) {
 	rs := &capturingRegionServer{}
 	d := newRegionServerDispatcher(rs, nil)
 
-	// PrePut is a region hook id; a region-server-only dispatcher must reject it.
 	inner := &hookpb.PreStopRegionServerRequest{Ctx: &hookpb.HookContext{}}
 	innerBytes, err := proto.Marshal(inner)
 	if err != nil {

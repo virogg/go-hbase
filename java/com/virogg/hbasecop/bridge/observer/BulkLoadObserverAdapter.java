@@ -25,18 +25,6 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
 import org.apache.hbase.thirdparty.com.google.protobuf.InvalidProtocolBufferException;
 
-/**
- * T54 BulkLoadObserver bridge. Routes both bulk-load hooks ({@code prePrepareBulkLoad}, {@code
- * preCleanupBulkLoad}) through the shared {@link HookDispatcher} mux. Mirrors {@link
- * MasterObserverAdapter}'s policy / dispatch / bypass plumbing exactly: the same {@link
- * PolicyConfig} resolves per-hook strict-vs-best-effort behaviour by method name (e.g. {@code
- * hbasecop.policy.prePrepareBulkLoad}), so failure semantics stay symmetric across every observer
- * surface.
- *
- * <p>HBase 2.5's BulkLoadObserver hooks take no payload arguments beyond the observer context, so
- * the per-hook proto request carries only HookContext - the bulk-load target table/region is pulled
- * from {@code env.getRegionInfo()} and travels in HookContext.
- */
 public final class BulkLoadObserverAdapter implements BulkLoadObserver {
 
   private static final Logger LOG = System.getLogger(BulkLoadObserverAdapter.class.getName());
@@ -67,8 +55,6 @@ public final class BulkLoadObserverAdapter implements BulkLoadObserver {
     applyBypass(c, resp);
   }
 
-  // --- Helpers -------------------------------------------------------------
-
   private static HookContext hookCtx(ObserverContext<RegionCoprocessorEnvironment> c) {
     HookContext.Builder b = HookContext.newBuilder();
     if (c == null) {
@@ -95,10 +81,6 @@ public final class BulkLoadObserverAdapter implements BulkLoadObserver {
     return b.build();
   }
 
-  /**
-   * Drive one hook call. Mirrors {@link MasterObserverAdapter#dispatch} exactly so policy
-   * resolution and STRICT-vs-best-effort behaviour stay symmetric across every adapter.
-   */
   private HookResponse dispatch(byte hookId, byte[] reqBytes) throws IOException {
     HookPolicy pol = policyConfig.forHook(hookId);
     final byte[] respBytes;

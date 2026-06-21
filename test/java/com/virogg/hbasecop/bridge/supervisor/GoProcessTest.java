@@ -24,18 +24,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/**
- * T18 acceptance: spawn the embedded Go runtime ELF, exchange one PING/PONG over real shmem rings,
- * call stop() and assert the process exits gracefully within 1s.
- *
- * <p>The Go ELF is expected on the test classpath at {@code bin/linux-amd64/hbasecop-runtime},
- * which {@code make go-build-runtime} stages into {@code src/main/resources/bin/linux-amd64/}.
- */
 class GoProcessTest {
 
   private static final int CAPACITY = 16;
   private static final int MAX_OBJECT_SIZE = 4096;
-  private static final byte HOOK_PING = (byte) 0xFF; // mirrors cpruntime.HookPing on the Go side
+  private static final byte HOOK_PING = (byte) 0xFF;
 
   @Test
   @DisplayName("PING/PONG roundtrip via spawned Go runtime, then graceful stop()")
@@ -53,7 +46,7 @@ class GoProcessTest {
               .goToJavaFile(outFile)
               .capacity(CAPACITY)
               .maxObjectSize(MAX_OBJECT_SIZE)
-              .heartbeatPeriodMs(-1) // disable heartbeats for a clean test
+              .heartbeatPeriodMs(-1)
               .build();
 
       try (GoProcess go = new GoProcess(cfg, javaToGo)) {
@@ -71,14 +64,12 @@ class GoProcessTest {
         encoded.get(frame);
         javaToGo.send(frame);
 
-        // Wait for PONG (spin with a deadline)
         Message pong = awaitRecv(goToJava, Duration.ofSeconds(5));
         assertEquals(FrameType.RESPONSE, pong.type(), "expected RESPONSE");
         assertEquals(reqId, pong.reqId(), "req_id must match");
         assertEquals(HOOK_PING, pong.hookId(), "hook_id must match");
         assertArrayEquals(payload, pong.payload(), "payload must be echoed verbatim");
 
-        // Graceful stop: sends SHUTDOWN, waits for exit ≤ 1s.
         Instant t0 = Instant.now();
         go.stop();
         Duration elapsed = Duration.between(t0, Instant.now());
@@ -109,7 +100,6 @@ class GoProcessTest {
 
       GoProcess go = new GoProcess(cfg, javaToGo);
       assertFalse(go.isAlive(), "process is not alive before start()");
-      // Don't bother starting/stopping here.
     }
   }
 

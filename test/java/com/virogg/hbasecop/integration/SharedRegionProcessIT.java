@@ -33,18 +33,6 @@ import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.junit.jupiter.api.Test;
 
-/**
- * T63 integration test: a single counter-observer coproc-jar attached to a 4-way pre-split table on
- * a one-RegionServer standalone cluster must spawn exactly one Go process. {@link
- * com.virogg.hbasecop.bridge.SharedRuntime} refcounts the process across all four {@code
- * CounterRegionObserver} instances; if that fell back to per-region spawning, we'd observe four
- * pids in the container.
- *
- * <p>Driven by {@code make test-integration-shared}: brings up the cluster, creates the pre-split
- * table, drives one Put per region, then checks both {@code pgrep} (live process count) and {@code
- * docker logs} (count of {@code GoProcess started:} lines during the test window) - both must be
- * exactly one.
- */
 final class SharedRegionProcessIT {
 
   private static final String CONTAINER_NAME = "go-hbase-dev";
@@ -99,7 +87,6 @@ final class SharedRegionProcessIT {
         waitForRegionCount(admin, tn, N_REGIONS, Duration.ofSeconds(60));
         runOnePutPerRegion(conn, tn);
 
-        // Process check: only one hbasecop-runtime should be alive on the RS.
         List<String> pids = pgrepRuntimePids();
         assertEquals(
             1,
@@ -111,8 +98,6 @@ final class SharedRegionProcessIT {
                     + pids
                     + " (SharedRuntime refcount likely broken)");
 
-        // Log check: only one `GoProcess started:` line should have been emitted in this test
-        // window.
         waitForLogs(baselineStartedLogs, 1, LOG_GRACE);
         long startedDelta = countStartedLogs() - baselineStartedLogs;
         assertEquals(
@@ -131,7 +116,6 @@ final class SharedRegionProcessIT {
   }
 
   private static byte[][] splitKeys(int n) {
-    // n regions ⇒ n-1 split keys. Keys must sort: "row-1xx" < "row-2xx" < ... lexicographically.
     byte[][] keys = new byte[n - 1][];
     for (int i = 1; i < n; i++) {
       keys[i - 1] = ("row-" + (i * 100)).getBytes(StandardCharsets.UTF_8);
@@ -206,8 +190,6 @@ final class SharedRegionProcessIT {
   }
 
   private static void runOnePutPerRegion(Connection conn, TableName tn) throws IOException {
-    // Row keys are chosen to land in each of the four regions (boundaries at row-100/200/300):
-    // "row-050" ∈ region 0, "row-150" ∈ region 1, "row-250" ∈ region 2, "row-350" ∈ region 3.
     String[] rows = {"row-050", "row-150", "row-250", "row-350"};
     try (Table table = conn.getTable(tn)) {
       Instant deadline = Instant.now().plus(OP_TIMEOUT);
@@ -233,11 +215,6 @@ final class SharedRegionProcessIT {
     }
   }
 
-  /**
-   * Counts {@code GoProcess started:} lines across the container's entire log history (emitted by
-   * {@code GoProcess.start()} once per spawned process). A shared runtime should produce one such
-   * line for the whole 4-region test; a per-region runtime would produce four.
-   */
   private static long countStartedLogs() throws IOException, InterruptedException {
     return runDockerCount("docker logs " + CONTAINER_NAME + " 2>&1 | grep -c 'GoProcess started:'");
   }
@@ -250,7 +227,6 @@ final class SharedRegionProcessIT {
     }
   }
 
-  /** Returns the pids of every live {@code hbasecop-runtime} process inside the container. */
   private static List<String> pgrepRuntimePids() throws IOException, InterruptedException {
     ProcessBuilder pb =
         new ProcessBuilder(

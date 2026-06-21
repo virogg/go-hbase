@@ -9,27 +9,6 @@ import (
 	"github.com/virogg/go-hbase/internal/wire/hookpb"
 )
 
-// UnimplementedRegionObserver is the embedded-noop helper users compose
-// into their own observer types so they only have to override the
-// hooks they care about. Every method is a no-op that returns the zero
-// HookResult and a nil error; Bypass stays false so HBase's own
-// implementation of the hook runs unmodified.
-//
-// The Go SDK's RegionObserver interface mirrors HBase 2.5's
-// RegionObserver method surface (68 hooks today, T41). The
-// UnimplementedRegionObserver type carries the same shape so that:
-//
-//	type MyObserver struct {
-//	    hbasecop.UnimplementedRegionObserver  // defaults
-//	    // ... user fields
-//	}
-//	func (o *MyObserver) PrePut(...) (hbasecop.HookResult, error) { ... }
-//
-// compiles even though MyObserver only overrides PrePut.
-//
-// Adding a method to RegionObserver in a future task requires a
-// matching method here; the hookTable + reflection tests in T41 keep
-// the three (interface, table, embedded helper) in lockstep.
 type UnimplementedRegionObserver struct{}
 
 // The 68 methods below are intentionally undocumented one-liners: they

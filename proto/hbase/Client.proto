@@ -1,32 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//
-// Vendored from apache/hbase rel/2.5.10 — see proto/hbase/UPSTREAM.md.
-//
-// T22 (Phase 2): MutationProto only (Put/Delete/Append/Increment share
-// the same shape, discriminated by MutationType).
-// T42 Wave 1: Get, Scan, Column, Cursor, Filter, Result, Consistency
-// added for the read-path hook payloads (preGetOp, preScannerOpen, …).
-// Additional Client.proto messages — Condition, MultiRequest, etc. —
-// stay deferred; only what the bridge actually serializes is vendored.
 
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-// This file contains protocol buffers that are used for Client service.
 syntax = "proto2";
 package virogg.hbasecop.hbase.v1;
 
@@ -39,39 +12,26 @@ option optimize_for = SPEED;
 import "hbase/Cell.proto";
 import "hbase/HBase.proto";
 
-/** Read consistency level for Get/Scan. */
 enum Consistency {
   STRONG = 0;
   TIMELINE = 1;
 }
 
-/**
- * Comparator envelope (mirrors hbase-protocol-shaded Comparator.proto).
- * Ships (class-name, serialized-bytes); reconstruction is opaque to the
- * Go side today.
- */
 message Comparator {
   required string name = 1;
   optional bytes serialized_comparator = 2;
 }
 
-/** Container for a list of column qualifier names of a family. */
 message Column {
   required bytes family = 1;
   repeated bytes qualifier = 2;
 }
 
-/**
- * Filter envelope. Carries the upstream-class name plus the filter's
- * own self-serialization (via Filter.toByteArray()); reconstruction on
- * the Go side is opaque until a per-filter mapper is added.
- */
 message Filter {
   required string name = 1;
   optional bytes serialized_filter = 2;
 }
 
-/** Get operation. */
 message Get {
   required bytes row = 1;
   repeated Column column = 2;
@@ -88,11 +48,6 @@ message Get {
   optional bool load_column_families_on_demand = 14;
 }
 
-/**
- * Result of a read. Cells either land in `cell` directly or are
- * shipped out-of-band with `associated_cell_count`; we always inline
- * via `cell` because the shmem ring carries the whole frame anyway.
- */
 message Result {
   repeated Cell cell = 1;
   optional int32 associated_cell_count = 2;
@@ -101,12 +56,10 @@ message Result {
   optional bool partial = 5 [default = false];
 }
 
-/** Cursor for resumable scans (see Scan.need_cursor_result). */
 message Cursor {
   optional bytes row = 1;
 }
 
-/** Scan operation. */
 message Scan {
   repeated Column column = 1;
   repeated NameBytesPair attribute = 2;
@@ -139,13 +92,6 @@ message Scan {
   optional bool need_cursor_result = 24 [default = false];
 }
 
-/**
- * A specific Mutate operation. The Mutation is wrapped in MutationProto.
- *
- * The 'cell' field is deliberately left out of this slim vendor — HBase
- * passes Cells out-of-band when associated_cell_count > 0; the in-band
- * column_value path covers everything Phase 2 (T22+) needs.
- */
 message MutationProto {
   optional bytes row = 1;
   optional MutationType mutate_type = 2;

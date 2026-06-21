@@ -64,7 +64,6 @@ final class GenericCoprocessorTest {
   void buildConfigHonoursEndpointTimeoutOverride(@TempDir Path tmp) {
     Configuration conf = new Configuration(false);
     conf.set(GenericCoprocessor.KEY_ENDPOINT_TIMEOUT, "12s");
-    // The endpoint timeout is independent of the hook timeout.
     conf.set(PolicyConfig.KEY_TIMEOUT_DEFAULT, "2s");
 
     CoprocessorRuntime.Config cfg = GenericCoprocessor.buildConfig(conf, tmp);
@@ -89,7 +88,6 @@ final class GenericCoprocessorTest {
 
   @Test
   void sharedKeyFallsBackToClassNameWithoutCoprocJar() {
-    // The bridge test classpath carries no coproc-jar manifest, so the key is the fallback.
     assertEquals("fallback-key", GenericCoprocessor.sharedKey("fallback-key"));
   }
 
@@ -104,7 +102,6 @@ final class GenericCoprocessorTest {
 
   @Test
   void regionAndMasterEntrypointsRegisterTheEndpointService() {
-    // getServices() is independent of start(): the service registers without a running handle.
     assertTrue(
         new GenericRegionObserver().getServices().iterator().next()
             instanceof GoEndpointServiceImpl);

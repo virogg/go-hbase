@@ -10,10 +10,6 @@ import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
 
-/**
- * Converts an HBase {@link Scan} into its vendored proto twin. Mirrors upstream Scan's wire format
- * so the bytes are interchangeable with hbase-protocol-shaded.
- */
 final class ScanConverter {
 
   private ScanConverter() {}

@@ -13,11 +13,6 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
-/**
- * Unit-level checks for the {@link GoProcessConfig} builder, focused on the {@code extraEnv}
- * channel that the T36 fault-injector uses to forward {@code HBASECOP_FAULT_MODE} to the spawned Go
- * process.
- */
 final class GoProcessConfigTest {
 
   @Test
@@ -67,7 +62,6 @@ final class GoProcessConfigTest {
             .extraEnv(env)
             .build();
 
-    // Mutating the source after build() must not leak into the config.
     env.put("HBASECOP_FAULT_MODE", "exit-1");
     env.put("HBASECOP_OBSERVER_TAG", "after-build");
 
@@ -119,7 +113,7 @@ final class GoProcessConfigTest {
             .maxObjectSize(1024)
             .heartbeatPeriodMs(-1)
             .extraEnv(Map.of("A", "1"))
-            .extraEnv(Map.of("B", "2")) // replaces; not merged.
+            .extraEnv(Map.of("B", "2"))
             .build();
 
     assertEquals(Map.of("B", "2"), cfg.extraEnv());

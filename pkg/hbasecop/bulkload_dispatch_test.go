@@ -16,8 +16,6 @@ import (
 	"github.com/virogg/go-hbase/internal/wire/hookpb"
 )
 
-// capturingBulkLoad records bulk-load hook invocations for round-trip
-// dispatch tests (T54 Wave A).
 type capturingBulkLoad struct {
 	UnimplementedBulkLoadObserver
 
@@ -125,7 +123,6 @@ func TestDispatchBulkLoadUnknownHookReturnsError(t *testing.T) {
 	bl := &capturingBulkLoad{}
 	d := newBulkLoadDispatcher(bl, nil)
 
-	// PrePut is a region hook id; a bulk-load-only dispatcher must reject it.
 	inner := &hookpb.PrePrepareBulkLoadRequest{Ctx: &hookpb.HookContext{}}
 	innerBytes, err := proto.Marshal(inner)
 	if err != nil {

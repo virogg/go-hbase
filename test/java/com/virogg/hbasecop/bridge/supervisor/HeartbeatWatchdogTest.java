@@ -14,10 +14,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-/**
- * T33 acceptance - verifies the {@link HeartbeatWatchdog} detection logic in isolation using a
- * deterministic fake clock. Wiring into {@code CoprocessorRuntime} is covered separately.
- */
 final class HeartbeatWatchdogTest {
 
   private static final Duration PERIOD = Duration.ofMillis(100);
@@ -46,7 +42,6 @@ final class HeartbeatWatchdogTest {
 
   @Test
   void tickWithinThresholdDoesNotFire() {
-    // 2 periods elapsed - under the 3-miss threshold.
     nowMs.addAndGet(2 * PERIOD.toMillis());
     assertFalse(wd.tick(), "tick must not fire below threshold");
     assertEquals(0, hungCalls.get());
@@ -55,7 +50,6 @@ final class HeartbeatWatchdogTest {
 
   @Test
   void tickAtThresholdFires() {
-    // Exactly missThreshold * period elapsed.
     nowMs.addAndGet(MISS_THRESHOLD * PERIOD.toMillis());
     assertTrue(wd.tick(), "tick must fire at/after threshold");
     assertEquals(1, hungCalls.get());
@@ -67,7 +61,6 @@ final class HeartbeatWatchdogTest {
   void firedOnlyOncePerHangSpell() {
     nowMs.addAndGet(MISS_THRESHOLD * PERIOD.toMillis());
     assertTrue(wd.tick());
-    // Subsequent ticks while still hung must not re-fire.
     nowMs.addAndGet(PERIOD.toMillis());
     assertFalse(wd.tick());
     nowMs.addAndGet(PERIOD.toMillis() * 10);
@@ -77,16 +70,13 @@ final class HeartbeatWatchdogTest {
 
   @Test
   void heartbeatAfterFireAllowsRefire() {
-    // First hang.
     nowMs.addAndGet(MISS_THRESHOLD * PERIOD.toMillis());
     assertTrue(wd.tick());
 
-    // Recovery: a heartbeat arrives, watchdog re-arms.
     nowMs.addAndGet(PERIOD.toMillis());
     wd.recordHeartbeat();
     assertFalse(wd.hungReported(), "recordHeartbeat must clear hung flag");
 
-    // Stale again → fires a second time.
     nowMs.addAndGet(MISS_THRESHOLD * PERIOD.toMillis());
     assertTrue(wd.tick());
     assertEquals(2, hungCalls.get());
@@ -94,11 +84,8 @@ final class HeartbeatWatchdogTest {
 
   @Test
   void recordHeartbeatBeforeThresholdPreventsFiring() {
-    // Miss 2 periods.
     nowMs.addAndGet(2 * PERIOD.toMillis());
-    // Heartbeat arrives just before the third.
     wd.recordHeartbeat();
-    // Tick one more period - only 1 period since last heartbeat.
     nowMs.addAndGet(PERIOD.toMillis());
     assertFalse(wd.tick(), "fresh heartbeat must reset the deadline");
     assertEquals(0, hungCalls.get());
@@ -111,10 +98,8 @@ final class HeartbeatWatchdogTest {
         new HeartbeatWatchdog(
             Duration.ofMillis(50), 5, nowMs::get, elapsed -> calls.incrementAndGet());
 
-    // 4 missed: under threshold.
     nowMs.addAndGet(4 * 50L);
     assertFalse(w.tick());
-    // 5 missed: fires.
     nowMs.addAndGet(50L);
     assertTrue(w.tick());
     assertEquals(1, calls.get());

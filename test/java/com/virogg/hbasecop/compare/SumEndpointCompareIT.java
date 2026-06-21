@@ -22,21 +22,6 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Table;
 import org.junit.jupiter.api.Test;
 
-/**
- * Native-vs-Go comparison for an AGGREGATING ENDPOINT (read path). Both arms expose the SAME {@code
- * GoEndpointService} surface, so the client call path ({@link
- * com.virogg.hbasecop.client.EndpointClient}) is byte identical — only the server-side {@code sum}
- * implementation differs:
- *
- * <ul>
- *   <li>native arm: {@code NativeSumEndpoint} scans the region and sums in the RegionServer JVM;
- *   <li>Go arm: the stock {@code GenericRegionObserver} forwards the call over the shmem bridge to
- *       the {@code endpoint-observer} Go process, which scans via the reverse channel and sums.
- * </ul>
- *
- * <p>Equivalence: both must return the exact arithmetic SUM of the seeded {@code cf:n} column.
- * Performance: per-arm sum-call latency, interleaved A/B over many rounds, reported (not gated).
- */
 final class SumEndpointCompareIT {
 
   private static final byte[] N = "n".getBytes(StandardCharsets.UTF_8);
@@ -65,18 +50,16 @@ final class SumEndpointCompareIT {
           Table goTable = conn.getTable(goTn)) {
         long expected = seedNumeric(nativeTable, goTable);
 
-        // --- Equivalence (hard pass/fail) ---------------------------------
         long nativeSum = CompareSupport.sumEndpoint(nativeTable, N);
         long goSum = CompareSupport.sumEndpoint(goTable, N);
         assertEquals(expected, nativeSum, "native endpoint SUM must equal the arithmetic total");
         assertEquals(
             nativeSum, goSum, "Go endpoint SUM must equal the native endpoint SUM (equivalence)");
 
-        // --- Performance (report-only) ------------------------------------
         List<Long> nativeSamples = new ArrayList<>();
         List<Long> goSamples = new ArrayList<>();
         for (int r = 0; r < WARMUP + ROUNDS; r++) {
-          boolean nativeFirst = (r & 1) == 0; // alternate order to cancel drift
+          boolean nativeFirst = (r & 1) == 0;
           long nt;
           long gt;
           if (nativeFirst) {
@@ -101,7 +84,6 @@ final class SumEndpointCompareIT {
     }
   }
 
-  /** Seeds rows 1..ROWS with cf:n=i into both tables; returns the arithmetic total. */
   private static long seedNumeric(Table nativeTable, Table goTable) throws Exception {
     List<Put> nativePuts = new ArrayList<>(ROWS);
     List<Put> goPuts = new ArrayList<>(ROWS);

@@ -9,8 +9,6 @@ import (
 	"testing"
 )
 
-// TestWALHookTableIsCanonical mirrors TestMasterHookTableIsCanonical for
-// the WAL surface introduced in T53.
 func TestWALHookTableIsCanonical(t *testing.T) {
 	if len(walHookTable) == 0 {
 		t.Fatal("walHookTable empty: T53 dispatch table not populated")
@@ -35,10 +33,6 @@ func TestWALHookTableIsCanonical(t *testing.T) {
 	}
 }
 
-// TestWALHookIDsAreInReservedRange pins the ID partitioning (region
-// 1-99, master 100-199, region-server 200-219, WAL 220-255) so a future
-// hook addition can't accidentally claim a value taken by another
-// surface.
 func TestWALHookIDsAreInReservedRange(t *testing.T) {
 	taken := make(map[HookID]string)
 	for _, h := range hookTable {
@@ -60,9 +54,6 @@ func TestWALHookIDsAreInReservedRange(t *testing.T) {
 	}
 }
 
-// TestWALObserverInterfaceCoversAllHooks mirrors the master reflection
-// check: every entry in walHookTable corresponds to a WALObserver
-// method and vice versa.
 func TestWALObserverInterfaceCoversAllHooks(t *testing.T) {
 	rt := reflect.TypeOf((*WALObserver)(nil)).Elem()
 	methods := make(map[string]bool, rt.NumMethod())
@@ -83,9 +74,6 @@ func TestWALObserverInterfaceCoversAllHooks(t *testing.T) {
 	}
 }
 
-// TestUnimplementedWALObserverSatisfiesInterface promotes the
-// compile-time satisfaction check to runtime and pins the noop return
-// contract (HookResult{}, nil) on Pre-* methods.
 func TestUnimplementedWALObserverSatisfiesInterface(t *testing.T) {
 	var obs WALObserver = UnimplementedWALObserver{}
 	res, err := obs.PreWALWrite(context.Background(), ObserverEnv{}, nil)

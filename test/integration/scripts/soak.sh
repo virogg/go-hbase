@@ -2,10 +2,9 @@
 # Copyright 2026 The go-hbase Authors
 # SPDX-License-Identifier: Apache-2.0
 #
-# T84: soak orchestrator - runs SoakIT (the paced load driver with the
-# data-loss ledger) while injecting kill-9 chaos into the Go runtime and
-# sampling RSS / process state inside the container, then evaluates the
-# release gates:
+# soak orchestrator - runs SoakIT (the paced load driver with the data-loss ledger) while injecting
+# kill-9 chaos into the Go runtime and sampling RSS / process state inside the container,
+# then evaluates the release gates:
 #
 #   1. dataloss   - SoakIT exit code (every client-acked Put present in scan)
 #   2. rss-flat   - median Go RSS of the last 20% of samples ≤ 1.15× first 20%
@@ -58,7 +57,6 @@ note() {
   printf '%s\n' "$1" | tee -a "$SUMMARY"
 }
 
-# Median of newline-separated integers on stdin (empty input -> empty output).
 median() {
   sort -n | awk '
     { a[NR] = $1 }
@@ -69,9 +67,7 @@ median() {
     }'
 }
 
-# ---------------------------------------------------------------------------
-# a. Load driver
-# ---------------------------------------------------------------------------
+# Load driver
 
 start_ts="$(date +%s)"
 printf 'soak: starting SoakIT (duration=%ss rate=%s ops/s), log: %s\n' \
@@ -82,24 +78,14 @@ printf 'soak: starting SoakIT (duration=%ss rate=%s ops/s), log: %s\n' \
   > "$MVN_LOG" 2>&1 &
 MVN_PID=$!
 
-# ---------------------------------------------------------------------------
-# b. Chaos loop - kill -9 the Go runtime at uniform-random intervals
-# ---------------------------------------------------------------------------
+# Chaos loop
 
-# The pgrep/pkill pattern uses the [h] bracket trick: probes run through
-# `docker exec sh -c '...'`, and a plain pattern would match the probing
-# shell's own argv - inflating process counts and corrupting pid samples.
 RUNTIME_PATTERN='[h]basecop-runtime'
 
 runtime_pid() {
   docker exec "$CONTAINER" sh -c "pgrep -f '$RUNTIME_PATTERN' | head -1" 2>/dev/null || true
 }
 
-# Chaos starts only once the Go runtime exists (SoakIT spends a minute-plus
-# on mvn boot + cluster-ready + table create before the coprocessor spawns
-# it; kills before that hit nothing and break restart accounting) and stops
-# 30s before the configured load end (a kill inside SoakIT's final scan +
-# table drop races the supervisor restart against the release path).
 chaos_loop() {
   local span delay slept n victim
   span=$(( SOAK_KILL_MAX_S - SOAK_KILL_MIN_S + 1 ))
@@ -112,15 +98,12 @@ chaos_loop() {
   while kill -0 "$MVN_PID" 2>/dev/null && (( $(date +%s) < chaos_deadline )); do
     delay=$(( SOAK_KILL_MIN_S + RANDOM % span ))
     slept=0
-    # Sleep in 1s slices so the loop exits promptly when mvn finishes.
     while (( slept < delay )) && kill -0 "$MVN_PID" 2>/dev/null; do
       sleep 1
       slept=$(( slept + 1 ))
     done
     kill -0 "$MVN_PID" 2>/dev/null || break
     (( $(date +%s) < chaos_deadline )) || break
-    # Only kills that found a live victim count toward restart accounting
-    # (a kill inside a restart window legitimately finds nothing).
     victim="$(runtime_pid)"
     [[ -n "$victim" ]] || continue
     docker exec "$CONTAINER" sh -c "pkill -9 -f '$RUNTIME_PATTERN'" >/dev/null 2>&1 || true
@@ -130,21 +113,17 @@ chaos_loop() {
   done
 }
 
-# ---------------------------------------------------------------------------
-# c. Sampler loop - RSS + process-state CSV every SOAK_SAMPLE_S
-# ---------------------------------------------------------------------------
+# Sampler loop
 
 sampler_loop() {
   local ts go_pid go_rss rs_pid rs_rss runtime_procs zombies
   while kill -0 "$MVN_PID" 2>/dev/null; do
     ts="$(date +%s)"
-    # Empty fields (not failures) during restart windows when no Go pid exists.
     go_pid="$(runtime_pid)"
     go_rss=""
     if [[ -n "$go_pid" ]]; then
       go_rss="$(docker exec "$CONTAINER" ps -o rss= -p "$go_pid" 2>/dev/null | tr -d '[:space:]' || true)"
     fi
-    # Standalone cluster: master+RS share the single java process (proc_master).
     rs_pid="$(docker exec "$CONTAINER" sh -c "pgrep -f '[p]roc_master' | head -1" 2>/dev/null || true)"
     if [[ -z "$rs_pid" ]]; then
       rs_pid="$(docker exec "$CONTAINER" sh -c 'pgrep java | head -1' 2>/dev/null || true)"
@@ -171,9 +150,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# ---------------------------------------------------------------------------
-# d. Wait for the driver, stop background loops
-# ---------------------------------------------------------------------------
+# Wait for the driver, stop background loops
 
 mvn_status=0
 wait "$MVN_PID" || mvn_status=$?
@@ -186,9 +163,7 @@ kill_count="$(cat "$KILL_COUNT_FILE" 2>/dev/null || echo 0)"
 printf 'soak: SoakIT finished (exit=%s) after %ss with %s kill(s)\n' \
   "$mvn_status" "$(( end_ts - start_ts ))" "$kill_count"
 
-# ---------------------------------------------------------------------------
-# e. Gates
-# ---------------------------------------------------------------------------
+# Gates
 
 overall=0
 note "=== SOAK SUMMARY $(date -u '+%Y-%m-%dT%H:%M:%SZ') ==="
@@ -197,7 +172,6 @@ note "kills=$kill_count"
 soak_result="$(grep 'SOAK_RESULT' "$MVN_LOG" | tail -1 || true)"
 note "${soak_result:-SOAK_RESULT <missing from $MVN_LOG>}"
 
-# Gate 1: data loss - SoakIT asserts every acked rowkey survives.
 if [[ "$mvn_status" -eq 0 ]]; then
   note "GATE dataloss: PASS (mvn exit 0)"
 else
@@ -205,18 +179,6 @@ else
   overall=1
 fi
 
-# Gate 2: flat RSS, comparing two median windows per process.
-#   go_rss  first 20% vs last 20%, ±15%: catches fast Go-side leaks - note
-#           each kill resets the process, so leaks slower than the kill
-#           cadence are invisible here by construction.
-#   rs_rss  60-80% vs last 20%, ±10%: the RegionServer JVM is never
-#           restarted, so this is the axis that catches Java-bridge leaks
-#           (mux pending map, decoder reassemblies) over the full hour.
-#           First-window comparison is wrong for a JVM: RSS legitimately
-#           ramps for the first ~25 min (heap expansion, block cache,
-#           memstore fill) then plateaus - measured 714→871 MB ramp then
-#           6.5% post-ramp drift on the reference run. A real leak under
-#           constant load keeps its slope and fails the post-ramp window.
 rss_gate() {
   local label="$1" col="$2" tolerance_pct="$3" base_window="$4"
   local -a samples
@@ -250,10 +212,6 @@ rss_gate() {
 rss_gate go 3 15 first || overall=1
 rss_gate rs 4 10 midlate || overall=1
 
-# Gate 3: process hygiene. While the load ran there must never have been
-# more than one runtime proc in any sample (restart windows legitimately
-# show 0). After SoakIT drops the table the release path stops the Go
-# process, so any survivor in the fresh post-run probe is a leak.
 sleep 5
 max_procs="$(awk -F, 'NR > 1 && $5 != "" && $5 > m { m = $5 } END { print m + 0 }' "$RSS_CSV")"
 final_procs="$(docker exec "$CONTAINER" sh -c "pgrep -f '$RUNTIME_PATTERN' | wc -l" 2>/dev/null | tr -d '[:space:]' || true)"
@@ -280,9 +238,6 @@ else
   overall=1
 fi
 
-# Gate 4: restart accounting - each kill triggers exactly one supervisor
-# respawn ('GoProcess started:' once at table open + once per kill) and the
-# RestartController never exhausts its budget ('UNHEALTHY').
 restart_count="$(docker logs "$CONTAINER" 2>&1 | grep -c 'GoProcess started:' || true)"
 restart_count="${restart_count:-0}"
 unhealthy_count="$(docker logs "$CONTAINER" 2>&1 | grep -c 'UNHEALTHY' || true)"

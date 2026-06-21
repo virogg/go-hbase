@@ -1,14 +1,6 @@
 // Copyright 2026 The go-hbase Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// Wire-level frame envelope for go-hbase IPC.
-//
-// Carries Request/Response/Heartbeat/Error/Shutdown/Log between the Java
-// RegionServer-side adapter and the Go runtime over a shared-memory ring.
-//
-// Stability: alpha (v1). Header layout is frozen for Phase 1; payload
-// messages may grow new fields but field numbers will not be reused.
-
 syntax = "proto3";
 
 package virogg.hbasecop.v1;
@@ -20,13 +12,9 @@ option java_outer_classname = "WireProto";
 
 // FrameHeader is the routing metadata carried on every frame.
 //
-//   req_id      - caller-assigned request id; correlates Request↔Response
-//                 (and Error responses). Heartbeats carry req_id=0.
+//   req_id      - caller-assigned request id; correlates Request ↔ Response (and Error responses). Heartbeats carry req_id=0.
 //   region_id   - HBase region identifier for routing on the Go side.
-//                 Always 0 in Phase 1 (single-region E2E); real values
-//                 land in T61.
-//   hook_id     - Observer-method discriminator (T41 hook table).
-//                 0 means "no hook" (control frames: Heartbeat/Shutdown/Log).
+//   hook_id     - Observer-method discriminator.
 //   chunk_idx   - 0-based index of this chunk in a multi-chunk message.
 //   chunk_total - total number of chunks (>=1). =1 for single-chunk.
 message FrameHeader {
@@ -37,40 +25,27 @@ message FrameHeader {
   uint32 chunk_total = 5;
 }
 
-// Request carries the PB-encoded HookContext (typed by FrameHeader.hook_id).
-// Per-hook context shapes land in T22+ when HBase .proto is vendored.
 message Request {
   bytes hook_ctx = 1;
 }
 
-// Response carries the PB-encoded HookResponse, or is empty for void hooks.
 message Response {
   bytes hook_resp = 1;
 }
 
-// Heartbeat is emitted by the Go runtime on a fixed cadence; supervisor
-// uses it for liveness (T33 watchdog). Header.req_id=0 by convention.
 message Heartbeat {
-  // Sender monotonic clock reading in nanoseconds.
   uint64 monotonic_nanos = 1;
 }
 
-// Error replaces Response when a hook invocation fails on the Go side.
-// Final routing (strict vs best-effort) is T32.
 message Error {
-  // Numeric class of the failure. 0 reserved for "unspecified".
   uint32 code = 1;
-  // Human-readable detail; surfaced in IOException message in strict mode.
   string message = 2;
 }
 
-// Shutdown is the Java-side signal to drain and exit.
 message Shutdown {
   string reason = 1;
 }
 
-// Log is a structured log line forwarded from the Go runtime to the Java
-// supervisor; supervisor relays to the HBase log subsystem.
 message Log {
   enum Level {
     LEVEL_UNSPECIFIED = 0;
@@ -83,26 +58,16 @@ message Log {
   string message = 2;
 }
 
-// EndpointInvoke (Tier 2) carries a client-initiated server-side RPC,
-// dispatched to a Go Endpoint handler. service/method name the target;
-// payload is the opaque user-defined request body.
 message EndpointInvoke {
   string service = 1;
   string method = 2;
   bytes payload = 3;
 }
 
-// EndpointResult is the success reply to an EndpointInvoke; failures use the
-// Error payload instead. payload is the opaque user-defined response body.
 message EndpointResult {
   bytes payload = 1;
 }
 
-// RpcRequest (Tier 2) is the Go-initiated reverse channel: a running endpoint
-// handler reads/writes region-local data. Correlated by the wire
-// FrameHeader.req_id; call_id groups a reverse RPC with its originating
-// EndpointInvoke (e.g. for scanner lifecycle). op_payload carries the vendored
-// HBase Scan/Get/Mutation protobuf for the op.
 message RpcRequest {
   enum Op {
     OP_UNSPECIFIED = 0;
@@ -115,15 +80,9 @@ message RpcRequest {
   uint64 call_id = 1;
   Op op = 2;
   bytes op_payload = 3;
-  // scanner_id (Tier 2, TE33) targets an open server-side scanner for SCAN_NEXT
-  // and SCAN_CLOSE. Unset (0) for SCAN_OPEN/GET/MUTATE. The (call_id, scanner_id)
-  // pair is the scanner's lifecycle key in the bridge's registry.
   uint64 scanner_id = 4;
 }
 
-// RpcResponse is the Java-side reply to an RpcRequest. payload carries the
-// vendored HBase Result / scan batch (chunked via the wire header when large);
-// status distinguishes success from a servicing error.
 message RpcResponse {
   enum Status {
     STATUS_UNSPECIFIED = 0;
@@ -132,16 +91,10 @@ message RpcResponse {
   }
   Status status = 1;
   bytes payload = 2;
-  // scanner_id (Tier 2, TE33) is the id the bridge assigns on SCAN_OPEN, echoed
-  // by the Go side on subsequent SCAN_NEXT/SCAN_CLOSE.
   uint64 scanner_id = 3;
-  // has_more (Tier 2, TE33) reports whether a SCAN_NEXT batch left more rows in
-  // the scanner (resumable): true => issue another SCAN_NEXT; false => exhausted.
   bool has_more = 4;
 }
 
-// Frame is the wire envelope. Every frame on the ring carries a header
-// and exactly one payload.
 message Frame {
   FrameHeader header = 1;
   oneof payload {

@@ -24,18 +24,18 @@ import (
 
 // pkgSpec describes one source wire package to harvest aliases from.
 type pkgSpec struct {
-	dir     string          // filesystem dir of the generated package
-	imp     string          // import path
-	name    string          // package identifier used to qualify aliases
-	exclude map[string]bool // exported type names NOT to re-export
+	dir     string
+	imp     string
+	name    string
+	exclude map[string]bool
 }
 
 // wireAlias is one emitted `type local = pkg.name` declaration.
 type wireAlias struct {
 	local string
-	pkg   string // source package identifier ("hookpb" | "hbasepb")
-	imp   string // source package import path
-	name  string // exported type name in the source package
+	pkg   string
+	imp   string
+	name  string
 }
 
 func main() {
@@ -46,23 +46,21 @@ func main() {
 
 	specs := []pkgSpec{
 		{
-			dir:  *hbasepbDir,
-			imp:  "github.com/virogg/go-hbase/internal/wire/hbasepb",
-			name: "hbasepb",
-			// Already aliased in observer.go (Phase-2 contract doc).
+			dir:     *hbasepbDir,
+			imp:     "github.com/virogg/go-hbase/internal/wire/hbasepb",
+			name:    "hbasepb",
 			exclude: map[string]bool{"MutationProto": true},
 		},
 		{
-			dir:  *hookpbDir,
-			imp:  "github.com/virogg/go-hbase/internal/wire/hookpb",
-			name: "hookpb",
-			// Transport types the runtime builds; authors never name them.
+			dir:     *hookpbDir,
+			imp:     "github.com/virogg/go-hbase/internal/wire/hookpb",
+			name:    "hookpb",
 			exclude: map[string]bool{"HookId": true, "HookError": true, "HookResponse": true},
 		},
 	}
 
 	var aliases []wireAlias
-	seen := map[string]string{} // local name -> source pkg, for collision detection
+	seen := map[string]string{}
 	for _, s := range specs {
 		names, err := exportedTypeNames(s.dir)
 		if err != nil {
@@ -79,7 +77,6 @@ func main() {
 			aliases = append(aliases, wireAlias{local: n, pkg: s.name, imp: s.imp, name: n})
 		}
 	}
-	// Group by source package (hbasepb block, then hookpb block), names sorted.
 	sort.Slice(aliases, func(i, j int) bool {
 		if aliases[i].pkg != aliases[j].pkg {
 			return aliases[i].pkg < aliases[j].pkg
@@ -126,8 +123,6 @@ import (
 	fmt.Fprintf(os.Stderr, "gen-wiretypes: wrote %d aliases to %s\n", len(aliases), *out)
 }
 
-// exportedTypeNames returns the names of every exported top-level type
-// declaration in the non-test .go files of dir.
 func exportedTypeNames(dir string) ([]string, error) {
 	fset := token.NewFileSet()
 	entries, err := os.ReadDir(dir)

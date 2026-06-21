@@ -8,17 +8,7 @@ import (
 	"testing"
 )
 
-// FuzzDecode feeds arbitrary bytes through the framing decoder. The decoder
-// reads length-prefixed, chunked frames off an untrusted shmem ring, so it is
-// the project's primary adversarial-input surface (T83). The invariant is
-// simple: Decode must never panic and never make an unbounded allocation -
-// every malformed input must surface as a returned error. The chunk_total OOM
-// (a 23-byte frame requesting a multi-GiB chunk slice) and the unbounded
-// pending-reassembly map are both regression-guarded here via MaxChunks /
-// MaxPendingReassemblies.
 func FuzzDecode(f *testing.F) {
-	// Seed corpus: a well-formed single-chunk frame, an empty input, and the
-	// two allocation-bomb shapes (huge chunk_total, many distinct req_ids).
 	var good bytes.Buffer
 	_ = NewEncoder(&good).Encode(&Message{Type: TypeRequest, ReqID: 1, HookID: 7, Payload: []byte("hi")})
 	f.Add(good.Bytes())
@@ -40,9 +30,6 @@ func FuzzDecode(f *testing.F) {
 	})
 }
 
-// craftHeader builds a raw frame (length prefix + 23-byte header + payload)
-// with caller-chosen fields so the fuzz seed can exercise the bounds checks
-// directly. Mirrors Encoder.writeChunk's layout.
 func craftHeader(typ Type, reqID uint64, regionID uint32, hookID uint8, chunkIdx, chunkTotal uint32, payload []byte) []byte {
 	var buf bytes.Buffer
 	body := make([]byte, headerSize+len(payload))

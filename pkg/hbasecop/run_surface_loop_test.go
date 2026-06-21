@@ -18,10 +18,6 @@ import (
 	"github.com/virogg/go-hbase/internal/wire/wirepb"
 )
 
-// runSurfaceHarness wires a mock peer onto the same mmap ring files a Run*
-// entrypoint opens from the environment: producer on the Java→Go file,
-// consumer on the Go→Java file. The Run* call itself opens the matching
-// consumer/producer ends.
 type runSurfaceHarness struct {
 	mockOut *shmem.Channel // producer on in-file (we send REQUEST/SHUTDOWN)
 	mockIn  *shmem.Channel // consumer on out-file (we read RESPONSE)
@@ -33,8 +29,6 @@ func openRunSurfaceHarness(t *testing.T) *runSurfaceHarness {
 	inFile := filepath.Join(dir, "in.mmap")
 	outFile := filepath.Join(dir, "out.mmap")
 
-	// The mock producer opens (and sizes) the in-file before Run* opens its
-	// consumer end; symmetrically the mock consumer opens the out-file.
 	mockOut, err := shmem.Open(shmem.Config{
 		Filename: inFile, Capacity: testRingCapacity,
 		MaxObjectSize: testRingMaxObjectSize, Role: shmem.RoleProducer,
@@ -52,7 +46,6 @@ func openRunSurfaceHarness(t *testing.T) *runSurfaceHarness {
 	}
 	t.Cleanup(func() { _ = mockIn.Close() })
 
-	// Run* reads these; heartbeats disabled to keep the out-ring clean.
 	t.Setenv("HBASECOP_SHMEM_IN_PATH", inFile)
 	t.Setenv("HBASECOP_SHMEM_OUT_PATH", outFile)
 	t.Setenv("HBASECOP_RING_CAPACITY", "16")
@@ -111,11 +104,6 @@ func requestFrame(t *testing.T, hookID HookID, reqID uint64) *wire.Message {
 	return &wire.Message{Type: wire.TypeRequest, ReqID: reqID, HookID: uint8(hookID), Payload: payload}
 }
 
-// TestRunSurfacesEndToEnd drives each non-Region Run* entrypoint through a
-// real shmem ring with an Unimplemented observer: send one valid REQUEST for
-// that surface, confirm a RESPONSE returns (proving the surface dispatcher +
-// event loop are wired), then send SHUTDOWN and confirm the entrypoint exits
-// cleanly with nil. This covers the Run*/loadShmemConfigFromEnv bodies.
 func TestRunSurfacesEndToEnd(t *testing.T) {
 	surfaces := []struct {
 		name   string
@@ -134,7 +122,6 @@ func TestRunSurfacesEndToEnd(t *testing.T) {
 			done := make(chan error, 1)
 			go func() { done <- s.run() }()
 
-			// One valid hook for this surface → expect a RESPONSE.
 			h.sendFrame(t, requestFrame(t, s.hookID, 1))
 			resp := h.recvResponse(t)
 			if resp.Type != wire.TypeResponse {
@@ -148,7 +135,6 @@ func TestRunSurfacesEndToEnd(t *testing.T) {
 				t.Fatalf("%s: unexpected hook error: %v", s.name, hookResp.GetError())
 			}
 
-			// SHUTDOWN frame → the loop cancels and the entrypoint returns nil.
 			h.sendFrame(t, &wire.Message{Type: wire.TypeShutdown})
 			select {
 			case err := <-done:

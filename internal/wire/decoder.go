@@ -9,20 +9,10 @@ import (
 	"io"
 )
 
-// Decoder reads chunk frames from an io.Reader and reassembles
-// multi-chunk Messages keyed by req_id.
-//
-// Decoder is not safe for concurrent use. Memory for partial
-// reassemblies persists until either the matching final chunk arrives
-// or the underlying reader is closed; supervisor-level inflight
-// cleanup is T35.
 type Decoder struct {
-	r        io.Reader
-	pending  map[uint64]*reassembly
-	maxFrame int
-	// pendingBytes is the payload total retained across all entries in
-	// pending, bounded by MaxPendingBytes (the entry-count cap alone
-	// would still permit hundreds of GiB of near-complete reassemblies).
+	r            io.Reader
+	pending      map[uint64]*reassembly
+	maxFrame     int
 	pendingBytes int
 }
 
@@ -36,8 +26,6 @@ type reassembly struct {
 	size     int
 }
 
-// NewDecoder returns a Decoder reading from r with the default
-// MaxFrameSize cap.
 func NewDecoder(r io.Reader) *Decoder {
 	return &Decoder{
 		r:        r,
@@ -46,12 +34,6 @@ func NewDecoder(r io.Reader) *Decoder {
 	}
 }
 
-// Decode returns the next fully reassembled Message. Single-chunk
-// frames return immediately; multi-chunk frames are buffered until
-// every chunk_idx in [0, chunk_total) has arrived (in any order).
-//
-// io.EOF means the stream ended cleanly between frames;
-// io.ErrUnexpectedEOF means the stream ended mid-frame.
 func (d *Decoder) Decode() (*Message, error) {
 	for {
 		msg, err := d.readChunk()
@@ -61,7 +43,6 @@ func (d *Decoder) Decode() (*Message, error) {
 		if msg != nil {
 			return msg, nil
 		}
-		// chunk accepted but reassembly not yet complete; loop.
 	}
 }
 
@@ -72,9 +53,6 @@ func (d *Decoder) readChunk() (*Message, error) {
 	}
 	l := binary.BigEndian.Uint32(lenBuf[:])
 
-	// Compare in unsigned width: a peer-supplied length above 2 GiB would
-	// sign-extend negative under int() on a 32-bit build and slip past the cap
-	// into make([]byte, l). uint64 keeps the bound portable.
 	if l < headerSize || uint64(l) > uint64(d.maxFrame)-4 {
 		return nil, fmt.Errorf("%w: %d", ErrFrameTooLarge, l)
 	}
@@ -99,16 +77,11 @@ func (d *Decoder) readChunk() (*Message, error) {
 	if chunkTotal == 0 || chunkIdx >= chunkTotal {
 		return nil, fmt.Errorf("%w: idx=%d total=%d", ErrInvalidChunk, chunkIdx, chunkTotal)
 	}
-	// Bound chunk_total BEFORE any allocation keyed off it: chunkTotal is
-	// peer-controlled (raw u32), so an unbounded value would make the
-	// make([][]byte, chunkTotal) below request gigabytes and OOM us.
 	if chunkTotal > MaxChunks {
 		return nil, fmt.Errorf("%w: %d > %d", ErrTooManyChunks, chunkTotal, MaxChunks)
 	}
 
 	if chunkTotal == 1 {
-		// Single-chunk fast path; copy out of buf so callers may
-		// retain Payload independently of the read buffer.
 		out := append([]byte(nil), payload...)
 		return &Message{
 			Type: typ, ReqID: reqID, RegionID: regionID, HookID: hookID,
@@ -125,8 +98,6 @@ func (d *Decoder) readChunk() (*Message, error) {
 
 	re, ok := d.pending[reqID]
 	if !ok {
-		// Cap concurrent in-progress reassemblies so abandoned req_ids
-		// (final chunk never arrives) cannot grow the map without bound.
 		if len(d.pending) >= MaxPendingReassemblies {
 			return nil, fmt.Errorf("%w: %d", ErrTooManyPending, len(d.pending))
 		}

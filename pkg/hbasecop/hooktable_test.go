@@ -9,8 +9,6 @@ import (
 	"testing"
 )
 
-// HookNames must enumerate every surface's hooks (the config CLI uses it for
-// per-hook key validation); it includes region hooks like PrePut.
 func TestHookNames(t *testing.T) {
 	names := HookNames()
 	if len(names) == 0 {
@@ -28,10 +26,6 @@ func TestHookNames(t *testing.T) {
 	}
 }
 
-// TestHookTableIsCanonical pins the T41 hook surface: the (HookID, name)
-// table is the single source of truth shared by Go and Java sides. Adding a
-// new HBase RegionObserver hook means appending one row here and the Java
-// HookId mirror; nothing else compiles without that step.
 func TestHookTableIsCanonical(t *testing.T) {
 	if len(hookTable) == 0 {
 		t.Fatal("hookTable empty: T41 dispatch table not populated")
@@ -56,10 +50,6 @@ func TestHookTableIsCanonical(t *testing.T) {
 	}
 }
 
-// TestRegionObserverInterfaceCoversAllHooks pins the T41 RegionObserver
-// surface: every (HookID, name) entry in the canonical table corresponds to
-// a method of the public RegionObserver interface, so a new hook cannot be
-// added to the dispatch table without a matching SDK contract method.
 func TestRegionObserverInterfaceCoversAllHooks(t *testing.T) {
 	rt := reflect.TypeOf((*RegionObserver)(nil)).Elem()
 	methods := make(map[string]bool, rt.NumMethod())
@@ -77,13 +67,6 @@ func TestRegionObserverInterfaceCoversAllHooks(t *testing.T) {
 	}
 }
 
-// TestUnimplementedRegionObserverSatisfiesInterface promotes the
-// compile-time satisfaction assertion to a runtime test so its failure
-// message points back to T41. UnimplementedRegionObserver is the
-// embedded-noop type users compose into their own observers; it must
-// implement every method on RegionObserver. A runtime
-// PrePut/PostPut invocation also pins the noop return contract
-// (HookResult{}, nil).
 func TestUnimplementedRegionObserverSatisfiesInterface(t *testing.T) {
 	var obs RegionObserver = UnimplementedRegionObserver{}
 	res, err := obs.PrePut(context.Background(), ObserverEnv{}, nil)

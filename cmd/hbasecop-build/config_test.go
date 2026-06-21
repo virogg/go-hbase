@@ -108,7 +108,7 @@ func TestCheckSiteFile(t *testing.T) {
 func TestUnknownHookSuffix(t *testing.T) {
 	tests := []struct {
 		name string
-		want string // the flagged unknown hook, or "" when the key is fine
+		want string
 	}{
 		{"hbasecop.policy.prePut", ""},              // valid lower-camel hook
 		{"hbasecop.timeout.preWALAppend", ""},       // valid multi-caps hook

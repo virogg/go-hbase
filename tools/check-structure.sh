@@ -2,14 +2,12 @@
 # Copyright 2026 The go-hbase Authors
 # SPDX-License-Identifier: Apache-2.0
 
-# Verifies that the repository skeleton matches SPEC.md §4.
-# Used by T01 acceptance and CI.
+# Verifies repository skeleton
 set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fail=0
 
-# Required files (top-level + placeholders).
 REQUIRED_FILES=(
   "SPEC.md"
   "README.md"
@@ -34,7 +32,6 @@ REQUIRED_FILES=(
   ".github/workflows/ci.yml"
 )
 
-# Required directories (must exist even if empty -- enforced via .gitkeep).
 REQUIRED_DIRS=(
   "proto/hbase"
   "java/com/virogg/hbasecop/bridge"

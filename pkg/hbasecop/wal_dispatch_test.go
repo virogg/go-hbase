@@ -15,8 +15,6 @@ import (
 	"github.com/virogg/go-hbase/internal/wire/hookpb"
 )
 
-// capturingWAL records WAL-hook invocations for round-trip dispatch
-// tests (T53 Wave A).
 type capturingWAL struct {
 	UnimplementedWALObserver
 
@@ -130,7 +128,6 @@ func TestDispatchWALUnknownHookReturnsError(t *testing.T) {
 	wal := &capturingWAL{}
 	d := newWALDispatcher(wal, nil)
 
-	// PrePut is a region hook id; a WAL-only dispatcher must reject it.
 	inner := &hookpb.PreWALWriteRequest{Ctx: &hookpb.HookContext{}}
 	innerBytes, err := proto.Marshal(inner)
 	if err != nil {

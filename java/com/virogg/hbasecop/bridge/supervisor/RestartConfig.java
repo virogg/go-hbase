@@ -3,31 +3,18 @@
 
 package com.virogg.hbasecop.bridge.supervisor;
 
-/**
- * Tunables for {@link RestartController}: exponential-backoff parameters, consecutive-failure
- * threshold before the runtime is declared unhealthy, and the probe interval used once unhealthy.
- *
- * <p>Defaults follow {@code plan.md} T34: {@code 200ms → 400 → 800 → ... → 5s} doubling, jitter
- * ±20%, 5 consecutive failures before {@code UNHEALTHY}, probe every 30s thereafter.
- */
 public final class RestartConfig {
 
-  /** Default delay before the first restart attempt. */
   public static final long DEFAULT_INITIAL_DELAY_MS = 200L;
 
-  /** Default upper bound on the per-attempt delay. */
   public static final long DEFAULT_MAX_DELAY_MS = 5_000L;
 
-  /** Default multiplier applied after each failed attempt. */
   public static final double DEFAULT_MULTIPLIER = 2.0;
 
-  /** Default jitter ratio (±20%). */
   public static final double DEFAULT_JITTER_RATIO = 0.2;
 
-  /** Default consecutive-failure threshold before the runtime is declared unhealthy. */
   public static final int DEFAULT_MAX_CONSECUTIVE_FAILS = 5;
 
-  /** Default probe interval once unhealthy. */
   public static final long DEFAULT_PROBE_INTERVAL_MS = 30_000L;
 
   private final long initialDelayMs;
@@ -98,7 +85,6 @@ public final class RestartConfig {
     return new Builder();
   }
 
-  /** Mutable builder; not thread-safe. */
   public static final class Builder {
     private long initialDelayMs = DEFAULT_INITIAL_DELAY_MS;
     private long maxDelayMs = DEFAULT_MAX_DELAY_MS;

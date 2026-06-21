@@ -10,10 +10,6 @@ import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
 
-/**
- * Converts an HBase {@link Get} into its vendored proto twin. Field selection mirrors upstream
- * Get's wire format so the bytes are interchangeable with hbase-protocol-shaded.
- */
 final class GetConverter {
 
   private GetConverter() {}

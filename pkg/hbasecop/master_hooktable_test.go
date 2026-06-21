@@ -9,8 +9,6 @@ import (
 	"testing"
 )
 
-// TestMasterHookTableIsCanonical mirrors TestHookTableIsCanonical for
-// the master surface introduced in T51.
 func TestMasterHookTableIsCanonical(t *testing.T) {
 	if len(masterHookTable) == 0 {
 		t.Fatal("masterHookTable empty: T51 dispatch table not populated")
@@ -35,9 +33,6 @@ func TestMasterHookTableIsCanonical(t *testing.T) {
 	}
 }
 
-// TestMasterHookIDsDoNotCollideWithRegion pins the ID partitioning
-// (region 1-99, master 100-199) so a future hook addition can't
-// accidentally claim a value already taken by the other surface.
 func TestMasterHookIDsDoNotCollideWithRegion(t *testing.T) {
 	regionIDs := make(map[HookID]string)
 	for _, h := range hookTable {
@@ -59,9 +54,6 @@ func TestMasterHookIDsDoNotCollideWithRegion(t *testing.T) {
 	}
 }
 
-// TestMasterObserverInterfaceCoversAllHooks mirrors the RegionObserver
-// reflection check: every entry in masterHookTable corresponds to a
-// MasterObserver method and vice versa.
 func TestMasterObserverInterfaceCoversAllHooks(t *testing.T) {
 	rt := reflect.TypeOf((*MasterObserver)(nil)).Elem()
 	methods := make(map[string]bool, rt.NumMethod())
@@ -82,9 +74,6 @@ func TestMasterObserverInterfaceCoversAllHooks(t *testing.T) {
 	}
 }
 
-// TestUnimplementedMasterObserverSatisfiesInterface promotes the
-// compile-time satisfaction check to runtime and pins the noop return
-// contract (HookResult{}, nil) on Pre-* methods.
 func TestUnimplementedMasterObserverSatisfiesInterface(t *testing.T) {
 	var obs MasterObserver = UnimplementedMasterObserver{}
 	res, err := obs.PreCreateTable(context.Background(), ObserverEnv{}, nil)

@@ -15,15 +15,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/**
- * T16 acceptance: mirror of {@code internal/shmem.TestChannelRoundtrip1000} on the Java side. The
- * wrapper is end-to-end exercised in a single thread so any cross-process visibility issues remain
- * outside the surface tested here (those land in T18/T19).
- */
 class ChannelTest {
 
   private static final int CAPACITY = 8;
-  private static final int MAX_OBJECT_SIZE = 256; // → max payload 252 bytes
+  private static final int MAX_OBJECT_SIZE = 256;
 
   private Config configFor(Path file, Role role) {
     return Config.builder()
@@ -63,7 +58,6 @@ class ChannelTest {
     Path file = tmp.resolve("channel.mmap");
     try (Channel prod = Channel.open(configFor(file, Role.PRODUCER));
         Channel cons = Channel.open(configFor(file, Role.CONSUMER))) {
-      // Touch the producer so the region is fully initialized.
       assertEquals(CAPACITY, prod.capacity());
       assertFalse(cons.recv().isPresent());
     }
@@ -95,7 +89,6 @@ class ChannelTest {
   void ringFull(@TempDir Path tmp) throws Exception {
     Path file = tmp.resolve("channel.mmap");
     try (Channel prod = Channel.open(configFor(file, Role.PRODUCER))) {
-      // No consumer ack, so capacity sends must succeed then the next fails.
       for (int i = 0; i < CAPACITY; i++) {
         prod.send(new byte[] {(byte) i});
       }

@@ -30,8 +30,6 @@ import (
 	"os"
 )
 
-// subcommands maps the first CLI arg to its handler. Each handler receives the
-// args following the subcommand and returns a non-nil error to exit non-zero.
 var subcommands = map[string]func([]string) error{
 	"package": runPackage,
 	"config":  runConfig,
@@ -40,9 +38,6 @@ var subcommands = map[string]func([]string) error{
 }
 
 func main() {
-	// Subcommands: `package` is the one-shot pipeline (cross-compile + stock
-	// delegate + shade), `config`/`admin`/`init` the DX helpers. Bare flags (no
-	// recognized subcommand) stay the low-level packer for back-compat.
 	if len(os.Args) > 1 {
 		if run, ok := subcommands[os.Args[1]]; ok {
 			if err := run(os.Args[2:]); err != nil {
@@ -70,15 +65,11 @@ func parseFlags(args []string) (BuildOptions, error) {
 	var opts BuildOptions
 	fs.StringVar(&opts.GoBinPath, "go-bin", "", "path to the compiled Go observer ELF")
 	fs.StringVar(&opts.BridgeJarPath, "bridge-jar", "", "path to the shaded hbasecop-bridge jar")
-	fs.StringVar(&opts.ObserverClass, "observer-class", "",
-		"fully-qualified Java observer class (e.g. com.example.Audit)")
-	fs.StringVar(&opts.CoprocID, "coproc-id", "",
-		"operator-chosen coprocessor id (e.g. audit-observer)")
+	fs.StringVar(&opts.ObserverClass, "observer-class", "", "fully-qualified Java observer class (e.g. com.example.Audit)")
+	fs.StringVar(&opts.CoprocID, "coproc-id", "", "operator-chosen coprocessor id (e.g. audit-observer)")
 	fs.StringVar(&opts.OutJarPath, "out", "", "output coproc-jar path")
-	fs.StringVar(&opts.PolicyConfig, "policy-config", "",
-		"optional .properties file copied to META-INF/hbasecop-policy.properties")
-	fs.StringVar(&opts.BinName, "bin-name", "",
-		"override for the ELF's jar resource path (default: bin/linux-amd64/<basename>)")
+	fs.StringVar(&opts.PolicyConfig, "policy-config", "", "optional .properties file copied to META-INF/hbasecop-policy.properties")
+	fs.StringVar(&opts.BinName, "bin-name", "", "override for the ELF's jar resource path (default: bin/linux-amd64/<basename>)")
 	if err := fs.Parse(args); err != nil {
 		return BuildOptions{}, err
 	}
