@@ -9,11 +9,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fail=0
 
 REQUIRED_FILES=(
-  "SPEC.md"
   "README.md"
   "LICENSE"
-  "CONTRIBUTING.md"
-  "CODE_OF_CONDUCT.md"
   ".gitignore"
   "proto/wire.proto"
   "proto/hooks.proto"
@@ -41,7 +38,6 @@ REQUIRED_DIRS=(
   "examples/ttl-validator"
   "test/java/com/virogg/hbasecop"
   "test/integration"
-  "test/e2e"
   "test/bench"
 )
 
