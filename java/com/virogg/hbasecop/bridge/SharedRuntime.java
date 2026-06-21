@@ -15,19 +15,6 @@ import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.coprocessor.RegionServerObserver;
 import org.apache.hadoop.hbase.coprocessor.WALObserver;
 
-/**
- * T63 - process-wide refcounted lookup for {@link CoprocessorRuntime}.
- *
- * <p>HBase loads a fresh {@code RegionCoprocessor} instance for each region attached on a
- * RegionServer. Without sharing, every region would spawn its own Go process - for a host serving
- * dozens or hundreds of regions, that is dozens of redundant ELFs, shmem pairs, and watchdog
- * schedulers. {@code SharedRuntime} lets a coprocessor wrapper acquire a runtime by key (typically
- * the coproc-id or class name): the first {@link #acquire} on a key spawns the Go process and
- * stands up the runtime; subsequent acquires bump a refcount and hand back the same instance; the
- * last {@link Handle#release} sends {@code SHUTDOWN} and waits for the process to exit.
- *
- * <p>Thread-safe across acquire/release. The registry is JVM-wide.
- */
 public final class SharedRuntime {
 
   private static final Logger LOG = System.getLogger(SharedRuntime.class.getName());
@@ -37,21 +24,11 @@ public final class SharedRuntime {
 
   private SharedRuntime() {}
 
-  /**
-   * Supplier of a {@link Spec} (config + optional cleanup); only invoked when this acquire is the
-   * one that creates the registry entry - i.e. the first acquire for the key.
-   */
   @FunctionalInterface
   public interface ConfigSupplier {
     Spec get() throws IOException;
   }
 
-  /**
-   * A {@link CoprocessorRuntime.Config} bundled with an optional cleanup callback invoked after the
-   * runtime has been stopped (i.e. on the {@link Handle#release} that brings the refcount to zero).
-   * Typical use: a coprocessor wrapper creates a temp directory for the shmem files in its supplier
-   * and registers a {@code Runnable} that removes that directory once the shared runtime is gone.
-   */
   public static final class Spec {
     private final CoprocessorRuntime.Config config;
     private final Runnable onStop;
@@ -78,14 +55,6 @@ public final class SharedRuntime {
     }
   }
 
-  /**
-   * Acquire a shared runtime for {@code key}. The first call spawns the Go process and starts a
-   * fresh {@link CoprocessorRuntime}; subsequent calls return a new {@link Handle} bound to the
-   * existing runtime and increment its refcount.
-   *
-   * @throws IOException if this is the first acquire for the key and either the supplier or the
-   *     runtime fails to start; in that case the registry stays clean and a retry may succeed.
-   */
   public static Handle acquire(String key, ConfigSupplier supplier) throws IOException {
     Objects.requireNonNull(key, "key");
     Objects.requireNonNull(supplier, "supplier");
@@ -106,9 +75,6 @@ public final class SharedRuntime {
           created = true;
         } finally {
           if (!ok) {
-            // start() already cleaned up its own partial state; swallow any close errors so the
-            // original IOException from start() reaches the caller unwrapped. Also run the
-            // caller-supplied onStop so e.g. tmpdirs created in the supplier don't leak.
             try {
               rt.close();
             } catch (IOException | InterruptedException ignored) {
@@ -142,7 +108,6 @@ public final class SharedRuntime {
     return new Handle(key, entry.runtime);
   }
 
-  /** Visible-for-testing: current refcount on a key, or {@code 0} if the key has no entry. */
   static int refcountForTesting(String key) {
     synchronized (LOCK) {
       Entry e = ENTRIES.get(key);
@@ -150,7 +115,6 @@ public final class SharedRuntime {
     }
   }
 
-  /** Visible-for-testing: number of distinct live keys in the registry. */
   static int activeKeyCountForTesting() {
     synchronized (LOCK) {
       return ENTRIES.size();
@@ -199,18 +163,10 @@ public final class SharedRuntime {
     }
   }
 
-  /**
-   * A refcount-holding reference to a shared {@link CoprocessorRuntime}. Each handle must be
-   * {@linkplain #release() released} (or {@linkplain #close() closed}) exactly once; further calls
-   * are no-ops.
-   */
   public static final class Handle implements AutoCloseable {
 
     private final String key;
     private final CoprocessorRuntime runtime;
-    // volatile: written under synchronized release() but read on the endpoint/observer
-    // accessors from RS handler threads; without it a concurrent invoke racing region
-    // close has no happens-before guarantee to observe the release (review E2J-3).
     private volatile boolean released;
 
     private Handle(String key, CoprocessorRuntime runtime) {
@@ -218,44 +174,26 @@ public final class SharedRuntime {
       this.runtime = runtime;
     }
 
-    /**
-     * The shared runtime's {@link RegionObserver}, or {@code null} after this handle is released.
-     */
     public RegionObserver getRegionObserver() {
       return released ? null : runtime.getRegionObserver();
     }
 
-    /**
-     * The shared runtime's {@link MasterObserver}, or {@code null} after this handle is released.
-     */
     public MasterObserver getMasterObserver() {
       return released ? null : runtime.getMasterObserver();
     }
 
-    /**
-     * The shared runtime's {@link RegionServerObserver}, or {@code null} after this handle is
-     * released.
-     */
     public RegionServerObserver getRegionServerObserver() {
       return released ? null : runtime.getRegionServerObserver();
     }
 
-    /** The shared runtime's {@link WALObserver}, or {@code null} after this handle is released. */
     public WALObserver getWALObserver() {
       return released ? null : runtime.getWALObserver();
     }
 
-    /**
-     * The shared runtime's {@link BulkLoadObserver}, or {@code null} after this handle is released.
-     */
     public BulkLoadObserver getBulkLoadObserver() {
       return released ? null : runtime.getBulkLoadObserver();
     }
 
-    /**
-     * Forwards a Tier 2 endpoint invocation to the shared runtime and returns the result payload.
-     * Throws {@link java.io.IOException} if this handle has been released or the call fails.
-     */
     public byte[] invokeEndpoint(com.virogg.hbasecop.bridge.wire.pb.EndpointInvoke invoke)
         throws java.io.IOException {
       if (released) {
@@ -264,10 +202,6 @@ public final class SharedRuntime {
       return runtime.invokeEndpoint(invoke);
     }
 
-    /**
-     * TE31: forward an endpoint invocation stamped with {@code regionId} so a Go handler's reverse
-     * RPCs target the originating region.
-     */
     public byte[] invokeEndpoint(
         com.virogg.hbasecop.bridge.wire.pb.EndpointInvoke invoke, int regionId)
         throws java.io.IOException {
@@ -277,18 +211,10 @@ public final class SharedRuntime {
       return runtime.invokeEndpoint(invoke, regionId);
     }
 
-    /**
-     * TE31: the wire region_id for {@code encodedRegionName}, or 0 if unknown / handle released.
-     */
     public int regionId(String encodedRegionName) {
       return released ? 0 : runtime.regionIdFor(encodedRegionName);
     }
 
-    /**
-     * Decrement the refcount on this handle's runtime. When the last handle for a key releases, the
-     * runtime is stopped (SHUTDOWN frame + {@code process.waitFor}). Idempotent: subsequent calls
-     * are no-ops.
-     */
     public synchronized void release() {
       if (released) {
         return;
@@ -302,10 +228,6 @@ public final class SharedRuntime {
       release();
     }
 
-    /**
-     * Visible-for-testing: direct access to the underlying runtime, for assertions on pid / isAlive
-     * / etc. Production callers should go through the {@code getXObserver()} accessors.
-     */
     CoprocessorRuntime runtimeForTesting() {
       return runtime;
     }

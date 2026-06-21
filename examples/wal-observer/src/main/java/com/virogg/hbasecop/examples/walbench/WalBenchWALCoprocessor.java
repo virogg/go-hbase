@@ -17,18 +17,6 @@ import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.WALCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.WALObserver;
 
-/**
- * T82 WAL coprocessor. Acquires a shared {@link CoprocessorRuntime} via {@link SharedRuntime}
- * keyed on this class and delegates to its {@link WALObserver} adapter. The embedded Go binary is
- * the {@code wal-observer} ELF, a deliberate no-op: every {@code preWALWrite}/{@code postWALWrite}
- * crosses the shmem rings and returns the zero result, so the {@code WalThroughputBenchIT} bench
- * measures pure bridge overhead on the WAL append hot path against a baseline cluster without
- * this coprocessor registered.
- *
- * <p>Registered cluster-wide via {@code hbase.coprocessor.wal.classes} (no per-table attachment
- * exists for WAL coprocessors); the T82 entrypoint block wires that when {@code
- * HBASECOP_WAL_COPROC_CLASS} is set.
- */
 public final class WalBenchWALCoprocessor implements WALCoprocessor {
 
   private static final Logger LOG = System.getLogger(WalBenchWALCoprocessor.class.getName());

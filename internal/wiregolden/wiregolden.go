@@ -1,10 +1,6 @@
 // Copyright 2026 The go-hbase Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// Package wiregolden parses test/golden/wire/v1/fixtures.tsv into
-// concrete wire.Message values plus the path to each pre-encoded .bin
-// fixture. Used by both the cross-language test in internal/wire and
-// the cmd/wire-golden generator that produces the .bin files.
 package wiregolden
 
 import (
@@ -18,17 +14,12 @@ import (
 	"github.com/virogg/go-hbase/internal/wire"
 )
 
-// Fixture describes one row of fixtures.tsv: the logical Message plus
-// the per-fixture chunk size override.
 type Fixture struct {
 	Name      string
 	Message   wire.Message
 	ChunkSize int // 0 = wire.MaxPayloadBytes
 }
 
-// Parse reads fixtures.tsv lines from r and returns the fixture list.
-// Lines starting with '#' or blank lines are ignored. The format is
-// documented at the top of test/golden/wire/v1/fixtures.tsv.
 func Parse(r io.Reader) ([]Fixture, error) {
 	var out []Fixture
 	scanner := bufio.NewScanner(r)

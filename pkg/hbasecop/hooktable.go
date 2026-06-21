@@ -11,12 +11,6 @@ import (
 	"github.com/virogg/go-hbase/internal/wire/hookpb"
 )
 
-// hookEntry is one row of the T41 dispatch table: how to decode an inbound
-// Request payload, how to invoke the matching RegionObserver method, and its
-// name (mirrored by the Go interface method and the Java HookId enum). Iterated
-// at startup to build hooksByID. TestHookTableIsCanonical and the
-// interface-coverage test keep the three sides (proto enum, Go interface, Java
-// HookId) in lockstep.
 type hookEntry struct {
 	id     HookID
 	name   string
@@ -24,14 +18,8 @@ type hookEntry struct {
 	invoke hookInvoker
 }
 
-// hookInvoker is the type-erased entrypoint. The closure dispatches to one
-// RegionObserver method, type-asserts the decoded Request, and normalises
-// Post-* methods (error-only) into the (HookResult, error) shape used by Pre-*.
 type hookInvoker func(observer RegionObserver, ctx context.Context, env ObserverEnv, req proto.Message) (HookResult, error)
 
-// newReq returns a zero-valued proto.Message for the type parameter so dispatch
-// table rows stay one-liners. The pointer constraint keeps PT = *T addressable
-// for proto.Unmarshal.
 func newReq[T any, PT interface {
 	*T
 	proto.Message
@@ -39,61 +27,50 @@ func newReq[T any, PT interface {
 	return PT(new(T))
 }
 
-// preHook boxes a RegionObserver Pre-* method expression behind the type-erased
-// hookInvoker. Interface method expressions yield func(RegionObserver, ...); the
-// closure type-asserts the decoded payload to the per-hook Request type.
 func preHook[Req proto.Message](method func(RegionObserver, context.Context, ObserverEnv, Req) (HookResult, error)) hookInvoker {
 	return func(o RegionObserver, ctx context.Context, env ObserverEnv, req proto.Message) (HookResult, error) {
 		return method(o, ctx, env, req.(Req))
 	}
 }
 
-// postHook boxes a RegionObserver Post-* method expression. Post-hooks
-// return only error; HookResult{} is returned so Bypass stays false.
 func postHook[Req proto.Message](method func(RegionObserver, context.Context, ObserverEnv, Req) error) hookInvoker {
 	return func(o RegionObserver, ctx context.Context, env ObserverEnv, req proto.Message) (HookResult, error) {
 		return HookResult{}, method(o, ctx, env, req.(Req))
 	}
 }
 
-// hookTable is the canonical T41 dispatch table. Order matches
-// proto/hooks.proto's HookId enum so it scans top-to-bottom against the .proto.
-// Adding an HBase RegionObserver method means: one row here, one method on the
-// RegionObserver interface, one no-op on UnimplementedRegionObserver, one entry
-// in the Java HookId enum plus RegionObserverAdapter override. The hooks_test
-// reflection checks pin the parity.
 var hookTable = []hookEntry{
-	// Lifecycle.
+	// Lifecycle
 	{HookIDPreOpen, "PreOpen", newReq[hookpb.PreOpenRequest], preHook(RegionObserver.PreOpen)},
 	{HookIDPostOpen, "PostOpen", newReq[hookpb.PostOpenRequest], postHook(RegionObserver.PostOpen)},
 	{HookIDPreClose, "PreClose", newReq[hookpb.PreCloseRequest], preHook(RegionObserver.PreClose)},
 	{HookIDPostClose, "PostClose", newReq[hookpb.PostCloseRequest], postHook(RegionObserver.PostClose)},
 
-	// Flush.
+	// Flush
 	{HookIDPreFlush, "PreFlush", newReq[hookpb.PreFlushRequest], preHook(RegionObserver.PreFlush)},
 	{HookIDPreFlushScannerOpen, "PreFlushScannerOpen", newReq[hookpb.PreFlushScannerOpenRequest], preHook(RegionObserver.PreFlushScannerOpen)},
 	{HookIDPostFlush, "PostFlush", newReq[hookpb.PostFlushRequest], postHook(RegionObserver.PostFlush)},
 
-	// MemStore compaction.
+	// MemStore compaction
 	{HookIDPreMemStoreCompaction, "PreMemStoreCompaction", newReq[hookpb.PreMemStoreCompactionRequest], preHook(RegionObserver.PreMemStoreCompaction)},
 	{HookIDPreMemStoreCompactionCompactScannerOpen, "PreMemStoreCompactionCompactScannerOpen", newReq[hookpb.PreMemStoreCompactionCompactScannerOpenRequest], preHook(RegionObserver.PreMemStoreCompactionCompactScannerOpen)},
 	{HookIDPreMemStoreCompactionCompact, "PreMemStoreCompactionCompact", newReq[hookpb.PreMemStoreCompactionCompactRequest], preHook(RegionObserver.PreMemStoreCompactionCompact)},
 	{HookIDPostMemStoreCompaction, "PostMemStoreCompaction", newReq[hookpb.PostMemStoreCompactionRequest], postHook(RegionObserver.PostMemStoreCompaction)},
 
-	// Compaction.
+	// Compaction
 	{HookIDPreCompactSelection, "PreCompactSelection", newReq[hookpb.PreCompactSelectionRequest], preHook(RegionObserver.PreCompactSelection)},
 	{HookIDPostCompactSelection, "PostCompactSelection", newReq[hookpb.PostCompactSelectionRequest], postHook(RegionObserver.PostCompactSelection)},
 	{HookIDPreCompactScannerOpen, "PreCompactScannerOpen", newReq[hookpb.PreCompactScannerOpenRequest], preHook(RegionObserver.PreCompactScannerOpen)},
 	{HookIDPreCompact, "PreCompact", newReq[hookpb.PreCompactRequest], preHook(RegionObserver.PreCompact)},
 	{HookIDPostCompact, "PostCompact", newReq[hookpb.PostCompactRequest], postHook(RegionObserver.PostCompact)},
 
-	// Read path.
+	// Read path
 	{HookIDPreGetOp, "PreGetOp", newReq[hookpb.PreGetOpRequest], preHook(RegionObserver.PreGetOp)},
 	{HookIDPostGetOp, "PostGetOp", newReq[hookpb.PostGetOpRequest], postHook(RegionObserver.PostGetOp)},
 	{HookIDPreExists, "PreExists", newReq[hookpb.PreExistsRequest], preHook(RegionObserver.PreExists)},
 	{HookIDPostExists, "PostExists", newReq[hookpb.PostExistsRequest], postHook(RegionObserver.PostExists)},
 
-	// Write path - Put (frozen Phase-2 signatures: take *MutationProto direct).
+	// Write path - Put
 	{
 		HookIDPrePut, "PrePut",
 		newReq[hookpb.PrePutRequest],
@@ -182,8 +159,6 @@ var hookTable = []hookEntry{
 	{HookIDPreWALAppend, "PreWALAppend", newReq[hookpb.PreWALAppendRequest], preHook(RegionObserver.PreWALAppend)},
 }
 
-// hooksByID indexes the dispatch table for O(1) lookup on the inbound-frame hot
-// path. Built once at package init.
 var hooksByID = func() map[HookID]hookEntry {
 	m := make(map[HookID]hookEntry, len(hookTable))
 	for _, h := range hookTable {
@@ -192,11 +167,6 @@ var hooksByID = func() map[HookID]hookEntry {
 	return m
 }()
 
-// HookNames returns the method name of every hook across all observer surfaces
-// (region, master, region-server, WAL, bulk-load). It is the canonical set a
-// config linter checks per-hook policy/timeout suffixes against, mirroring the
-// Java HookId.byMethodName lookup. The order matches each surface's dispatch
-// table; callers wanting membership should build their own set.
 func HookNames() []string {
 	names := make([]string, 0,
 		len(hookTable)+len(masterHookTable)+len(regionServerHookTable)+len(walHookTable)+len(bulkLoadHookTable))

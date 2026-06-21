@@ -7,10 +7,6 @@ import com.virogg.hbasecop.hbase.v1.ClientProtos;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Result;
 
-/**
- * Maps an HBase {@link Result} into the vendored proto envelope, including every Cell that the
- * Result carries in-band. Empty Results (no Cells) round-trip as an empty proto Result.
- */
 final class ResultConverter {
 
   private ResultConverter() {}

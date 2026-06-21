@@ -25,22 +25,6 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Table;
 import org.junit.jupiter.api.Test;
 
-/**
- * Native-vs-Go comparison for a READ-PATH bypass OBSERVER. Both arms bypass any Get whose row
- * carries the blocked prefix {@code "block-"} (the Get returns empty):
- *
- * <ul>
- *   <li>native arm: {@code NativeFilterObserver.preGetOp} calls {@code ctx.bypass()} in the
- *       RegionServer JVM;
- *   <li>Go arm: {@code FilterRegionObserver} forwards preGetOp over the bridge to the Go {@code
- *       filter-observer} process, which returns {@code HookResult.Bypass=true}.
- * </ul>
- *
- * <p>Equivalence: for the same rows, both arms must return the SAME visible result (blocked rows
- * empty, allowed rows present). Performance: per-arm Get latency over a blocked/allowed mix,
- * interleaved A/B, reported (not gated). The coproc is attached AFTER seeding
- * (disable/modify/enable) so the seed Puts never traverse the read-path observer.
- */
 final class FilterReadCompareIT {
 
   private static final byte[] Q = "q".getBytes(StandardCharsets.UTF_8);
@@ -65,7 +49,6 @@ final class FilterReadCompareIT {
       CompareSupport.dropTable(admin, nativeTn);
       CompareSupport.dropTable(admin, goTn);
 
-      // Seed BEFORE attaching (the Go arm also vetoes block-* writes via preBatchMutate).
       CompareSupport.createPlainTable(admin, nativeTn);
       CompareSupport.createPlainTable(admin, goTn);
       try (Table seedN = conn.getTable(nativeTn);
@@ -83,7 +66,6 @@ final class FilterReadCompareIT {
       try (Table nativeTable = conn.getTable(nativeTn);
           Table goTable = conn.getTable(goTn)) {
 
-        // --- Equivalence (hard pass/fail) ---------------------------------
         for (int i = 0; i < N_PER_GROUP; i++) {
           byte[] blockedRow = (BLOCKED + i).getBytes(StandardCharsets.UTF_8);
           byte[] allowedRow = (ALLOWED + i).getBytes(StandardCharsets.UTF_8);
@@ -104,7 +86,6 @@ final class FilterReadCompareIT {
               "allowed Get value equivalence");
         }
 
-        // --- Performance (report-only): mixed blocked/allowed Get latency --
         List<Long> nativeSamples = new ArrayList<>();
         List<Long> goSamples = new ArrayList<>();
         for (int r = 0; r < PERF_WARMUP + PERF_ROUNDS; r++) {
@@ -133,7 +114,6 @@ final class FilterReadCompareIT {
     }
   }
 
-  /** One blocked Get + one allowed Get (the workload unit timed per round). */
   private static void getMix(Table table) throws Exception {
     table.get(new Get((BLOCKED + "1").getBytes(StandardCharsets.UTF_8)));
     table.get(new Get((ALLOWED + "1").getBytes(StandardCharsets.UTF_8)));

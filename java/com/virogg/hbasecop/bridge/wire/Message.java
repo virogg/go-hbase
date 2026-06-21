@@ -6,14 +6,6 @@ package com.virogg.hbasecop.bridge.wire;
 import java.util.Arrays;
 import java.util.Objects;
 
-/**
- * Reassembled wire-level frame: routing metadata plus the raw PB-encoded payload corresponding to
- * {@link FrameType}.
- *
- * <p>{@code regionId} is the unsigned uint32 from the wire stored in a signed int; callers reading
- * region IDs from the wire should treat the high bit as a magnitude bit (use {@code
- * Integer.toUnsignedLong}).
- */
 public final class Message {
   private final FrameType type;
   private final long reqId;

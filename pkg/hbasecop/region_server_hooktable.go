@@ -11,9 +11,6 @@ import (
 	"github.com/virogg/go-hbase/internal/wire/hookpb"
 )
 
-// regionServerHookEntry is the region-server analogue of hookEntry:
-// maps a HookID to its decoder + a closure that invokes the matching
-// RegionServerObserver method.
 type regionServerHookEntry struct {
 	id     HookID
 	name   string
@@ -35,8 +32,6 @@ func postRegionServerHook[Req proto.Message](method func(RegionServerObserver, c
 	}
 }
 
-// regionServerHookTable is the T52 region-server dispatch table. Order
-// mirrors proto/hooks.proto's HookId region-server section (IDs 200-210).
 var regionServerHookTable = []regionServerHookEntry{
 	{HookIDPreStopRegionServer, "PreStopRegionServer", newReq[hookpb.PreStopRegionServerRequest], preRegionServerHook(RegionServerObserver.PreStopRegionServer)},
 
@@ -53,8 +48,6 @@ var regionServerHookTable = []regionServerHookEntry{
 	{HookIDPostExecuteProcedures, "PostExecuteProcedures", newReq[hookpb.PostExecuteProceduresRequest], postRegionServerHook(RegionServerObserver.PostExecuteProcedures)},
 }
 
-// regionServerHooksByID indexes the region-server dispatch table for
-// O(1) lookup.
 var regionServerHooksByID = func() map[HookID]regionServerHookEntry {
 	m := make(map[HookID]regionServerHookEntry, len(regionServerHookTable))
 	for _, h := range regionServerHookTable {

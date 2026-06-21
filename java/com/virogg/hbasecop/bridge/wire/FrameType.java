@@ -3,12 +3,6 @@
 
 package com.virogg.hbasecop.bridge.wire;
 
-/**
- * On-wire payload-type discriminator (the {@code type} byte).
- *
- * <p>Values match {@code internal/wire/frame.go}; the wire numeric values are independent of the PB
- * oneof tag numbers in {@code wire.proto}.
- */
 public enum FrameType {
   UNKNOWN((byte) 0),
   REQUEST((byte) 1),
@@ -17,8 +11,6 @@ public enum FrameType {
   ERROR((byte) 4),
   SHUTDOWN((byte) 5),
   LOG((byte) 6),
-  // Tier 2 (wire v2): endpoint invoke/result and the Go-initiated reverse-RPC
-  // channel. Appended; v1 values are unchanged.
   ENDPOINT_INVOKE((byte) 7),
   ENDPOINT_RESULT((byte) 8),
   RPC_REQUEST((byte) 9),
@@ -38,7 +30,6 @@ public enum FrameType {
     return value >= 1 && value <= 10;
   }
 
-  /** Heartbeat/Shutdown/Log are stateless and must be single-chunk on the wire. */
   public boolean isControl() {
     return this == HEARTBEAT || this == SHUTDOWN || this == LOG;
   }

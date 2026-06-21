@@ -13,7 +13,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-/** TE31 - {@link RegionRegistry} acceptance: register/lookup/release of region_id -> Region. */
 @ExtendWith(MockitoExtension.class)
 class RegionRegistryTest {
 
@@ -49,7 +48,7 @@ class RegionRegistryTest {
   @Test
   void zeroIdAndNullRegionAreNotStored() {
     RegionRegistry reg = new RegionRegistry();
-    reg.register(0, regionA); // 0 = no region scope sentinel
+    reg.register(0, regionA);
     reg.register(5, null);
     assertNull(reg.lookup(0));
     assertNull(reg.lookup(5));

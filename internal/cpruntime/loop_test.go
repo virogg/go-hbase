@@ -24,8 +24,6 @@ const (
 	testRingMaxObjectSize = 4096
 )
 
-// loopChannels are the four endpoints around a Loop running in-process:
-// the Loop's own InCh/OutCh, plus the mock-Java side that drives them.
 type loopChannels struct {
 	loopIn  *shmem.Channel // RoleConsumer  (Java → Go inbound)
 	loopOut *shmem.Channel // RoleProducer  (Go → Java outbound)
@@ -80,10 +78,6 @@ func decodeWireFrame(t *testing.T, data []byte) *wire.Message {
 	return msg
 }
 
-// TestLoopPingPong10000 is the T17 acceptance test: 10k ping/pong
-// round-trips through a real shmem pair, asserting p99 latency < 1ms.
-// Heartbeats are disabled so they do not contend with the latency
-// measurement.
 func TestLoopPingPong10000(t *testing.T) {
 	ch := openLoopChannels(t)
 
@@ -164,12 +158,6 @@ func TestLoopPingPong10000(t *testing.T) {
 	p50 := latencies[N/2]
 	p99 := latencies[int(float64(N)*0.99)]
 	t.Logf("ping/pong latency: p50=%v p99=%v max=%v", p50, p99, latencies[N-1])
-	// Gate on p50: it is the robust statistic on shared CI runners, where
-	// multi-ms scheduler stalls under -race routinely land in the p99 tail
-	// (observed: p50=16µs, p99=2ms on a 2-core hosted runner). The SPEC §7
-	// latency SLO is asserted by the T81 bench, not this unit test; the p99
-	// ceiling here only catches pathological regressions (lost wakeups,
-	// seconds-scale stalls), not jitter.
 	if p50 > time.Millisecond {
 		t.Fatalf("p50 latency %v > 1ms", p50)
 	}
@@ -215,7 +203,6 @@ func TestLoopHeartbeats(t *testing.T) {
 	cancel()
 	wg.Wait()
 
-	// 200ms / 10ms = 20 expected; allow scheduler slop, demand ≥ 10.
 	if beats < 10 {
 		t.Fatalf("expected ≥10 heartbeats in 200ms with 10ms period, got %d", beats)
 	}

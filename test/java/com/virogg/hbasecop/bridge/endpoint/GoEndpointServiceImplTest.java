@@ -17,14 +17,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.junit.jupiter.api.Test;
 
-/**
- * TE21: the generic endpoint Service maps a client {@code Call} onto an {@link EndpointInvoke} wire
- * frame and returns the invoker's result, exercised through the exact UNSHADED {@code
- * com.google.protobuf} invocation shape HBase uses (ServerRpcController + an unshaded RpcCallback).
- */
 final class GoEndpointServiceImplTest {
 
-  // Unshaded callback (NOT hbase's BlockingRpcCallback, which is shaded): captures the response.
   private static GoEndpointResponse invokeCall(
       GoEndpointServiceImpl service, GoEndpointRequest request) {
     AtomicReference<GoEndpointResponse> out = new AtomicReference<>();
@@ -50,13 +44,11 @@ final class GoEndpointServiceImplTest {
             .build();
     GoEndpointResponse resp = invokeCall(service, request);
 
-    // The bridge built an EndpointInvoke carrying the service name, method, and payload verbatim.
     EndpointInvoke invoke = captured.get();
     assertEquals("virogg.hbasecop.v1.GoEndpointService", invoke.getService());
     assertEquals("sum", invoke.getMethod());
     assertArrayEquals("body".getBytes(), invoke.getPayload().toByteArray());
 
-    // The Service returned the invoker's result and reported no error.
     assertArrayEquals("RESULT".getBytes(), resp.getPayload().toByteArray());
     assertTrue(resp.getError().isEmpty(), "no error on success");
   }

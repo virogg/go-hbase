@@ -9,15 +9,6 @@ import (
 	"github.com/virogg/go-hbase/internal/wire/hookpb"
 )
 
-// RegionServerObserver is the Go-side mirror of HBase 2.5
-// RegionServerObserver. Implement the methods whose hooks your
-// region-server coprocessor needs; embed UnimplementedRegionServerObserver
-// to inherit no-op defaults for the rest. Returning HookResult{Bypass:true}
-// from a Pre-* method causes the Java RegionServerObserverAdapter to
-// invoke ObserverContext.bypass(), short-circuiting the in-progress
-// region-server operation. Returning a non-nil error fails the call back
-// to HBase per the configured failure policy (T31/T32, same wiring as
-// RegionObserver and MasterObserver).
 type RegionServerObserver interface {
 	// Server lifecycle.
 	PreStopRegionServer(ctx context.Context, env ObserverEnv, req *hookpb.PreStopRegionServerRequest) (HookResult, error)
@@ -39,10 +30,6 @@ type RegionServerObserver interface {
 	PostExecuteProcedures(ctx context.Context, env ObserverEnv, req *hookpb.PostExecuteProceduresRequest) error
 }
 
-// UnimplementedRegionServerObserver provides no-op implementations of
-// every RegionServerObserver method. Embed it in your own struct so
-// adding a new hook to RegionServerObserver later doesn't break your
-// code.
 type UnimplementedRegionServerObserver struct{}
 
 var _ RegionServerObserver = UnimplementedRegionServerObserver{}

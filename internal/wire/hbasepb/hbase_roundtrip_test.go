@@ -12,11 +12,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// TestHBaseMessageRoundTrip is T21's per-language round-trip gate:
-// for every vendored HBase message + the new hook envelopes, Marshal
-// then Unmarshal must reproduce the original message bit-for-bit.
-// Anything that fails here would also break cross-language wire
-// compatibility with real HBase (since we kept upstream field numbers).
 func TestHBaseMessageRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -108,9 +103,6 @@ func TestHBaseMessageRoundTrip(t *testing.T) {
 				t.Fatalf("round-trip diverged:\n  want: %v\n  got:  %v", tc.msg, decoded)
 			}
 
-			// Second-pass encode must produce identical bytes - protoc-gen-go
-			// encodes deterministically in field-number order, which is what
-			// the cross-language wire compatibility story relies on.
 			reEncoded, err := proto.Marshal(decoded)
 			if err != nil {
 				t.Fatalf("re-Marshal(%T): %v", tc.msg, err)

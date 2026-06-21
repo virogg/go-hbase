@@ -17,15 +17,6 @@ import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 
-/**
- * T73 TTL-validation example, RegionServer side: delegates every RegionObserver hook to the Go
- * runtime via a {@link CoprocessorRuntime}. The Go observer rejects Puts whose cell values lack the
- * {@code ttl=<seconds>;} envelope; under the default <b>strict</b> policy for pre-hooks the
- * rejection reaches the HBase client as an {@code IOException} and the write is aborted.
- *
- * <p>The runtime is acquired via {@link SharedRuntime} keyed on this class, so all regions on one
- * RegionServer share one Go process / one shmem pair (T63).
- */
 public final class TtlValidatorRegionObserver implements RegionCoprocessor {
 
   private static final Logger LOG = System.getLogger(TtlValidatorRegionObserver.class.getName());

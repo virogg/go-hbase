@@ -3,7 +3,6 @@
 
 package com.virogg.hbasecop.multiplex;
 
-import com.virogg.hbasecop.bridge.wire.FrameType;
 import com.virogg.hbasecop.bridge.wire.Message;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -17,40 +16,13 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
-/**
- * Correlates outbound Requests with inbound Responses over a single shared channel.
- *
- * <p>Each {@link #call} allocates a strictly monotonic {@code uint64} req_id, registers a pending
- * {@link CompletableFuture}, stamps that id onto a copy of the supplied {@link Message} (preserving
- * its frame type — {@link FrameType#REQUEST} for hooks, {@link FrameType#ENDPOINT_INVOKE} for Tier
- * 2 endpoint calls) and hands it to the {@link Sender}. The future completes when {@link #deliver}
- * receives a reply (Response/Error/EndpointResult) with the same req_id, or fails with {@link
- * ChannelClosedException} on {@link #close}.
- *
- * <p>Crash-restart semantics (T35): {@link #pauseInflightFailing(Throwable)} fails every pending
- * future and parks subsequent {@link #call}s as <em>deferred</em>; {@link #resume()} adopts the
- * deferred queue into pending and dispatches each REQUEST. With a {@link ScheduledExecutorService}
- * and positive {@code restartDeadlineMs} configured via {@link #builder(Sender)}, each deferred
- * call gets a per-call timer that fails it with {@link GoSideCrashedException} once the deadline
- * elapses without a resume. With neither wired in, calls during pause fail immediately with {@link
- * GoSideCrashedException} carrying the pause-time reason.
- *
- * <p>One {@code Multiplexer} instance corresponds to one (in,out) channel pair; region/hook fan-out
- * lives in higher layers (T61).
- */
 public final class Multiplexer implements AutoCloseable {
 
-  /** Outbound writer. Implementations must be safe for concurrent invocation. */
   @FunctionalInterface
   public interface Sender {
     void send(Message msg) throws Exception;
   }
 
-  /**
-   * Upper bound on concurrent in-flight (pending) calls. Backstops memory against a leak if a
-   * caller forgets to {@link #cancel} a timed-out request. Far above any realistic inflight count
-   * (bounded in practice by the HBase RPC handler-thread pool).
-   */
   public static final int DEFAULT_MAX_PENDING = 100_000;
 
   private final Sender sender;
@@ -88,34 +60,15 @@ public final class Multiplexer implements AutoCloseable {
     return new Builder(sender);
   }
 
-  /**
-   * Allocate a fresh req_id, register a waiter, stamp it onto {@code request} and dispatch via the
-   * {@link Sender}. The returned future completes when a matching reply is delivered, fails with
-   * {@link ChannelClosedException} on {@link #close}, with {@link GoSideCrashedException} when the
-   * mux is paused (or becomes paused while deferred), or with the sender's exception if dispatch
-   * throws.
-   *
-   * <p>The supplied {@code request} is not mutated; a new {@link Message} carrying the allocated
-   * req_id and the caller's original frame type is forwarded to the sender.
-   */
   public CompletableFuture<Message> call(Message request) {
     return callTracked(request).future;
   }
 
-  /**
-   * Like {@link #call(Message)} but returns the allocated req_id alongside the future so the caller
-   * can {@link #cancel(long)} it on timeout. The synchronous hook dispatcher uses this to drop a
-   * timed-out request from {@code pending}; otherwise its future and map entry leak for the life of
-   * the channel (one per timed-out call).
-   */
   public Call callTracked(Message request) {
     Objects.requireNonNull(request, "request");
 
     long id = nextId.incrementAndGet();
     CompletableFuture<Message> fut = new CompletableFuture<>();
-    // Preserve the caller's frame type: hooks send REQUEST, Tier 2 endpoint
-    // invocations send ENDPOINT_INVOKE. Hardcoding REQUEST here mis-routed
-    // endpoint calls to the Go hook dispatcher (surfacing as "unknown hook").
     Message outbound =
         new Message(request.type(), id, request.regionId(), request.hookId(), request.payload());
 
@@ -126,7 +79,6 @@ public final class Multiplexer implements AutoCloseable {
       }
       if (paused) {
         if (scheduler == null || restartDeadlineMs <= 0L) {
-          // No deferred-wait wiring: fail fast with the pause reason.
           fut.completeExceptionally(
               pauseReason != null ? pauseReason : new GoSideCrashedException("multiplex: paused"));
           return new Call(id, fut);
@@ -161,12 +113,6 @@ public final class Multiplexer implements AutoCloseable {
     return new Call(id, fut);
   }
 
-  /**
-   * Stop tracking {@code reqId}: remove any pending or deferred waiter for it and cancel its
-   * deadline timer. Called by the dispatcher on {@link #call} timeout so the future and map entry
-   * are reclaimed instead of leaking. A late RESPONSE for a cancelled id is then dropped by {@link
-   * #deliver} (no waiter found). Idempotent.
-   */
   public void cancel(long reqId) {
     Deferred d;
     synchronized (lock) {
@@ -178,7 +124,6 @@ public final class Multiplexer implements AutoCloseable {
     }
   }
 
-  /** A dispatched call: the allocated req_id plus the future that completes on its RESPONSE. */
   public static final class Call {
     public final long reqId;
     public final CompletableFuture<Message> future;
@@ -189,12 +134,6 @@ public final class Multiplexer implements AutoCloseable {
     }
   }
 
-  /**
-   * Route {@code response} to the waiter that issued the matching {@link #call}.
-   *
-   * @return {@code true} when a waiter was found and completed, {@code false} when no pending entry
-   *     exists for {@code response.reqId()}; typically a late arrival after timeout/close.
-   */
   public boolean deliver(Message response) {
     Objects.requireNonNull(response, "response");
     CompletableFuture<Message> fut;
@@ -208,12 +147,6 @@ public final class Multiplexer implements AutoCloseable {
     return true;
   }
 
-  /**
-   * Crash-restart entry: fail every {@link #call} currently pending a response with {@code reason}
-   * and move the mux to {@code paused}. Subsequent {@link #call}s are parked as deferred (with a
-   * {@code restartDeadlineMs} timer when one is wired) until {@link #resume()} or {@link #close()}.
-   * Idempotent when already paused; the existing {@code reason} is retained.
-   */
   public void pauseInflightFailing(Throwable reason) {
     Objects.requireNonNull(reason, "reason");
     List<CompletableFuture<Message>> drained;
@@ -231,11 +164,6 @@ public final class Multiplexer implements AutoCloseable {
     }
   }
 
-  /**
-   * Leave the paused state and dispatch every deferred call. Each deferred entry is moved into
-   * pending and its REQUEST is forwarded to the {@link Sender} (any pending deadline timer is
-   * cancelled). A no-op when not paused.
-   */
   public void resume() {
     List<Deferred> drained;
     synchronized (lock) {
@@ -265,10 +193,6 @@ public final class Multiplexer implements AutoCloseable {
     }
   }
 
-  /**
-   * Transition to a terminal state: every pending and deferred {@link #call} fails with {@link
-   * ChannelClosedException} and subsequent calls fail the same way. Idempotent.
-   */
   @Override
   public void close() {
     List<CompletableFuture<Message>> drainedPending;
@@ -295,14 +219,12 @@ public final class Multiplexer implements AutoCloseable {
     }
   }
 
-  /** Visible-for-testing: number of pending (in-flight, awaiting response) calls. */
   public int pendingCountForTesting() {
     synchronized (lock) {
       return pending.size();
     }
   }
 
-  /** Visible-for-testing: number of deferred (paused, awaiting resume or deadline) calls. */
   public int deferredCountForTesting() {
     synchronized (lock) {
       return deferred.size();
@@ -335,7 +257,6 @@ public final class Multiplexer implements AutoCloseable {
     }
   }
 
-  /** Builder for the deferred-wait variant. */
   public static final class Builder {
     private final Sender sender;
     private long restartDeadlineMs;
@@ -346,25 +267,16 @@ public final class Multiplexer implements AutoCloseable {
       this.sender = Objects.requireNonNull(sender, "sender");
     }
 
-    /** Override the maximum number of concurrent in-flight calls. Must be {@code > 0}. */
     public Builder maxPending(int n) {
       this.maxPending = n;
       return this;
     }
 
-    /**
-     * Window during which a call issued while paused waits for {@link Multiplexer#resume()} before
-     * being failed with {@link GoSideCrashedException}. {@code 0} → no waiting (fail fast).
-     */
     public Builder restartDeadlineMs(long ms) {
       this.restartDeadlineMs = ms;
       return this;
     }
 
-    /**
-     * Scheduler that owns the per-deferred-call timeout tasks. When omitted (or {@code null}),
-     * calls during pause fail immediately regardless of {@link #restartDeadlineMs(long)}.
-     */
     public Builder scheduler(ScheduledExecutorService scheduler) {
       this.scheduler = scheduler;
       return this;

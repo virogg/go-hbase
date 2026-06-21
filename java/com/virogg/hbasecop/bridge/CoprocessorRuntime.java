@@ -58,78 +58,44 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hbase.thirdparty.com.google.protobuf.InvalidProtocolBufferException;
 
-/**
- * In-RegionServer bridge runtime: ties together the {@link GoProcess} supervisor, the shmem {@link
- * Channel} pair, a {@link Multiplexer}-backed {@link HookDispatcher} and a single reader thread
- * draining inbound frames, and finally exposes the {@link RegionObserver} that the host coproc
- * delegates to.
- *
- * <p>One instance owns one Go process and one ring pair; the lifecycle is {@code start()}, use,
- * {@code stop()}. Concrete HBase {@code RegionCoprocessor} classes (e.g. the counter-observer
- * example) delegate their {@code start(env) / stop(env) / getRegionObserver()} hooks to this class.
- *
- * <p>Instances are not thread-safe across {@link #start()} / {@link #stop()}, but {@link
- * #getRegionObserver()} may be called from any thread once {@link #start()} has returned.
- */
 public final class CoprocessorRuntime implements AutoCloseable {
 
   private static final Logger LOG = System.getLogger(CoprocessorRuntime.class.getName());
 
-  /** Configuration key: heartbeat period (Hadoop-style duration, e.g. {@code 500ms}). */
   public static final String KEY_HEARTBEAT_PERIOD = "hbasecop.heartbeat.period";
 
-  /** Configuration key: consecutive missed heartbeats before the watchdog fires. */
   public static final String KEY_HEARTBEAT_MISS_THRESHOLD = "hbasecop.heartbeat.miss-threshold";
 
-  /** Default heartbeat period when neither Configuration nor builder pin one. */
   public static final Duration DEFAULT_HEARTBEAT_PERIOD = Duration.ofMillis(500);
 
-  /** Default miss threshold for the watchdog. */
   public static final int DEFAULT_HEARTBEAT_MISS_THRESHOLD = 3;
 
-  /**
-   * Tick cadence for the supervisor scheduler when heartbeats are disabled. Crash detection and
-   * restart still run at this interval so disabling heartbeats never disables auto-restart.
-   */
   private static final long DEFAULT_CRASH_PROBE_MS = 500L;
 
-  /** Configuration key: max consecutive restart failures before declaring the runtime unhealthy. */
   public static final String KEY_RESTART_MAX_FAILS = "hbasecop.restart.max-fails";
 
-  /** Configuration key: probe interval after the runtime is declared unhealthy. */
   public static final String KEY_RESTART_PROBE_INTERVAL = "hbasecop.restart.probe-interval";
 
-  /** Configuration key: initial delay before the first restart attempt. */
   public static final String KEY_RESTART_INITIAL_DELAY = "hbasecop.restart.initial-delay";
 
-  /** Configuration key: cap on the per-attempt restart delay. */
   public static final String KEY_RESTART_MAX_DELAY = "hbasecop.restart.max-delay";
 
-  /** Configuration key: deadline for deferred calls during a paused-by-crash window. */
   public static final String KEY_RESTART_DEADLINE = "hbasecop.restart.deadline";
 
-  /** Default deadline a call issued during a paused-by-crash window waits before failing. */
   public static final Duration DEFAULT_RESTART_DEADLINE = Duration.ofSeconds(3);
 
   private final Config cfg;
 
-  // TE31: shared per-process region_id space + region_id -> live Region map. The
-  // RegionObserverAdapter populates both over the region open/close lifecycle;
-  // the endpoint path resolves region_id (regionIdFor) to stamp reverse RPCs and
-  // the servicing pool resolves the Region (regionRegistry) to execute them.
   private final com.virogg.hbasecop.multiplex.RegionIdAllocator regionIdAllocator =
       new com.virogg.hbasecop.multiplex.RegionIdAllocator();
   private final com.virogg.hbasecop.bridge.rpc.RegionRegistry regionRegistry =
       new com.virogg.hbasecop.bridge.rpc.RegionRegistry();
-  // TE33: open server-side scanners, reaped on Go-process crash so no RegionScanner leaks.
-  // TE42: bounded per call + idle-lease evicted (constructed from cfg).
   private final com.virogg.hbasecop.bridge.rpc.ScannerRegistry scannerRegistry;
-  // TE42 admission: bounds concurrent client endpoint calls (each pins an RS handler thread).
   private final java.util.concurrent.Semaphore endpointAdmission;
 
   private Channel javaToGo;
   private Channel goToJava;
-  private Channel javaToGoBulk; // TE31: bulk J->G ring carrying reverse-RPC replies
+  private Channel javaToGoBulk;
   private com.virogg.hbasecop.bridge.rpc.ReverseRpcServicer reverseRpcServicer;
   private GoProcess goProcess;
   private Multiplexer mux;
@@ -155,11 +121,6 @@ public final class CoprocessorRuntime implements AutoCloseable {
     this.endpointAdmission = new java.util.concurrent.Semaphore(cfg.maxConcurrentCalls());
   }
 
-  /**
-   * Opens both rings, spawns the Go runtime, stands up the multiplexer + reader thread, and builds
-   * the {@link RegionObserverAdapter}. After this returns successfully, {@link
-   * #getRegionObserver()} is wired and HBase may invoke it.
-   */
   public synchronized void start() throws IOException {
     if (started) {
       throw new IllegalStateException("CoprocessorRuntime already started");
@@ -175,8 +136,6 @@ public final class CoprocessorRuntime implements AutoCloseable {
           Channel.open(
               shmemConfig(
                   cfg.goToJavaFile(), Role.CONSUMER, cfg.ringCapacity(), cfg.ringMaxObjectSize()));
-      // TE31: dedicated bulk J->G ring for reverse-RPC replies (Result data), isolated from the
-      // control ring so a large reply never queues behind a hook invoke or starves the heartbeat.
       javaToGoBulk =
           Channel.open(
               shmemConfig(
@@ -191,11 +150,6 @@ public final class CoprocessorRuntime implements AutoCloseable {
 
       watchdog = maybeBuildWatchdog(cfg, effectiveHeartbeatMs);
       restartController = buildRestartController(cfg);
-      // Scheduler drives crash detection (detectExitedGoProcess) and restart
-      // (restartController.tick); watchdog tick is optional. Must run even with heartbeats
-      // disabled, else a crashed/exited Go process is never detected or restarted (strict
-      // hooks fail forever). Created unconditionally; with no watchdog it ticks at a
-      // crash-probe cadence. tickSchedulerTask() null-checks the watchdog.
       long tickMs = effectiveHeartbeatMs > 0 ? effectiveHeartbeatMs : DEFAULT_CRASH_PROBE_MS;
       watchdogScheduler =
           Executors.newSingleThreadScheduledExecutor(
@@ -210,9 +164,6 @@ public final class CoprocessorRuntime implements AutoCloseable {
 
       Encoder enc = new Encoder();
       long restartDeadlineMs = resolveRestartDeadlineMs(cfg);
-      // The shmem Channel is single-producer (see Channel javadoc). Under T63, a shared
-      // CoprocessorRuntime is fed by hook threads from N regions concurrently, so we serialize
-      // every send through this lock; the ring stays effectively SPSC from the producer's view.
       final Object sendLock = new Object();
       final Channel javaToGoRef = javaToGo;
       final long sendDeadlineMs = restartDeadlineMs;
@@ -227,9 +178,6 @@ public final class CoprocessorRuntime implements AutoCloseable {
               .scheduler(watchdogScheduler)
               .build();
 
-      // TE31: reverse-RPC replies ride a SECOND send funnel on the dedicated bulk ring, so a large
-      // Result never contends with hook/endpoint/heartbeat traffic under the control sendLock. The
-      // bulk ring has one logical producer; the lock guards the concurrent servicing-pool threads.
       final Encoder bulkEnc = new Encoder();
       final Object bulkSendLock = new Object();
       final Channel javaToGoBulkRef = javaToGoBulk;
@@ -239,8 +187,6 @@ public final class CoprocessorRuntime implements AutoCloseable {
               try {
                 sendOnChannel(javaToGoBulkRef, bulkEnc, msg, sendDeadlineMs);
               } catch (ShmemException | WireException e) {
-                // The Go caller's reverse RPC will fail on its own deadline; a lost reply must not
-                // take down the servicing thread or the bridge.
                 LOG.log(Level.WARNING, "CoprocessorRuntime: reverse-RPC reply send failed", e);
               } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -262,8 +208,6 @@ public final class CoprocessorRuntime implements AutoCloseable {
               cfg.maxBytesPerResp(),
               cfg.maxRowsPerNext());
 
-      // TE31: route reverse-RPC requests to the bounded, fail-closed servicing pool (never the
-      // reader thread). accept() only submits, so the reader keeps routing hooks/heartbeats.
       reader =
           new ChannelReader(goToJava, new Decoder(), mux, watchdog, reverseRpcServicer::accept);
       readerThread = new Thread(reader, "hbasecop-reader");
@@ -288,85 +232,52 @@ public final class CoprocessorRuntime implements AutoCloseable {
     }
   }
 
-  /** True between a successful {@link #start()} and {@link #stop()}. */
   public synchronized boolean isStarted() {
     return started;
   }
 
-  /** True iff the supervised Go process is alive. */
   public synchronized boolean isAlive() {
     return goProcess != null && goProcess.isAlive();
   }
 
-  /**
-   * True iff the restart controller has exhausted its consecutive-failure budget and the runtime is
-   * in the probing-only {@code UNHEALTHY} state. Hook dispatch can short-circuit calls by policy
-   * without waiting on dead transport.
-   */
   public boolean isUnhealthy() {
     RestartController c = restartController;
     return c != null && c.isUnhealthy();
   }
 
-  /** The RegionObserver to expose to HBase; null until {@link #start()} succeeds. */
   public RegionObserver getRegionObserver() {
     return observer;
   }
 
-  /** The MasterObserver to expose to HBase (T51); null until {@link #start()} succeeds. */
   public org.apache.hadoop.hbase.coprocessor.MasterObserver getMasterObserver() {
     return masterObserver;
   }
 
-  /** The RegionServerObserver to expose to HBase (T52); null until {@link #start()} succeeds. */
   public org.apache.hadoop.hbase.coprocessor.RegionServerObserver getRegionServerObserver() {
     return regionServerObserver;
   }
 
-  /** The WALObserver to expose to HBase (T53); null until {@link #start()} succeeds. */
   public org.apache.hadoop.hbase.coprocessor.WALObserver getWALObserver() {
     return walObserver;
   }
 
-  /** The BulkLoadObserver to expose to HBase (T54); null until {@link #start()} succeeds. */
   public org.apache.hadoop.hbase.coprocessor.BulkLoadObserver getBulkLoadObserver() {
     return bulkLoadObserver;
   }
 
-  /**
-   * Forwards a Tier 2 endpoint invocation to the Go side and returns the result payload. Sends an
-   * {@code ENDPOINT_INVOKE} frame through the same multiplexer + send lock as hooks, blocks for the
-   * matching {@code ENDPOINT_RESULT} (or an {@code ERROR}) up to the configured hook timeout, and
-   * unwraps the result. Throws {@link IOException} on timeout, a Go-side error, channel close, or a
-   * malformed reply, which {@code GoEndpointServiceImpl} surfaces to the client as an endpoint
-   * error.
-   */
   public byte[] invokeEndpoint(EndpointInvoke invoke) throws IOException {
     return invokeEndpoint(invoke, 0);
   }
 
-  /**
-   * The region id under which the named region was allocated (TE61/TE31), or 0 if it is not
-   * currently open here. The endpoint path stamps this onto an {@link EndpointInvoke} so a Go
-   * handler's reverse RPCs target the region the client invoked the endpoint on.
-   */
   public int regionIdFor(String encodedRegionName) {
     return regionIdAllocator.idFor(encodedRegionName);
   }
 
-  /**
-   * TE31 variant: forward an endpoint invocation stamped with {@code regionId}, so a Go endpoint
-   * handler's reverse RPCs (reads of region-local data) resolve to the originating region. {@code
-   * regionId} 0 means no region scope (e.g. master endpoints).
-   */
   public byte[] invokeEndpoint(EndpointInvoke invoke, int regionId) throws IOException {
     Multiplexer m = mux;
     if (m == null) {
       throw new IOException("hbasecop: endpoint invoked before runtime start");
     }
-    // TE42 admission: bound concurrent client endpoint calls so they cannot exhaust the RS handler
-    // thread pool — each call blocks an RS handler thread on fut.get below (A-1). tryAcquire never
-    // blocks; over the cap we fail fast with a clear, client-visible error.
     if (!endpointAdmission.tryAcquire()) {
       throw new IOException(
           "hbasecop: endpoint max-concurrent-calls ("
@@ -424,8 +335,6 @@ public final class CoprocessorRuntime implements AutoCloseable {
         throw new IOException("hbasecop: malformed EndpointResult payload", e);
       }
     } finally {
-      // TE33: reap any scanners this endpoint call opened but did not close (handler bug, early
-      // return, panic, or timeout) so a RegionScanner read point never leaks past the call.
       if (call != null) {
         int reaped = scannerRegistry.closeForCall(call.reqId);
         if (reaped > 0) {
@@ -436,14 +345,10 @@ public final class CoprocessorRuntime implements AutoCloseable {
               call.reqId);
         }
       }
-      endpointAdmission.release(); // TE42: paired with the tryAcquire above
+      endpointAdmission.release();
     }
   }
 
-  /**
-   * Tears down the runtime in reverse order: stop reader thread, close mux (failing inflight), send
-   * SHUTDOWN to Go via {@link GoProcess#stop()}, close shmem channels. Idempotent.
-   */
   public synchronized void stop() throws IOException, InterruptedException {
     if (!started) {
       return;
@@ -457,32 +362,22 @@ public final class CoprocessorRuntime implements AutoCloseable {
     stop();
   }
 
-  /** Visible-for-testing: lets tests assert the reader has joined after {@link #stop()}. */
   Thread readerThreadForTesting() {
     return readerThread;
   }
 
-  /** Visible-for-testing: current Go pid, or {@code -1} if no process is running. */
   synchronized long goProcessPidForTesting() {
     return goProcess == null ? -1L : goProcess.pid();
   }
 
-  /** Visible-for-testing: the active multiplexer, or {@code null} before {@link #start()}. */
   synchronized Multiplexer multiplexerForTesting() {
     return mux;
   }
 
-  /**
-   * Visible-for-testing: the active restart controller, or {@code null} before {@link #start()}.
-   */
   RestartController restartControllerForTesting() {
     return restartController;
   }
 
-  /**
-   * Visible-for-testing: SIGKILLs the underlying Go process to simulate a crash. The watchdog
-   * scheduler will detect the dead process on its next tick and notify the restart controller.
-   */
   synchronized void crashGoProcessForTesting() {
     if (goProcess != null) {
       goProcess.destroyForcibly();
@@ -518,12 +413,9 @@ public final class CoprocessorRuntime implements AutoCloseable {
         Thread.currentThread().interrupt();
       }
     }
-    // TE31: stop the reverse-RPC servicing pool after the reader has joined (no new requests are
-    // handed off) and before the bulk channel is closed (in-flight replies still have a sink).
     if (reverseRpcServicer != null) {
       reverseRpcServicer.close();
     }
-    // TE33: close any scanners still open at teardown (clean stop, not a crash) so none leak.
     reapScanners("runtime teardown");
     if (mux != null) {
       mux.close();
@@ -559,12 +451,6 @@ public final class CoprocessorRuntime implements AutoCloseable {
     restartController = null;
   }
 
-  /**
-   * TE33: close every open server-side scanner when the Go process dies, so no {@link
-   * org.apache.hadoop.hbase.regionserver.RegionScanner} — and the MVCC read point it pins — leaks.
-   * Invoked alongside {@code pauseInflightFailing} on the crash path; logs the count so a leak
-   * regression is observable in the RegionServer log.
-   */
   private void reapScanners(String reason) {
     int n = scannerRegistry.closeAll();
     if (n > 0) {
@@ -592,9 +478,6 @@ public final class CoprocessorRuntime implements AutoCloseable {
         LOG.log(Level.WARNING, "CoprocessorRuntime: watchdog tick threw", e);
       }
     }
-    // Detect process-exit independently of heartbeats so `exit 1` from the Go side also
-    // triggers a restart. The watchdog only catches "hung" (no heartbeats over the miss
-    // window), not an outright exit.
     detectExitedGoProcess();
     RestartController c = restartController;
     if (c != null) {
@@ -604,8 +487,6 @@ public final class CoprocessorRuntime implements AutoCloseable {
         LOG.log(Level.WARNING, "CoprocessorRuntime: restart controller tick threw", e);
       }
     }
-    // TE42: reap scanners idle past their lease (an endpoint that opened a scanner and never
-    // closed it, or a reaping-race straggler).
     try {
       int evicted = scannerRegistry.evictIdle();
       if (evicted > 0) {
@@ -639,10 +520,6 @@ public final class CoprocessorRuntime implements AutoCloseable {
     }
   }
 
-  /**
-   * Watchdog miss action: SIGKILL the hung Go process (so the OS reaps it) and notify the restart
-   * controller, which schedules the actual respawn through {@link #attemptRestart()}.
-   */
   private void onHung(long elapsedMs) {
     GoProcess gp;
     Multiplexer m;
@@ -671,14 +548,6 @@ public final class CoprocessorRuntime implements AutoCloseable {
     }
   }
 
-  /**
-   * Attempt one restart cycle: clean up the old Go process and spawn a fresh one against the same
-   * shmem rings. Returns {@code true} on success. Called by {@link RestartController} from the
-   * watchdog scheduler thread.
-   *
-   * <p>Inflight requests waiting on the multiplexer are <em>not</em> cancelled here; T35 handles
-   * mux teardown on crash.
-   */
   private boolean attemptRestart() {
     synchronized (this) {
       if (!started) {
@@ -699,14 +568,10 @@ public final class CoprocessorRuntime implements AutoCloseable {
         GoProcess fresh = buildGoProcess();
         fresh.start();
         goProcess = fresh;
-        // Re-arm the watchdog: a fresh process has not sent any heartbeats yet, but we treat the
-        // successful spawn moment as a heartbeat so the watchdog does not immediately re-fire
-        // within the first miss-threshold window.
         HeartbeatWatchdog wd = watchdog;
         if (wd != null) {
           wd.recordHeartbeat();
         }
-        // Let any deferred (post-crash) calls go through to the new process.
         Multiplexer m = mux;
         if (m != null) {
           m.resume();
@@ -725,16 +590,10 @@ public final class CoprocessorRuntime implements AutoCloseable {
   }
 
   private GoProcess buildGoProcess() {
-    // TE31: tell the Go child where the bulk ring is and how it is sized, so it opens the matching
-    // consumer endpoint and stands up its reverse in-pump. Carried as extra env on top of the
-    // caller's, so no GoProcess change is needed.
     Map<String, String> env = new LinkedHashMap<>(cfg.extraEnv());
     env.put("HBASECOP_SHMEM_BULK_PATH", cfg.javaToGoBulkFile().toString());
     env.put("HBASECOP_BULK_RING_CAPACITY", Integer.toString(cfg.bulkRingCapacity()));
     env.put("HBASECOP_BULK_RING_MAX_OBJECT_SIZE", Integer.toString(cfg.bulkRingMaxObjectSize()));
-    // M2: bound each reverse RPC (env.Get/Scan) by the endpoint budget rather than a fixed Go-side
-    // ceiling, so raising/lowering hbasecop.endpoint.timeout moves the per-call deadline with it
-    // (the two were previously decoupled 30s defaults; review INT-1).
     env.put("HBASECOP_REVERSE_CALL_TIMEOUT_MS", Long.toString(cfg.endpointTimeout().toMillis()));
     GoProcessConfig procCfg =
         GoProcessConfig.builder()
@@ -745,23 +604,12 @@ public final class CoprocessorRuntime implements AutoCloseable {
             .maxObjectSize(cfg.ringMaxObjectSize())
             .heartbeatPeriodMs(effectiveHeartbeatMs)
             .gracefulShutdownTimeout(cfg.gracefulShutdownTimeout())
-            // T71/CP-ε3: pass the manifest's HbaseCop-Go-Bin-SHA256 so GoProcess validates the
-            // extracted ELF before exec and fails closed on a corrupt/wrong-arch/tampered binary.
-            // Without this, the checksum hbasecop-build writes is never verified at runtime.
             .expectedBinarySha256(resolveExpectedBinarySha256())
             .extraEnv(env)
             .build();
     return new GoProcess(procCfg, javaToGo);
   }
 
-  /**
-   * Resolve the expected SHA-256 of the embedded Go ELF. Precedence: explicit override on the
-   * {@link Config}, else the {@code HbaseCop-Go-Bin-SHA256} attribute from the manifest of the
-   * <em>same</em> jar that provides {@link Config#binaryResourcePath()} (binds the digest to the
-   * same artifact as the ELF). Returns {@code null} (checksum skipped, with a WARN) only for
-   * dev/uninstrumented classpaths (e.g. {@code target/classes}) that carry no HbaseCop manifest
-   * attributes; production coproc-jars from {@code hbasecop-build} always carry the attribute.
-   */
   private String resolveExpectedBinarySha256() {
     String override = cfg.expectedBinarySha256();
     if (override != null && !override.isEmpty()) {
@@ -861,7 +709,6 @@ public final class CoprocessorRuntime implements AutoCloseable {
 
   private HeartbeatWatchdog maybeBuildWatchdog(Config cfg, long effectiveHeartbeatMs) {
     if (effectiveHeartbeatMs <= 0) {
-      // Heartbeats explicitly disabled: no watchdog.
       return null;
     }
     Duration period = Duration.ofMillis(effectiveHeartbeatMs);
@@ -879,25 +726,16 @@ public final class CoprocessorRuntime implements AutoCloseable {
 
   private static PolicyConfig buildPolicyConfig(Config cfg) {
     Configuration src = cfg.configuration();
-    // Clone via iterator rather than `new Configuration(src)`: HBase wraps the per-region coproc
-    // env in a CompoundConfiguration that merges TableDescriptor.setValue keys dynamically inside
-    // get(); the copy-constructor only clones the base `properties` map, so it would silently drop
-    // those merged values (per-table policy and timeout overrides).
     Configuration conf = new Configuration(false);
     if (src != null) {
       for (java.util.Map.Entry<String, String> e : src) {
         conf.set(e.getKey(), e.getValue());
       }
     }
-    // The configured hookTimeout is a global default: only inject it when the caller's
-    // Configuration does not already pin per-hook or global hbasecop.timeout.* keys, so
-    // explicit overrides always win.
     if (conf.get(PolicyConfig.KEY_TIMEOUT_DEFAULT) == null) {
       conf.setTimeDuration(
           PolicyConfig.KEY_TIMEOUT_DEFAULT, cfg.hookTimeout().toNanos(), TimeUnit.NANOSECONDS);
     }
-    // Fail fast at start on a malformed hbasecop.* value (else it would surface
-    // lazily on the first hook of a live write path); WARN on unknown keys.
     ConfigPreflight.validate(conf, LOG);
     return new PolicyConfig(conf);
   }
@@ -920,21 +758,11 @@ public final class CoprocessorRuntime implements AutoCloseable {
     sendWithDeadline(() -> ch.send(frame), deadlineMs, System::nanoTime);
   }
 
-  /** A single non-blocking ring write; throws {@link RingFullException} when no slot is free. */
   @FunctionalInterface
   interface RingSend {
     void send() throws ShmemException;
   }
 
-  /**
-   * Retry a non-blocking ring write until it succeeds, the deadline passes, or the thread is
-   * interrupted. The spin must be bounded: {@link Channel#send} throws {@link RingFullException}
-   * immediately (never blocks) and the production caller holds the shared {@code sendLock}, so an
-   * unbounded spin against a full/hung/dead Go side would pin this RegionServer RPC-handler thread
-   * at 100% CPU and starve every other region's send. On timeout throws a clear {@link
-   * ShmemException} so the hook fails by policy instead of hanging forever. {@code nanoClock} is
-   * injected for testability.
-   */
   static void sendWithDeadline(
       RingSend send, long deadlineMs, java.util.function.LongSupplier nanoClock)
       throws ShmemException, InterruptedException {
@@ -957,31 +785,17 @@ public final class CoprocessorRuntime implements AutoCloseable {
     }
   }
 
-  /**
-   * Sink for inbound {@code RPC_REQUEST} frames: a Go-initiated reverse RPC (Tier 2). The bounded
-   * servicing pool that executes scan/get/mutate against the region lands in TE31; in E1 this is a
-   * stub. Correlation is by the wire-header {@code req_id} carried on the {@link Message}; the
-   * router does not unmarshal the protobuf payload.
-   */
   @FunctionalInterface
   interface ReverseRpcSink {
     void accept(Message m);
   }
 
-  /**
-   * Routes one decoded Go→Java frame. Package-private and static so it can be unit-tested by
-   * injecting Messages without standing up a Channel/Thread.
-   */
   static void routeFrame(
       Message m, Multiplexer mux, HeartbeatWatchdog watchdog, ReverseRpcSink reverseRpc) {
     switch (m.type()) {
       case RESPONSE:
       case ERROR:
       case ENDPOINT_RESULT:
-        // All carry the req_id of a pending mux call: a hook RESPONSE, an
-        // ENDPOINT_RESULT for an endpoint invoke, or an ERROR for either. The
-        // Go side picks ERROR when the call fails; the waiting caller
-        // (MuxHookDispatcher / invokeEndpoint) inspects FrameType.
         if (!mux.deliver(m)) {
           LOG.log(Level.DEBUG, "CoprocessorRuntime: unmatched {0} req_id={1}", m.type(), m.reqId());
         }
@@ -992,8 +806,6 @@ public final class CoprocessorRuntime implements AutoCloseable {
         }
         break;
       case RPC_REQUEST:
-        // Go-initiated reverse RPC (Tier 2); hand to the stub sink keyed by
-        // req_id. No PB decode here.
         reverseRpc.accept(m);
         break;
       default:
@@ -1001,7 +813,6 @@ public final class CoprocessorRuntime implements AutoCloseable {
     }
   }
 
-  /** Reader thread: drains the Go→Java ring and routes frames to the multiplexer. */
   private static final class ChannelReader implements Runnable {
     private final Channel ch;
     private final Decoder decoder;
@@ -1049,7 +860,6 @@ public final class CoprocessorRuntime implements AutoCloseable {
           continue;
         }
         if (m == null) {
-          // Partial frame: Decoder will resume on next chunk; here we treat as "wait".
           continue;
         }
         routeFrame(m, mux, watchdog, reverseRpc);
@@ -1057,7 +867,6 @@ public final class CoprocessorRuntime implements AutoCloseable {
     }
   }
 
-  /** Immutable runtime configuration. Use {@link #builder()} to construct. */
   public static final class Config {
 
     private final String binaryResourcePath;
@@ -1074,15 +883,12 @@ public final class CoprocessorRuntime implements AutoCloseable {
     private final RestartConfig restartConfig;
     private final Duration restartDeadline;
     private final Map<String, String> extraEnv;
-    // TE31 reverse-RPC servicing pool + bulk ring sizing.
     private final int servicingPoolSize;
     private final int servicingQueueDepth;
     private final Duration servicingTimeout;
     private final int bulkRingCapacity;
     private final int bulkRingMaxObjectSize;
-    // TE41: gate for reverse MUTATE (endpoint writes); off by default.
     private final boolean allowMutate;
-    // TE42 endpoint limits + admission.
     private final int maxConcurrentCalls;
     private final int maxScannersPerCall;
     private final int maxBytesPerResp;
@@ -1155,10 +961,6 @@ public final class CoprocessorRuntime implements AutoCloseable {
       return binaryResourcePath;
     }
 
-    /**
-     * Optional explicit override for the expected ELF SHA-256. When unset, the runtime resolves it
-     * from the coproc-jar manifest ({@code HbaseCop-Go-Bin-SHA256}).
-     */
     public String expectedBinarySha256() {
       return expectedBinarySha256;
     }
@@ -1187,7 +989,6 @@ public final class CoprocessorRuntime implements AutoCloseable {
       return hookTimeout;
     }
 
-    /** Wall-clock bound on a Tier 2 endpoint call awaiting its EndpointResult. */
     public Duration endpointTimeout() {
       return endpointTimeout;
     }
@@ -1196,98 +997,66 @@ public final class CoprocessorRuntime implements AutoCloseable {
       return gracefulShutdownTimeout;
     }
 
-    /**
-     * The HBase {@link Configuration} forwarded to {@link PolicyConfig}; may be {@code null} when
-     * the runtime is driven from a context that does not own a Configuration (e.g. raw bridge
-     * tests). When null, an empty configuration is used and the builder's {@link #hookTimeout()} is
-     * treated as the global default.
-     */
     public Configuration configuration() {
       return configuration;
     }
 
-    /**
-     * Explicit {@link RestartConfig}; {@code null} means derive from {@link #configuration()} or
-     * fall back to {@link RestartConfig#defaults()}.
-     */
     public RestartConfig restartConfig() {
       return restartConfig;
     }
 
-    /**
-     * Deadline a call issued during a paused-by-crash window waits for restart before failing with
-     * {@link GoSideCrashedException}. {@code null} means derive from {@link #configuration()} via
-     * {@link #KEY_RESTART_DEADLINE} or fall back to {@link #DEFAULT_RESTART_DEADLINE}.
-     */
     public Duration restartDeadline() {
       return restartDeadline;
     }
 
-    /**
-     * Extra environment variables passed to the spawned Go process on top of the JVM's environment.
-     * Useful for forwarding coprocessor-specific tokens (e.g. {@code HBASECOP_FAULT_MODE} from the
-     * T36 fault-observer) into the child.
-     */
     public Map<String, String> extraEnv() {
       return extraEnv;
     }
 
-    /** TE31: max concurrent reverse-RPC servicing threads. */
     public int servicingPoolSize() {
       return servicingPoolSize;
     }
 
-    /** TE31: bounded reverse-RPC backlog before requests fail closed. */
     public int servicingQueueDepth() {
       return servicingQueueDepth;
     }
 
-    /** TE31: how long teardown waits for in-flight reverse-RPC tasks to drain. */
     public Duration servicingTimeout() {
       return servicingTimeout;
     }
 
-    /** TE31: slot count of the dedicated bulk Java->Go ring carrying reverse-RPC replies. */
     public int bulkRingCapacity() {
       return bulkRingCapacity;
     }
 
-    /** TE31: slot byte size of the bulk Java->Go ring. */
     public int bulkRingMaxObjectSize() {
       return bulkRingMaxObjectSize;
     }
 
-    /** TE41: whether reverse MUTATE (endpoint writes) is enabled; off by default. */
     public boolean allowMutate() {
       return allowMutate;
     }
 
-    /** TE42: max concurrent client endpoint calls (bounds blocked RS handler threads). */
     public int maxConcurrentCalls() {
       return maxConcurrentCalls;
     }
 
-    /** TE42: max open server-side scanners per endpoint call. */
     public int maxScannersPerCall() {
       return maxScannersPerCall;
     }
 
-    /** TE42: max bytes in a single SCAN_NEXT reply (clamped to the bulk-ring slot). */
     public int maxBytesPerResp() {
       return maxBytesPerResp;
     }
 
-    /** TE42: max rows in a single SCAN_NEXT batch. */
     public int maxRowsPerNext() {
       return maxRowsPerNext;
     }
 
-    /** TE42: idle scanner lease before reaping. */
     public Duration scannerIdleLease() {
       return scannerIdleLease;
     }
 
-    /** TE31: the bulk ring's segment path, derived next to the control Java->Go segment. */
     public Path javaToGoBulkFile() {
       return Path.of(javaToGoFile.toString() + ".bulk");
     }
@@ -1296,7 +1065,6 @@ public final class CoprocessorRuntime implements AutoCloseable {
       return new Builder();
     }
 
-    /** Mutable builder; not thread-safe. */
     public static final class Builder {
       private String binaryResourcePath = "bin/linux-amd64/hbasecop-runtime";
       private String expectedBinarySha256;
@@ -1329,11 +1097,6 @@ public final class CoprocessorRuntime implements AutoCloseable {
         return this;
       }
 
-      /**
-       * Override the expected ELF SHA-256 (64 lower-case hex chars). Normally left unset so the
-       * runtime reads it from the coproc-jar manifest; useful for tests and embedders that supply
-       * the digest out of band.
-       */
       public Builder expectedBinarySha256(String hex) {
         this.expectedBinarySha256 = hex;
         return this;
@@ -1379,107 +1142,76 @@ public final class CoprocessorRuntime implements AutoCloseable {
         return this;
       }
 
-      /**
-       * Supplies the HBase {@link Configuration} that drives per-hook policy + timeout resolution.
-       * Optional: when omitted, the runtime falls back to defaults and treats {@link
-       * #hookTimeout(Duration)} as the global default timeout.
-       */
       public Builder configuration(Configuration c) {
         this.configuration = c;
         return this;
       }
 
-      /**
-       * Override the restart controller tunables. When omitted, the runtime derives them from the
-       * supplied {@link #configuration(Configuration)} via {@code hbasecop.restart.*} keys, or
-       * falls back to {@link RestartConfig#defaults()}.
-       */
       public Builder restartConfig(RestartConfig rc) {
         this.restartConfig = rc;
         return this;
       }
 
-      /**
-       * Override the deadline a call waits during a paused-by-crash window before failing with
-       * {@link GoSideCrashedException}. When omitted, the runtime derives it from {@link
-       * #configuration(Configuration)} via {@code hbasecop.restart.deadline}, falling back to
-       * {@link #DEFAULT_RESTART_DEADLINE}.
-       */
       public Builder restartDeadline(Duration d) {
         this.restartDeadline = d;
         return this;
       }
 
-      /**
-       * Replace the extra-env map. {@code null} clears it. The map is defensively copied at {@link
-       * #build()}, so post-build mutations of the caller's map do not leak through.
-       */
       public Builder extraEnv(Map<String, String> env) {
         this.extraEnv = env == null ? new LinkedHashMap<>() : new LinkedHashMap<>(env);
         return this;
       }
 
-      /** TE31: max concurrent reverse-RPC servicing threads (default 8). */
       public Builder servicingPoolSize(int n) {
         this.servicingPoolSize = n;
         return this;
       }
 
-      /** TE31: bounded reverse-RPC backlog before requests fail closed (default 64). */
       public Builder servicingQueueDepth(int n) {
         this.servicingQueueDepth = n;
         return this;
       }
 
-      /** TE31: teardown drain timeout for in-flight reverse-RPC tasks (default 30s). */
       public Builder servicingTimeout(Duration d) {
         this.servicingTimeout = d;
         return this;
       }
 
-      /** TE31: bulk ring slot count (default 16). */
       public Builder bulkRingCapacity(int n) {
         this.bulkRingCapacity = n;
         return this;
       }
 
-      /** TE31: bulk ring slot byte size (default 1 MiB). */
       public Builder bulkRingMaxObjectSize(int n) {
         this.bulkRingMaxObjectSize = n;
         return this;
       }
 
-      /** TE41: enable reverse MUTATE (endpoint writes); off by default. */
       public Builder allowMutate(boolean enabled) {
         this.allowMutate = enabled;
         return this;
       }
 
-      /** TE42: max concurrent client endpoint calls (default 8). */
       public Builder maxConcurrentCalls(int n) {
         this.maxConcurrentCalls = n;
         return this;
       }
 
-      /** TE42: max open scanners per endpoint call (default 16). */
       public Builder maxScannersPerCall(int n) {
         this.maxScannersPerCall = n;
         return this;
       }
 
-      /** TE42: max bytes per SCAN_NEXT reply (default 1 MiB, clamped to slot). */
       public Builder maxBytesPerResp(int n) {
         this.maxBytesPerResp = n;
         return this;
       }
 
-      /** TE42: max rows per SCAN_NEXT batch (default 1000). */
       public Builder maxRowsPerNext(int n) {
         this.maxRowsPerNext = n;
         return this;
       }
 
-      /** TE42: idle scanner lease before reaping (default 2m). */
       public Builder scannerIdleLease(Duration d) {
         this.scannerIdleLease = d;
         return this;

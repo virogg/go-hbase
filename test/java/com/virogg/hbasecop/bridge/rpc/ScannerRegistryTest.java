@@ -26,7 +26,6 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-/** TE33 - {@link ScannerRegistry}: id assignment, lookup, and reaping (the leak guarantee). */
 @ExtendWith(MockitoExtension.class)
 class ScannerRegistryTest {
 
@@ -59,7 +58,7 @@ class ScannerRegistryTest {
     assertSame(s1, reg.remove(1, id));
     assertNull(reg.lookup(1, id));
     assertEquals(0, reg.size());
-    verify(s1, org.mockito.Mockito.never()).close(); // remove does not close
+    verify(s1, org.mockito.Mockito.never()).close();
   }
 
   @Test
@@ -85,8 +84,6 @@ class ScannerRegistryTest {
     assertEquals(0, reg.size());
   }
 
-  // TE42 race #2/#3: after a crash sweep (closeAll), a late SCAN_OPEN for the reaped call must be
-  // rejected and its freshly-opened scanner closed — never left to pin a read point.
   @Test
   void registerAfterReapRejectsAndClosesScanner() throws Exception {
     ScannerRegistry reg = new ScannerRegistry();
@@ -101,7 +98,6 @@ class ScannerRegistryTest {
     assertNull(reg.lookup(1, id));
   }
 
-  // TE42: register racing closeAll under load never leaves an open scanner (the leak guarantee).
   @Test
   void concurrentRegisterAndCloseAllNeverLeaksAScanner() throws Exception {
     ScannerRegistry reg = new ScannerRegistry();
@@ -114,7 +110,7 @@ class ScannerRegistryTest {
     try {
       List<Future<?>> registrars = new ArrayList<>();
       for (int t = 0; t < threads; t++) {
-        long callId = t % 3; // a few calls, so registers and the sweep collide on the same buckets
+        long callId = t % 3;
         registrars.add(
             pool.submit(
                 () -> {
@@ -140,7 +136,7 @@ class ScannerRegistryTest {
       }
       stop.set(true);
       reaper.get(30, TimeUnit.SECONDS);
-      reg.closeAll(); // final sweep catches any straggler entry created after a racing sweep
+      reg.closeAll();
     } finally {
       pool.shutdownNow();
     }
@@ -151,7 +147,6 @@ class ScannerRegistryTest {
     }
   }
 
-  // TE42 max-scanners-per-call: opening past the cap is rejected and the scanner closed.
   @Test
   void registerRejectsBeyondMaxPerCall() throws Exception {
     ScannerRegistry reg = new ScannerRegistry(2, Long.MAX_VALUE, System::currentTimeMillis);
@@ -163,16 +158,15 @@ class ScannerRegistryTest {
     assertEquals(2, reg.size());
   }
 
-  // TE42 scanner-idle-lease: evictIdle reaps only scanners untouched past the lease.
   @Test
   void evictIdleClosesOnlyStaleScanners() throws Exception {
     AtomicLong now = new AtomicLong(0);
     ScannerRegistry reg = new ScannerRegistry(Integer.MAX_VALUE, 1000, now::get);
-    reg.register(1, s1); // touched at t=0
-    now.set(2000); // advance past the 1000ms lease
-    long id2 = reg.register(1, s2); // touched at t=2000
+    reg.register(1, s1);
+    now.set(2000);
+    long id2 = reg.register(1, s2);
 
-    int reaped = reg.evictIdle(); // now=2000: s1 idle 2000>1000 -> reaped; s2 is fresh
+    int reaped = reg.evictIdle();
     assertEquals(1, reaped);
     verify(s1).close();
     assertEquals(1, reg.size());

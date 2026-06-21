@@ -40,26 +40,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
-/**
- * T36 fault-injection matrix: per-hook policy ({@code strict | best-effort}) crossed with fault
- * mode ({@code kill-9 | hang | exit-1 | protocol-error | oom}) against a live HBase 2.5 cluster
- * (T26 docker-compose target) wired to the {@code fault-observer} coproc-jar (T36 foundation). Per
- * case asserts:
- *
- * <ul>
- *   <li>(a) semantic correctness: {@code strict} makes the client see {@link IOException}; {@code
- *       best-effort} lets the {@code Put} complete normally;
- *   <li>(b) no data loss / no double-apply: post-state scan row count matches the policy (0 for
- *       strict, 1 for best-effort);
- *   <li>(c) supervisor recovery: a follow-up {@code Put} after the restart deadline completes in
- *       finite time with the same per-policy outcome (no hang).
- * </ul>
- *
- * <p>Like {@code PrePutCounterIT}, not part of {@code mvn test} (the {@code *IT} suffix keeps
- * Surefire's default includes from picking it up). Runs via {@code make test-fault}, which manages
- * the cluster lifecycle and stages {@code test/integration/coproc-jars/fault-observer.jar} into the
- * bind-mount the container reads from.
- */
 final class FaultMatrixIT {
 
   private static final String CONTAINER_NAME = "go-hbase-dev";
@@ -78,7 +58,6 @@ final class FaultMatrixIT {
 
   private static final List<Outcome> RESULTS = new CopyOnWriteArrayList<>();
 
-  /** Cartesian product (policy x mode): 10 cases (2 x 5); satisfies T36's {@code >=10}. */
   static Stream<Arguments> matrix() {
     List<String> policies = List.of("strict", "best-effort");
     List<String> modes = List.of("kill-9", "hang", "exit-1", "protocol-error", "oom");
@@ -93,10 +72,6 @@ final class FaultMatrixIT {
 
   @ParameterizedTest(name = "{0} × {1}")
   @MethodSource("matrix")
-  // Per-case wall-clock bound: a supervisor-recovery regression (or a fault that takes the
-  // cluster down) must fail THIS case with a stack dump — not hang until the whole job is
-  // SIGTERM'd with no signal of which case wedged. SEPARATE_THREAD so the watcher can abort a
-  // test stuck in a blocking RPC. Healthy cases finish in ~15s; 90s is wide headroom.
   @Timeout(value = 90, unit = TimeUnit.SECONDS, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
   void faultCase(String policy, String mode) throws Exception {
     Path jarOnHost = resolveJarOnHost();
@@ -123,7 +98,6 @@ final class FaultMatrixIT {
       try {
         outcome.firstPut = runOnePut(conn, tn, "row-1");
 
-        // Let the supervisor detect death and finish a restart cycle for crash modes.
         Thread.sleep(RESTART_DEADLINE.plus(RECOVERY_SLACK).toMillis());
 
         outcome.secondPut = runOnePut(conn, tn, "row-2");
@@ -211,7 +185,6 @@ final class FaultMatrixIT {
     cfg.set("hbase.zookeeper.quorum", ZK_QUORUM);
     cfg.set("hbase.zookeeper.property.clientPort", ZK_PORT);
     cfg.set("zookeeper.recovery.retry", "2");
-    // Keep client retries low so per-case wall time stays bounded.
     cfg.set("hbase.client.retries.number", "2");
     cfg.set("hbase.client.pause", "200");
     cfg.set("hbase.rpc.timeout", "15000");
@@ -253,8 +226,6 @@ final class FaultMatrixIT {
     TableDescriptorBuilder b =
         TableDescriptorBuilder.newBuilder(tn)
             .setColumnFamily(ColumnFamilyDescriptorBuilder.of(CF))
-            // Per-table policy and fault-mode keys; the bridge / fault-observer read them
-            // from env.getConfiguration() at coprocessor start.
             .setValue("hbasecop.policy.prePut", policy)
             .setValue("hbasecop.fault.mode", mode);
     b.setCoprocessor(
@@ -299,7 +270,6 @@ final class FaultMatrixIT {
     return n;
   }
 
-  /** Per-Put outcome captured for both the report and the assertions. */
   private static final class PutOutcome {
     final boolean threw;
     final Throwable cause;

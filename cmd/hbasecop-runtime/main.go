@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Command hbasecop-runtime is the long-running Go process spawned by the
-// Java RegionServer-side bridge (T18). It reads its shmem configuration
+// Java RegionServer-side bridge. It reads its shmem configuration
 // from environment variables, opens the inbound (Java→Go) and outbound
 // (Go→Java) rings and runs internal/cpruntime.Loop until either a
 // SIGTERM/SIGINT is received or an inbound SHUTDOWN frame arrives.
@@ -41,9 +41,6 @@ func main() {
 	}
 }
 
-// logLevelFromEnv maps HBASECOP_LOG_LEVEL (case-insensitive, trimmed)
-// onto a slog.Level per SPEC §6. debug|info|warn|error (plus "warning");
-// anything else, including empty, is info.
 func logLevelFromEnv() slog.Level {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("HBASECOP_LOG_LEVEL"))) {
 	case "debug":

@@ -7,11 +7,6 @@ import com.virogg.hbasecop.hbase.v1.ClientProtos;
 import org.apache.hadoop.hbase.filter.ByteArrayComparable;
 import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
 
-/**
- * Maps an HBase {@link ByteArrayComparable} to its vendored proto envelope. Ships the upstream
- * class name plus the comparator's self-serialization; full reconstruction on the Go side waits for
- * a per-comparator mapper.
- */
 final class ComparatorConverter {
 
   private ComparatorConverter() {}

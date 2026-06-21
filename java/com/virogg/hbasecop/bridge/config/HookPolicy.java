@@ -6,7 +6,6 @@ package com.virogg.hbasecop.bridge.config;
 import java.time.Duration;
 import java.util.Objects;
 
-/** Resolved policy + timeout for a single hook. Immutable value. */
 public final class HookPolicy {
 
   private final Policy policy;

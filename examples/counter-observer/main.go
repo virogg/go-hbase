@@ -1,14 +1,6 @@
 // Copyright 2026 The go-hbase Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// Command counter-observer is the Go-side runtime of the counter-observer
-// coproc demo (T25). Built into examples/counter-observer/src/main/resources/
-// bin/linux-amd64/hbasecop-runtime so the Maven shade picks it up; the Java
-// bridge supervisor (GoProcess) extracts it from the deployed coproc-jar and
-// exec's it on the RegionServer.
-//
-// The observer keeps an atomic counter of PrePut invocations and emits it to
-// the JSON logger that the bridge tails into the RegionServer log.
 package main
 
 import (

@@ -9,8 +9,6 @@ import (
 	"testing"
 )
 
-// TestBulkLoadHookTableIsCanonical mirrors TestMasterHookTableIsCanonical for
-// the bulk-load surface introduced in T54.
 func TestBulkLoadHookTableIsCanonical(t *testing.T) {
 	if len(bulkLoadHookTable) == 0 {
 		t.Fatal("bulkLoadHookTable empty: T54 dispatch table not populated")
@@ -35,10 +33,6 @@ func TestBulkLoadHookTableIsCanonical(t *testing.T) {
 	}
 }
 
-// TestBulkLoadHookIDsDoNotCollide pins the ID partitioning so a future
-// hook addition can't accidentally claim a value taken by another
-// surface (region 1-99, master 100-199, region-server 200-219,
-// WAL 220-223, bulk-load 224-225).
 func TestBulkLoadHookIDsDoNotCollide(t *testing.T) {
 	taken := make(map[HookID]string)
 	for _, h := range hookTable {
@@ -60,9 +54,6 @@ func TestBulkLoadHookIDsDoNotCollide(t *testing.T) {
 	}
 }
 
-// TestBulkLoadObserverInterfaceCoversAllHooks mirrors the master
-// reflection check: every entry in bulkLoadHookTable corresponds to a
-// BulkLoadObserver method and vice versa.
 func TestBulkLoadObserverInterfaceCoversAllHooks(t *testing.T) {
 	rt := reflect.TypeOf((*BulkLoadObserver)(nil)).Elem()
 	methods := make(map[string]bool, rt.NumMethod())
@@ -83,9 +74,6 @@ func TestBulkLoadObserverInterfaceCoversAllHooks(t *testing.T) {
 	}
 }
 
-// TestUnimplementedBulkLoadObserverSatisfiesInterface promotes the
-// compile-time satisfaction check to runtime and pins the noop return
-// contract (HookResult{}, nil) on every method.
 func TestUnimplementedBulkLoadObserverSatisfiesInterface(t *testing.T) {
 	var obs BulkLoadObserver = UnimplementedBulkLoadObserver{}
 	res, err := obs.PrePrepareBulkLoad(context.Background(), ObserverEnv{}, nil)

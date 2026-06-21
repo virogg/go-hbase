@@ -13,20 +13,6 @@ import java.util.jar.JarInputStream;
 import java.util.jar.Manifest;
 import java.util.regex.Pattern;
 
-/**
- * Parsed view of the {@code HbaseCop-*} entries emitted by {@code hbasecop-build} into a coproc-jar
- * manifest. Used by the supervisor to (a) locate the embedded Go ELF inside the jar and (b) verify
- * its SHA-256 digest at extract time - guarding against jar corruption or wrong-arch binaries.
- *
- * <p>Two manifest attributes are paired and mutually required: {@code HbaseCop-Go-Bin-Name}
- * (resource path inside the jar, e.g. {@code bin/linux-amd64/audit}) and {@code
- * HbaseCop-Go-Bin-SHA256} (lower-case 64-hex digest of the ELF bytes). The remaining attributes
- * {@code HbaseCop-Observer-Class} and {@code HbaseCop-Coproc-Id} are optional metadata for
- * registration tooling.
- *
- * <p>A jar with none of these attributes returns {@code null} from {@link #fromJar(Path)} - that is
- * not an error, only an indication that the jar was not produced by {@code hbasecop-build}.
- */
 public final class ManifestBinaryDescriptor {
 
   private static final String ATTR_OBSERVER_CLASS = "HbaseCop-Observer-Class";
@@ -49,33 +35,22 @@ public final class ManifestBinaryDescriptor {
     this.binarySha256 = binarySha256;
   }
 
-  /** Fully-qualified Java class implementing the observer; may be {@code null}. */
   public String observerClass() {
     return observerClass;
   }
 
-  /** Operator-chosen identifier for this coprocessor (e.g. {@code audit-observer}); nullable. */
   public String coprocId() {
     return coprocId;
   }
 
-  /** Jar-internal resource path of the embedded Go ELF; never {@code null}. */
   public String binaryResourcePath() {
     return binaryResourcePath;
   }
 
-  /** Lower-case 64-hex SHA-256 digest of the ELF bytes; never {@code null}. */
   public String binarySha256() {
     return binarySha256;
   }
 
-  /**
-   * Read and validate the {@code HbaseCop-*} manifest entries from {@code jarPath}.
-   *
-   * @return descriptor, or {@code null} when the jar has no {@code HbaseCop-*} entries
-   * @throws IOException if the jar is missing, unreadable, or its {@code HbaseCop-*} entries are
-   *     internally inconsistent (e.g. name without sha256, malformed digest)
-   */
   public static ManifestBinaryDescriptor fromJar(Path jarPath) throws IOException {
     try (InputStream is = Files.newInputStream(jarPath);
         JarInputStream jis = new JarInputStream(is)) {
@@ -87,13 +62,6 @@ public final class ManifestBinaryDescriptor {
     }
   }
 
-  /**
-   * Build a descriptor from an already-parsed {@link Attributes} block (e.g. the main attributes of
-   * a {@link Manifest} loaded from a classpath resource).
-   *
-   * @return descriptor, or {@code null} when the attributes carry no {@code HbaseCop-*} keys
-   * @throws IOException on internal inconsistency (see {@link #fromJar(Path)})
-   */
   public static ManifestBinaryDescriptor fromAttributes(Attributes a) throws IOException {
     String observerClass = trimToNull(a.getValue(ATTR_OBSERVER_CLASS));
     String coprocId = trimToNull(a.getValue(ATTR_COPROC_ID));

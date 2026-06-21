@@ -23,12 +23,6 @@ import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-/**
- * TE31 F4 acceptance: the converter bridges vendored-pb wire bytes and native HBase objects via the
- * shaded ProtobufUtil. Feeding bytes from the <em>vendored</em> {@code ClientProtos} (what the Go
- * side marshals) into the converter (which parses with HBase's <em>shaded</em> {@code
- * ClientProtos}) proves the byte-identity the reverse-RPC path relies on.
- */
 class ReverseGetConverterTest {
 
   @Test

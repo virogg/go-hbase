@@ -15,8 +15,6 @@ import (
 	"github.com/virogg/go-hbase/internal/wire/hookpb"
 )
 
-// capturingMaster records master-hook invocations for round-trip
-// dispatch tests (T51 Wave A).
 type capturingMaster struct {
 	UnimplementedMasterObserver
 
@@ -105,7 +103,6 @@ func TestDispatchMasterUnknownHookReturnsError(t *testing.T) {
 	master := &capturingMaster{}
 	d := newMasterDispatcher(master, nil)
 
-	// PrePut is a region hook id; a master-only dispatcher must reject it.
 	inner := &hookpb.PreCreateTableRequest{Ctx: &hookpb.HookContext{}}
 	innerBytes, err := proto.Marshal(inner)
 	if err != nil {

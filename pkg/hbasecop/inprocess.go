@@ -15,11 +15,6 @@ import (
 	"github.com/virogg/go-hbase/internal/wire/wirepb"
 )
 
-// InvokeRegion runs obs through the production dispatcher for one region hook
-// and returns the result as the Java side would observe it - env decode, panic
-// recovery and result mapping all run. req is the per-hook *XxxRequest envelope
-// with Ctx set. It is the seam for in-process testing without a cluster; see
-// pkg/hbasecop/hbasecoptest for an ergonomic wrapper.
 func InvokeRegion(obs RegionObserver, hookID HookID, req proto.Message) (HookResult, error) {
 	inner, err := proto.Marshal(req)
 	if err != nil {

@@ -20,42 +20,16 @@ import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionServerObserver;
 
-/**
- * T52 region-server coprocessor. Acquires a shared {@link CoprocessorRuntime} via {@link
- * SharedRuntime} keyed on this class and delegates to its {@link RegionServerObserver} adapter -
- * but attaches at a RegionServer instead of the HMaster. The embedded Go binary is the {@code
- * rs-policy-observer} ELF, which audits region-server lifecycle hooks and, when WAL-roll vetoing
- * is enabled, rejects every {@code preRollWALWriterRequest} by returning an error; rejection
- * travels back as an IOException to the HBase admin client because the {@code
- * preRollWALWriterRequest} hook defaults to the STRICT failure policy.
- *
- * <p>WAL-roll vetoing is read from the {@link #KEY_VETO_WAL_ROLL} coprocessor config and forwarded
- * to the Go side via the {@code HBASECOP_RS_POLICY_VETO_WAL_ROLL} environment variable.
- */
 public final class RsPolicyRegionServerObserver implements RegionServerCoprocessor {
 
-  private static final Logger LOG =
-      System.getLogger(RsPolicyRegionServerObserver.class.getName());
+  private static final Logger LOG = System.getLogger(RsPolicyRegionServerObserver.class.getName());
 
-  /**
-   * Configuration key (boolean) selecting whether WAL-writer rolls are vetoed. When {@code "true"}
-   * the {@code HBASECOP_RS_POLICY_VETO_WAL_ROLL} environment variable is forwarded to the spawned
-   * Go process; any other value (or unset) leaves the env var unset.
-   */
   public static final String KEY_VETO_WAL_ROLL = "hbasecop.policy.veto_wal_roll";
 
   private static final String SHARED_KEY = RsPolicyRegionServerObserver.class.getName();
 
   private SharedRuntime.Handle handle;
 
-  /**
-   * Maps the {@link #KEY_VETO_WAL_ROLL} value in {@code conf} to the env-var map consumed by
-   * {@link CoprocessorRuntime.Config#extraEnv()}. A value other than {@code "true"} returns the
-   * empty map.
-   *
-   * <p>Visible-for-testing as a pure helper so the mapping can be exercised without driving a
-   * RegionServerCoprocessor lifecycle.
-   */
   public static Map<String, String> envFromConfig(Configuration conf) {
     Objects.requireNonNull(conf, "conf");
     if ("true".equals(conf.get(KEY_VETO_WAL_ROLL))) {

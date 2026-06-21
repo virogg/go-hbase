@@ -15,10 +15,6 @@ import (
 	"testing"
 )
 
-// TestBuild_HappyPath checks the full coproc-jar shape produced from a synthetic
-// bridge.jar plus an ELF stand-in. The asserts target what the supervisor
-// (T71 Wave A/B) consumes: HbaseCop-* manifest entries with correct SHA-256 +
-// the ELF at the declared resource path.
 func TestBuild_HappyPath(t *testing.T) {
 	dir := t.TempDir()
 
@@ -57,7 +53,6 @@ func TestBuild_HappyPath(t *testing.T) {
 		entries[f.Name] = readZipEntry(t, f)
 	}
 
-	// Manifest must be present and parseable.
 	mfBytes, ok := entries["META-INF/MANIFEST.MF"]
 	if !ok {
 		t.Fatalf("output jar missing META-INF/MANIFEST.MF; entries=%v", keys(entries))
@@ -70,7 +65,6 @@ func TestBuild_HappyPath(t *testing.T) {
 	wantSha := sha256Hex(elfBytes)
 	checkAttr(t, mf, "HbaseCop-Go-Bin-SHA256", wantSha)
 
-	// ELF must be at the declared resource path with original bytes.
 	gotElf, ok := entries["bin/linux-amd64/myelf"]
 	if !ok {
 		t.Fatalf("output jar missing bin/linux-amd64/myelf; entries=%v", keys(entries))
@@ -79,22 +73,17 @@ func TestBuild_HappyPath(t *testing.T) {
 		t.Fatalf("ELF bytes mismatch: got %q want %q", gotElf, elfBytes)
 	}
 
-	// Bridge classes preserved.
 	if _, ok := entries["com/virogg/hbasecop/bridge/Foo.class"]; !ok {
 		t.Fatalf("bridge class dropped from output jar")
 	}
 	if _, ok := entries["META-INF/services/foo"]; !ok {
 		t.Fatalf("META-INF/services lost")
 	}
-	// Stale bin/** from bridge must NOT win - the user's ELF is canonical.
 	if _, ok := entries["bin/linux-amd64/hbasecop-runtime"]; ok {
 		t.Fatalf("stale bridge ELF leaked into output jar (must be stripped)")
 	}
 }
 
-// TestBuild_FirstEntryIsManifest pins the contract JarInputStream.getManifest()
-// relies on: MANIFEST.MF must be the first regular entry (after the optional
-// META-INF/ dir). Without this, ManifestBinaryDescriptor.fromJar returns null.
 func TestBuild_FirstEntryIsManifest(t *testing.T) {
 	dir := t.TempDir()
 	bridgeJar := filepath.Join(dir, "bridge.jar")
@@ -124,8 +113,6 @@ func TestBuild_FirstEntryIsManifest(t *testing.T) {
 	if len(zr.File) == 0 {
 		t.Fatalf("empty jar")
 	}
-	// JarInputStream tolerates a leading META-INF/ directory entry - the
-	// manifest must come either first or right after it.
 	first := zr.File[0].Name
 	switch first {
 	case "META-INF/MANIFEST.MF":
@@ -265,8 +252,6 @@ func TestBuild_ValidatesInputs(t *testing.T) {
 	}
 }
 
-// --- helpers ---
-
 func writeBridgeJar(t *testing.T, path string, entries map[string]string) {
 	t.Helper()
 	f, err := os.Create(path)
@@ -313,10 +298,6 @@ func readZipEntry(t *testing.T, f *zip.File) []byte {
 
 func parseManifest(t *testing.T, raw []byte) map[string]string {
 	t.Helper()
-	// Unfold continuation lines (leading-space lines append to previous after
-	// stripping the leading space and any preceding CR/LF). Then split into
-	// key:value records on bare blank lines (we only need the main section
-	// for HbaseCop-* lookups; per-entry sections come after a blank line).
 	text := strings.ReplaceAll(string(raw), "\r\n", "\n")
 	text = strings.ReplaceAll(text, "\n ", "")
 	out := map[string]string{}

@@ -11,9 +11,6 @@ import (
 	"github.com/virogg/go-hbase/internal/wire/hookpb"
 )
 
-// masterHookEntry is the master-side analogue of hookEntry: maps a
-// HookID to its decoder + a closure that invokes the matching
-// MasterObserver method.
 type masterHookEntry struct {
 	id     HookID
 	name   string
@@ -35,8 +32,6 @@ func postMasterHook[Req proto.Message](method func(MasterObserver, context.Conte
 	}
 }
 
-// masterHookTable is the T51 master dispatch table. Order mirrors
-// proto/hooks.proto's HookId master section (IDs 100-119).
 var masterHookTable = []masterHookEntry{
 	{HookIDPreCreateTable, "PreCreateTable", newReq[hookpb.PreCreateTableRequest], preMasterHook(MasterObserver.PreCreateTable)},
 	{HookIDPostCreateTable, "PostCreateTable", newReq[hookpb.PostCreateTableRequest], postMasterHook(MasterObserver.PostCreateTable)},
@@ -63,7 +58,6 @@ var masterHookTable = []masterHookEntry{
 	{HookIDPostBalance, "PostBalance", newReq[hookpb.PostBalanceRequest], postMasterHook(MasterObserver.PostBalance)},
 }
 
-// masterHooksByID indexes the master dispatch table for O(1) lookup.
 var masterHooksByID = func() map[HookID]masterHookEntry {
 	m := make(map[HookID]masterHookEntry, len(masterHookTable))
 	for _, h := range masterHookTable {

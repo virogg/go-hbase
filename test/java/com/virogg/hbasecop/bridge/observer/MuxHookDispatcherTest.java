@@ -18,11 +18,6 @@ import java.util.concurrent.TimeoutException;
 import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
 import org.junit.jupiter.api.Test;
 
-/**
- * Unit coverage for {@link MuxHookDispatcher}: the synchronous request/response gateway over a
- * {@link Multiplexer}. Exercises the RESPONSE-unwrap path, the ERROR-frame → IOException mapping,
- * and the timeout path (which must cancel the pending entry so it is not leaked; the H3 fix).
- */
 class MuxHookDispatcherTest {
 
   private static final byte HOOK = (byte) 22;
@@ -30,8 +25,6 @@ class MuxHookDispatcherTest {
   @Test
   void responseFrameUnwrapsHookResponseBytes() throws Exception {
     byte[] hookRespBytes = HookResponse.newBuilder().setBypass(true).build().toByteArray();
-    // Echoing sender: completes the future synchronously with a RESPONSE wrapping
-    // the HookResponse, so dispatchHook returns without a separate thread.
     Multiplexer[] holder = new Multiplexer[1];
     Multiplexer mux =
         new Multiplexer(
@@ -89,7 +82,6 @@ class MuxHookDispatcherTest {
 
   @Test
   void timeoutCancelsPendingEntry() {
-    // No-op sender: the future never completes, so dispatchHook times out.
     Multiplexer mux = new Multiplexer(msg -> {});
     MuxHookDispatcher dispatcher = new MuxHookDispatcher(mux);
 
@@ -97,7 +89,6 @@ class MuxHookDispatcherTest {
         TimeoutException.class,
         () -> dispatcher.dispatchHook(0, HOOK, new byte[0], Duration.ofMillis(100)));
 
-    // H3: the timed-out call must be removed from the mux, not leaked.
     assertEquals(0, mux.pendingCountForTesting(), "timed-out request must be cancelled");
   }
 }

@@ -14,17 +14,6 @@ import (
 	_ "github.com/virogg/go-hbase/internal/wire/hookpb"
 )
 
-// TestAllHookMessagesRoundTrip is the T42 Wave-5 "100% coverage" gate: every
-// hookpb message must marshal/unmarshal cleanly at default-instance shape
-// (proto.Marshal -> proto.Unmarshal -> equal). Fields added in later phases
-// (T43+) flow through the same code path.
-//
-// Enumerates message types via the proto global registry, filters to
-// virogg.hbasecop.v1, and asserts:
-//
-//   - default-instance bytes round-trip equal
-//   - mutating one field (a synthetic byte tag) also round-trips, exercising
-//     wire-tag handling beyond the no-op default.
 func TestAllHookMessagesRoundTrip(t *testing.T) {
 	count := 0
 	protoregistry.GlobalTypes.RangeMessages(func(mt protoreflect.MessageType) bool {
@@ -36,7 +25,6 @@ func TestAllHookMessagesRoundTrip(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			msg := mt.New().Interface()
 
-			// Default-instance round-trip.
 			b, err := proto.Marshal(msg)
 			if err != nil {
 				t.Fatalf("marshal default: %v", err)
@@ -49,8 +37,6 @@ func TestAllHookMessagesRoundTrip(t *testing.T) {
 				t.Fatalf("default round-trip not equal")
 			}
 
-			// Mutating round-trip: populate any byte/string field found via
-			// reflection so the wire bytes are non-empty.
 			mutated := mt.New()
 			fields := mt.Descriptor().Fields()
 			for i := 0; i < fields.Len(); i++ {
@@ -74,8 +60,6 @@ func TestAllHookMessagesRoundTrip(t *testing.T) {
 				case protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
 					mutated.Set(fd, protoreflect.ValueOfUint64(7))
 				default:
-					// Skip enums, messages, doubles, floats; not needed for the
-					// smoke check.
 				}
 			}
 			b, err = proto.Marshal(mutated.Interface())
@@ -92,10 +76,6 @@ func TestAllHookMessagesRoundTrip(t *testing.T) {
 		})
 		return true
 	})
-	// T41 hook surface + T42 Waves 1-4 give 80+ proto messages today (68 hook
-	// Requests + shared HookContext/HookResponse + 12 helper types like
-	// CellPair, FamilyPath, etc.). Fewer than 70 means something stopped
-	// registering.
 	if count < 70 {
 		t.Fatalf("hookpb registry shows %d messages, want >=70 (T42 coverage gate)", count)
 	}

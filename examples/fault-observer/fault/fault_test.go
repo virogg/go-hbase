@@ -50,15 +50,12 @@ func TestMode_String_RoundTrip(t *testing.T) {
 	}
 }
 
-// stubActions records which side-effecting calls were invoked. The Sleep / Exit
-// / Kill stubs do not actually block or terminate, so observer logic can run
-// to completion under test.
 type stubActions struct {
 	kill9    int
 	exit1    int
 	hang     int
 	oom      int
-	hangChan chan struct{} // optional; when non-nil, Hang sends here so tests can synchronise
+	hangChan chan struct{}
 }
 
 func (s *stubActions) Kill9()       { s.kill9++ }
@@ -141,8 +138,6 @@ func TestObserver_ProtocolError_ReturnsError(t *testing.T) {
 }
 
 func TestObserver_PostPut_AlwaysNoop(t *testing.T) {
-	// PostPut isn't part of the fault matrix in T36 (matrix uses prePut only); the observer
-	// must keep PostPut neutral so it doesn't interfere with post-state HBase scans.
 	for _, m := range []Mode{ModeNone, ModeKill9, ModeHang, ModeExit1, ModeProtocolError, ModeOOM} {
 		stub := &stubActions{}
 		obs := New(m, stub)

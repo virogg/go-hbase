@@ -32,33 +32,12 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
 
-/**
- * Services Go-initiated reverse RPCs (Tier 2): a running endpoint handler asks the bridge to read
- * region-local data — GET (TE31) and pull-scan SCAN_OPEN/NEXT/CLOSE (TE33). Requests are handed off
- * by the reader thread via {@link #accept(Message)} and executed on a bounded, dedicated thread
- * pool — never the reader thread (which must keep routing hooks/heartbeats) and never the
- * RegionServer handler thread blocked awaiting the endpoint result (A-1, anti-deadlock).
- *
- * <p>The pool is <em>fail-closed</em>: when both the pool and its bounded queue are saturated, a
- * request is rejected and answered with an {@code RpcResponse{ERROR}} rather than blocking.
- *
- * <p>Scans batch bytes-primary and resumably: each SCAN_NEXT accumulates whole rows (never
- * splitting a row) up to a byte ceiling and row cap (TE42) that keep the reply within one ring
- * slot; {@code has_more} tells the caller whether to issue another SCAN_NEXT. A single row whose
- * cells exceed one slot is a clean error (the scanner is closed) rather than a crash loop. Open
- * scanners live in the shared {@link ScannerRegistry} and are reaped on Go-process crash. MUTATE
- * (TE41) applies a Put/Delete through the region (observer hooks fire, as in the stock
- * MultiRowMutationEndpoint), gated off unless {@code hbasecop.endpoint.allow-mutate=true}.
- */
 public final class ReverseRpcServicer {
 
   private static final Logger LOG = System.getLogger(ReverseRpcServicer.class.getName());
 
-  // Headroom reserved within a ring slot for the frame header + RpcResponse fields around the
-  // Result payload, so a batch that fits our threshold also fits the slot once encoded.
   private static final int SLOT_HEADROOM = 64 * 1024;
 
-  // TE42: per-table reverse-MUTATE gate, set as a coprocessor property on the table descriptor.
   private static final String ALLOW_MUTATE_PROPERTY = "hbasecop.endpoint.allow-mutate";
 
   private final RegionRegistry regionRegistry;
@@ -66,27 +45,12 @@ public final class ReverseRpcServicer {
   private final Consumer<Message> replySink;
   private final int slotMaxObjectSize;
   private final ThreadPoolExecutor pool;
-  // Single dedicated thread for sending pool-saturation ERROR replies, so the reject path never
-  // sends inline on the reader thread (the reply is itself a bulk-ring send that can block).
   private final ThreadPoolExecutor overflowReplies;
   private final Duration shutdownTimeout;
-  // TE41: reverse MUTATE is gated off by default; only enabled via
-  // hbasecop.endpoint.allow-mutate=true. A disabled MUTATE fails closed with an ERROR reply.
   private final boolean allowMutate;
-  // TE42: per-SCAN_NEXT reply caps (bytes and rows).
   private final int maxBytesPerResp;
   private final int maxRowsPerNext;
 
-  /**
-   * @param regionRegistry resolves a request's {@code region_id} to its live {@link Region}
-   * @param scannerRegistry holds open server-side scanners keyed by {@code (call_id, scanner_id)}
-   * @param replySink ships an {@code RpcResponse} {@link Message} back over the bulk ring; must not
-   *     block (it runs on a servicing-pool thread)
-   * @param slotMaxObjectSize the bulk ring slot size in bytes; bounds a scan batch
-   * @param poolSize max concurrent servicing threads
-   * @param queueDepth bounded backlog before requests are rejected (fail-closed)
-   * @param shutdownTimeout how long {@link #close()} waits for in-flight tasks to drain
-   */
   public ReverseRpcServicer(
       RegionRegistry regionRegistry,
       ScannerRegistry scannerRegistry,
@@ -95,7 +59,6 @@ public final class ReverseRpcServicer {
       int poolSize,
       int queueDepth,
       Duration shutdownTimeout) {
-    // Read-only servicer: reverse MUTATE disabled (the safe default).
     this(
         regionRegistry,
         scannerRegistry,
@@ -107,7 +70,6 @@ public final class ReverseRpcServicer {
         false);
   }
 
-  /** Adds the TE41 allow-mutate gate; default (unbounded) TE42 scan limits. */
   public ReverseRpcServicer(
       RegionRegistry regionRegistry,
       ScannerRegistry scannerRegistry,
@@ -130,13 +92,6 @@ public final class ReverseRpcServicer {
         Integer.MAX_VALUE);
   }
 
-  /**
-   * @param allowMutate whether reverse MUTATE (TE41) is permitted; off by default
-   *     (hbasecop.endpoint.allow-mutate). When false, a MUTATE request fails closed with an ERROR
-   *     reply before any region write.
-   * @param maxBytesPerResp TE42 cap on a SCAN_NEXT reply's encoded size (clamped to the ring slot)
-   * @param maxRowsPerNext TE42 cap on the number of rows in a single SCAN_NEXT batch
-   */
   public ReverseRpcServicer(
       RegionRegistry regionRegistry,
       ScannerRegistry scannerRegistry,
@@ -185,8 +140,6 @@ public final class ReverseRpcServicer {
               return t;
             },
             new ThreadPoolExecutor.AbortPolicy());
-    // Let idle threads die so a pure-observer deployment that never issues a reverse RPC keeps no
-    // servicing threads parked; they respawn on demand up to poolSize.
     this.pool.allowCoreThreadTimeOut(true);
 
     this.overflowReplies =
@@ -205,23 +158,13 @@ public final class ReverseRpcServicer {
     this.overflowReplies.allowCoreThreadTimeOut(true);
   }
 
-  /**
-   * Hand off one reverse-RPC request for servicing. Called on the reader thread, so it only submits
-   * (cheap) and never blocks: on pool+queue saturation it fails closed with an ERROR reply.
-   */
   public void accept(Message request) {
     try {
       pool.execute(() -> service(request));
     } catch (RejectedExecutionException e) {
-      // Fail closed WITHOUT blocking the reader thread. The ERROR reply is itself a (possibly
-      // blocking) bulk-ring send, so hand it to a dedicated thread — accept() must stay O(1), else
-      // it stalls the reader, starves heartbeat accounting, and risks a false watchdog kill of a
-      // healthy Go process (A-1).
       try {
         overflowReplies.execute(() -> replyError(request, "reverse RPC servicing pool saturated"));
       } catch (RejectedExecutionException drop) {
-        // Even the overflow path is saturated (extreme, sustained load): drop the reply; the Go
-        // caller's reverse-call deadline surfaces it as a clean error.
         LOG.log(Level.WARNING, "hbasecop: dropped reverse-RPC saturation reply (overflow full)");
       }
     }
@@ -256,9 +199,6 @@ public final class ReverseRpcServicer {
           replyError(request, "unsupported reverse op " + req.getOp());
       }
     } catch (Throwable t) {
-      // A worker must never die silently or leak the exception: turn any failure into an ERROR
-      // reply
-      // so the Go caller sees a clean error instead of hanging until its deadline.
       LOG.log(Level.WARNING, "hbasecop: reverse " + req.getOp() + " servicing failed", t);
       replyError(request, "reverse " + req.getOp() + " failed: " + messageOf(t));
     }
@@ -286,13 +226,11 @@ public final class ReverseRpcServicer {
     RegionScanner scanner = region.getScanner(scan);
     long scannerId = scannerRegistry.register(req.getCallId(), scanner);
     if (scannerId == ScannerRegistry.REJECTED) {
-      // The call is being reaped (Go-process crash) — the registry already closed the scanner.
       replyError(
           request, "scanner registry reaping call " + req.getCallId() + "; SCAN_OPEN rejected");
       return;
     }
     if (scannerId == ScannerRegistry.AT_CAPACITY) {
-      // TE42: per-call scanner cap reached — the registry already closed the scanner.
       replyError(request, "max scanners per call exceeded for call " + req.getCallId());
       return;
     }
@@ -306,9 +244,6 @@ public final class ReverseRpcServicer {
     long scannerId = req.getScannerId();
     Region region = region(request);
     if (region == null) {
-      // region() already replied ERROR. The scanner registered at SCAN_OPEN can no longer make
-      // progress (region moved/closed), so close it now to release its MVCC read point instead of
-      // pinning it until the per-call/idle-lease reap (review E3J-4).
       closeQuietly(scannerRegistry.remove(callId, scannerId));
       return;
     }
@@ -318,11 +253,6 @@ public final class ReverseRpcServicer {
       return;
     }
 
-    // Bytes-primary, row-aligned batch (TE33) under the TE42 caps: accumulate whole rows
-    // (single-arg nextRaw never splits a row) until the per-reply byte ceiling or the row cap is
-    // reached, keeping the encoded reply within one ring slot. The byte ceiling is the smaller of
-    // the slot budget and max-bytes-per-resp; the row cap is max-rows-per-next. has_more (the last
-    // nextRaw result) drives resumption.
     long byteCeiling =
         Math.max(
             1L, Math.min((long) (slotMaxObjectSize - SLOT_HEADROOM) / 2L, (long) maxBytesPerResp));
@@ -349,9 +279,6 @@ public final class ReverseRpcServicer {
         region.closeRegionOperation();
       }
     } catch (IOException e) {
-      // The scan can no longer make progress (region moving/closing, or the scanner faulted), so
-      // close and deregister it to release its MVCC read point immediately rather than leaving it
-      // pinned until the per-call/idle-lease reap, then surface the failure (review E3J-4).
       closeQuietly(scannerRegistry.remove(callId, scannerId));
       throw e;
     }
@@ -359,13 +286,6 @@ public final class ReverseRpcServicer {
     byte[] payload = ReverseGetConverter.toResultBytes(Result.create(cells));
     int max = slotMaxObjectSize - SLOT_HEADROOM;
     if (payload.length > max) {
-      // The encoded batch exceeds one ring slot (cross-slot reassembly is unsupported). The rows
-      // were already consumed from the scanner and cannot be re-read, so fail clean and close the
-      // scanner rather than risk silently skipping them on a retry. rows<=1 is a genuinely
-      // oversized
-      // single row; rows>1 is an estimator anomaly (the /2 byteCeiling should keep a multi-row
-      // batch
-      // within the slot) — distinguish them in the message for diagnosis (review E3J-5).
       RegionScanner dead = scannerRegistry.remove(callId, scannerId);
       closeQuietly(dead);
       String detail =
@@ -385,9 +305,6 @@ public final class ReverseRpcServicer {
   }
 
   private void serviceScanClose(Message request, RpcRequest req) {
-    // closeQuietly: if close() throws, the scanner is already removed from the registry, so swallow
-    // (and log) rather than leak the exception into an ERROR reply for an otherwise-successful
-    // close.
     closeQuietly(scannerRegistry.remove(req.getCallId(), req.getScannerId()));
     sendReply(request, RpcResponse.newBuilder().setStatus(RpcResponse.Status.OK).build());
   }
@@ -398,15 +315,9 @@ public final class ReverseRpcServicer {
       return; // region() already replied ERROR
     }
     if (!allowMutateFor(region)) {
-      // Fail closed: reverse writes are opt-in — they bypass the client RPC stack (ACL/quota), so
-      // exposing them by default would be a DoS / authorization-bypass surface.
       replyError(request, "reverse MUTATE disabled (set hbasecop.endpoint.allow-mutate=true)");
       return;
     }
-    // region.put/delete go through the region's observer pipeline (Pre/Post-Put/Delete fire) but
-    // bypass the client RPC stack — the same write path as the stock MultiRowMutationEndpoint. This
-    // runs on a servicing-pool thread, never the RS handler blocked on the endpoint result (A-1),
-    // so an endpoint mutating the very region it was invoked on does not self-deadlock.
     Mutation m = ReverseGetConverter.toNativeMutation(req.getOpPayload().toByteArray());
     if (m instanceof Put) {
       region.put((Put) m);
@@ -416,13 +327,6 @@ public final class ReverseRpcServicer {
     sendReply(request, RpcResponse.newBuilder().setStatus(RpcResponse.Status.OK).build());
   }
 
-  /**
-   * TE42 per-table gate: the effective allow-mutate for the invoking region. The table opts in via
-   * the coprocessor property {@code hbasecop.endpoint.allow-mutate} (authoritative per table);
-   * absent that, the cluster-wide value baked at runtime start applies. Read from the server-side
-   * {@link Region#getTableDescriptor()} — never a Go wire field — so the privilege-escalation
-   * surface is exactly the table's own descriptor.
-   */
   private boolean allowMutateFor(Region region) {
     try {
       for (org.apache.hadoop.hbase.client.CoprocessorDescriptor cd :
@@ -433,15 +337,11 @@ public final class ReverseRpcServicer {
         }
       }
     } catch (RuntimeException e) {
-      // A missing/odd descriptor must not crash the mutate path; fall back to the baked default.
       LOG.log(Level.WARNING, "hbasecop: reading per-table allow-mutate failed; using default", e);
     }
     return allowMutate;
   }
 
-  /**
-   * Resolve the request's region, replying ERROR (and returning null) when it is not registered.
-   */
   private Region region(Message request) {
     Region region = regionRegistry.lookup(request.regionId());
     if (region == null) {
@@ -483,7 +383,6 @@ public final class ReverseRpcServicer {
     return t.getMessage() != null ? t.getMessage() : t.toString();
   }
 
-  /** Stop servicing and wait briefly for in-flight tasks to drain. Idempotent. */
   public void close() {
     pool.shutdownNow();
     overflowReplies.shutdownNow();

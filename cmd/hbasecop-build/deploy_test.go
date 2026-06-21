@@ -17,13 +17,11 @@ func TestRunAdminRequiresSubcommand(t *testing.T) {
 }
 
 func TestRunAdminPrintsCommandWithoutHbase(t *testing.T) {
-	// Force the "hbase not on PATH" branch: empty PATH, explicit bridge jar.
 	t.Setenv("PATH", "")
 	jar := filepath.Join(t.TempDir(), "hbasecop-bridge-0.0.1-all.jar")
 	if err := os.WriteFile(jar, []byte("jar"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// Should not error: it prints the ready-to-run command and returns nil.
 	if err := runAdmin([]string{"--bridge-jar", jar, "list", "--table", "t"}); err != nil {
 		t.Fatalf("expected printed-command fallback, got %v", err)
 	}

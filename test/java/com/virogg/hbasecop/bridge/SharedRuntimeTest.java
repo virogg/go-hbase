@@ -20,12 +20,6 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/**
- * T63 - refcounted lifecycle: first {@link SharedRuntime#acquire} on a key spawns the Go process;
- * subsequent acquires share the existing runtime/channel; the last {@link
- * SharedRuntime.Handle#release} sends SHUTDOWN and waits for the process to exit. No ELF-leak
- * across repeated start/stop cycles.
- */
 final class SharedRuntimeTest {
 
   @Test
@@ -55,7 +49,6 @@ final class SharedRuntimeTest {
         h2.release();
       }
 
-      // Releasing h2 must not stop the runtime - h1 still holds a ref.
       assertEquals(1, SharedRuntime.refcountForTesting(key));
       assertTrue(
           h1.runtimeForTesting().isAlive(), "Go process must still be alive on refcount > 0");
@@ -106,7 +99,7 @@ final class SharedRuntimeTest {
             () ->
                 SharedRuntime.Spec.of(baseConfig(tmp.resolve("in.mmap"), tmp.resolve("out.mmap"))));
     h.release();
-    h.release(); // must be a no-op, must not double-stop the runtime or NPE
+    h.release();
     assertEquals(0, SharedRuntime.refcountForTesting(key));
   }
 
@@ -114,8 +107,6 @@ final class SharedRuntimeTest {
   void acquireFailureDoesNotPoisonRegistry(@TempDir Path tmp) throws Exception {
     String key = "shared-rt-fail-" + System.nanoTime();
 
-    // Supplier throws - the registry entry must not be created, so a subsequent acquire with a
-    // good supplier succeeds (no stale half-built entry blocking the key).
     assertThrows(
         IOException.class,
         () ->

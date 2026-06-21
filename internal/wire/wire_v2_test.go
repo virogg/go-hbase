@@ -10,9 +10,6 @@ import (
 	"github.com/virogg/go-hbase/internal/wire"
 )
 
-// TE11: the Tier 2 endpoint/reverse-RPC frame types round-trip through the
-// encoder/decoder exactly like the v1 types. They are NOT control frames, so
-// they may also span multiple chunks.
 func TestRoundTripEndpointFrameTypes(t *testing.T) {
 	cases := []struct {
 		name string
@@ -63,8 +60,6 @@ func TestRoundTripEndpointFrameTypes(t *testing.T) {
 	}
 }
 
-// TE11: Valid() accepts exactly the v1 + v2 type bytes, and the new types are
-// not misclassified as control frames.
 func TestNewFrameTypesValidAndNotControl(t *testing.T) {
 	for _, typ := range []wire.Type{
 		wire.TypeEndpointInvoke, wire.TypeEndpointResult,

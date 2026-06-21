@@ -14,10 +14,9 @@ go run ./cmd/wire-golden -out test/golden/wire/v1
 ```
 
 Генератор записывает только файлы `<name>.bin`; `fixtures.tsv` правится вручную.
-Перезапускайте после любого изменения wire-layout (T11/T12/T13 владеют этим форматом; T31+ может
-расширять семантику payload без перезаписи байтов).
+Перезапускайте после любого изменения wire-layout
 
-## Потребляется
+## Используется
 
 - Go: `internal/wire/wire_golden_test.go`
 - Java: `test/java/com/virogg/hbasecop/bridge/wire/WireGoldenTest.java`
@@ -27,5 +26,5 @@ go run ./cmd/wire-golden -out test/golden/wire/v1
 1. Кодирование логического Message выдаёт точно те байты, что в `<name>.bin`.
 2. Декодирование `<name>.bin` выдаёт Message, равный логическому Message.
 
-Эта двунаправленная проверка и доказывает, что Go encode ↔ Java decode (и
-наоборот) совпадают без запуска живого межпроцессного набора.
+Эта двунаправленная проверка доказывает, что Go encode ↔ Java decode (и наоборот) совпадают без запуска живого
+межпроцессного набора.

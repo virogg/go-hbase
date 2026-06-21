@@ -31,24 +31,6 @@ import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.junit.jupiter.api.Test;
 
-/**
- * T27 integration test: drives 100 PrePut hooks through a real coprocessor on a live HBase 2.5
- * standalone cluster (T26 docker-compose target); asserts the Go-side counter incremented 100
- * times.
- *
- * <p>Not in {@code mvn test} (name doesn't match Surefire defaults); run via {@code make
- * test-integration}, which manages the cluster lifecycle and stages the coproc-jar into the
- * container's bind-mount.
- *
- * <p>Assumptions on entry:
- *
- * <ul>
- *   <li>The cluster is up (master web UI returns 200 on {@code localhost:16010/master-status}).
- *   <li>{@code test/integration/coproc-jars/counter-observer.jar} exists and is mounted into the
- *       container at {@code /coproc-jars/counter-observer.jar}.
- *   <li>{@code docker} CLI is on PATH and can read logs of the {@code go-hbase-dev} container.
- * </ul>
- */
 final class PrePutCounterIT {
 
   private static final String CONTAINER_NAME = "go-hbase-dev";
@@ -126,7 +108,6 @@ final class PrePutCounterIT {
 
   private static Path resolveJarOnHost() {
     Path here = Paths.get("").toAbsolutePath();
-    // Test may be invoked from repo root or from target/; climb to find the bind-mount dir.
     while (here != null) {
       Path candidate = here.resolve(COPROC_JAR_HOST_RELATIVE);
       if (Files.exists(candidate)) {
@@ -199,10 +180,8 @@ final class PrePutCounterIT {
       }
       Thread.sleep(250);
     }
-    // Fall through on timeout; caller's assertEquals surfaces the exact delta.
   }
 
-  /** Runs `docker logs {container} 2>&1 | grep -c 'counter-observer: prePut'`. */
   private static long countPrePutLogs() throws IOException, InterruptedException {
     ProcessBuilder pb =
         new ProcessBuilder(
@@ -227,7 +206,6 @@ final class PrePutCounterIT {
       throw new IOException("docker logs grep timed out");
     }
     int code = proc.exitValue();
-    // grep -c returns 1 when zero matches; both 0 and 1 are fine if numeric stdout follows.
     if (code != 0 && code != 1) {
       throw new IOException(
           "docker logs grep exited " + code + " (is the container `" + CONTAINER_NAME + "` up?)");

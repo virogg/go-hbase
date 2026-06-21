@@ -43,7 +43,6 @@ func TestValidate(t *testing.T) {
 			if !tc.wantErr && got != tc.want {
 				t.Fatalf("Validate(%q) = %v, want %v", tc.value, got, tc.want)
 			}
-			// SPEC §8: error text must not echo the (potentially sensitive) value.
 			if err != nil && len(tc.value) > 4 && strings.Contains(err.Error(), tc.value) {
 				t.Fatalf("error leaks the cell value: %v", err)
 			}
@@ -80,7 +79,6 @@ func TestPrePutAcceptsAndRejects(t *testing.T) {
 	} else if !strings.Contains(err.Error(), "ttl-validator") {
 		t.Fatalf("rejection error lacks observer prefix: %v", err)
 	}
-	// Mixed: one valid + one invalid cell → whole Put rejected.
 	if _, err := o.PrePut(ctx, env, put("ttl=60;ok", "bad")); err == nil {
 		t.Fatal("mixed put accepted; the whole Put must be rejected")
 	}

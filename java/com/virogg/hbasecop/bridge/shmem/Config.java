@@ -3,16 +3,8 @@
 
 package com.virogg.hbasecop.bridge.shmem;
 
-/**
- * Immutable configuration for one {@link Channel} endpoint. Use {@link #builder()} to construct;
- * the underlying {@code Channel.open} performs the cross-field validation.
- *
- * <p>Mirrors the Go-side {@code shmem.Config} struct field-for-field so a shared JSON
- * representation can drive both sides (introduced in T17/T18).
- */
 public final class Config {
 
-  /** Backend identifier - must match {@code com.jgshmem.backend.MemoryBackends}. */
   public static final String BACKEND_MMAP = "mmap";
 
   public static final String BACKEND_POSIX_SHM = "posix_shm";
@@ -61,7 +53,6 @@ public final class Config {
     return new Builder();
   }
 
-  /** Mutable builder; not thread-safe. */
   public static final class Builder {
     private String backend = BACKEND_MMAP;
     private String filename;

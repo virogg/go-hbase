@@ -17,12 +17,6 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.junit.jupiter.api.Test;
 
-/**
- * Round-trip checks for the T42 Wave-2 write-path converter ({@link MutationConverter}). The four
- * HBase {@link org.apache.hadoop.hbase.client.Mutation} subtypes (Put / Delete / Append /
- * Increment) all share the {@link MutationProto} wire shape - the discriminator {@link
- * MutationProto.MutationType} steers the Go side per mutation kind.
- */
 class MutationConverterTest {
 
   @Test
@@ -70,7 +64,6 @@ class MutationConverterTest {
             sawFamily = true;
             break;
           default:
-            // ignore - other delete types covered by separate tests later.
         }
       }
     }
@@ -102,15 +95,11 @@ class MutationConverterTest {
 
     assertEquals(MutationProto.MutationType.INCREMENT, rehydrated.getMutateType());
     MutationProto.ColumnValue.QualifierValue qv = rehydrated.getColumnValue(0).getQualifierValue(0);
-    // HBase encodes the long delta as 8 bytes big-endian in the cell value.
     assertEquals(5L, Bytes.toLong(qv.getValue().toByteArray()));
   }
 
   @Test
   void preDeleteWiresThroughMutationConverter() throws IOException {
-    // Sanity: the proto Request body for PreDelete embeds MutationProto (T42 Wave 2
-    // schema). This shape pins the wire contract - observers can rely on the field
-    // numbering: ctx=1, mutation=2.
     com.virogg.hbasecop.bridge.wire.pb.PreDeleteRequest empty =
         com.virogg.hbasecop.bridge.wire.pb.PreDeleteRequest.getDefaultInstance();
     assertEquals(false, empty.hasMutation());
@@ -119,25 +108,16 @@ class MutationConverterTest {
 
   @Test
   void postIncrementBeforeWalCarriesCellPairs() throws IOException {
-    // Proto-shape pin: the Before-WAL hook accepts repeated CellPair {old, new}
-    // entries. Real cell content is exercised by ReadPathConverterTest's CellConverter
-    // coverage; this asserts the envelope exposes the right field number for forward
-    // compatibility.
     com.virogg.hbasecop.bridge.wire.pb.PostIncrementBeforeWALRequest empty =
         com.virogg.hbasecop.bridge.wire.pb.PostIncrementBeforeWALRequest.getDefaultInstance();
     assertEquals(0, empty.getCellPairCount());
   }
 
-  // Regression for the F2 data-integrity defect: mutation-level attributes were
-  // dropped, so a Go security/validation observer saw none of the client's
-  // CellVisibility / ACL / TTL context. setTTL is stored as a mutation attribute
-  // ("_ttl"), and setAttribute is the same generic mechanism CellVisibility/ACL
-  // use; both must now reach the proto's attribute list.
   @Test
   void putMutationCarriesAttributesIncludingTtl() throws IOException {
     Put put = new Put(Bytes.toBytes("row-1"));
     put.addColumn(Bytes.toBytes("f"), Bytes.toBytes("q"), Bytes.toBytes("v"));
-    put.setTTL(60_000L); // stored as the "_ttl" mutation attribute
+    put.setTTL(60_000L);
     put.setAttribute("custom-policy", Bytes.toBytes("audit=on"));
 
     MutationProto rehydrated =

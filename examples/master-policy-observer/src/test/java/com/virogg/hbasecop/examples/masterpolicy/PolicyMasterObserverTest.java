@@ -11,7 +11,6 @@ import java.util.Map;
 import org.apache.hadoop.conf.Configuration;
 import org.junit.jupiter.api.Test;
 
-/** Pure-helper tests for {@link PolicyMasterObserver#envFromConfig(Configuration)}. */
 final class PolicyMasterObserverTest {
 
   @Test

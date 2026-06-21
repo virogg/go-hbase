@@ -16,19 +16,8 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 
-/**
- * Native (pure-Java) twin of the Go {@code examples/filter-observer} read-path observer. {@code
- * preGetOp} inspects every Get's row key: those carrying the configured blocked prefix are bypassed
- * ({@link ObserverContext#bypass()}), so HBase skips its own read and the Get returns empty — the
- * same observable effect the Go arm produces via {@code HookResult.Bypass=true}.
- *
- * <p>The blocked prefix matches the Go arm's default ({@code "block-"}; override via the {@code
- * hbasecop.compare.filter.blocked-prefix} coprocessor config). Match logic mirrors {@code
- * examples/filter-observer/filter/filter.go} {@code matchesBlocked} ({@code bytes.HasPrefix}).
- */
 public final class NativeFilterObserver implements RegionCoprocessor, RegionObserver {
 
-  /** Table-level config key — same key the Go arm's FilterRegionObserver reads. */
   static final String BLOCKED_PREFIX_KEY = "hbasecop.filter.blocked_prefix";
 
   static final String DEFAULT_BLOCKED_PREFIX = "block-";
@@ -66,7 +55,7 @@ public final class NativeFilterObserver implements RegionCoprocessor, RegionObse
     preGetOps.incrementAndGet();
     if (matchesBlocked(get.getRow())) {
       blockedGets.incrementAndGet();
-      c.bypass(); // skip the core read; result stays empty
+      c.bypass();
     }
   }
 

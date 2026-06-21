@@ -29,18 +29,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
-/**
- * Spawns and supervises the long-running Go runtime process. One {@code GoProcess} owns one OS
- * process: it extracts the embedded ELF from classpath resources to a tmp file, exec's it with
- * shmem configuration passed via environment variables, and forwards Go stdout/stderr to {@link
- * System.Logger}.
- *
- * <p>{@link #stop()} sends a {@code SHUTDOWN} wire frame through the command channel and waits up
- * to {@link GoProcessConfig#gracefulShutdownTimeout()} for the process to exit cleanly; on timeout
- * it falls back to {@link Process#destroyForcibly()}.
- *
- * <p>Instances are not thread-safe.
- */
 public final class GoProcess implements AutoCloseable {
 
   private static final Logger LOG = System.getLogger(GoProcess.class.getName());
@@ -56,18 +44,11 @@ public final class GoProcess implements AutoCloseable {
   private Thread stdoutPump;
   private Thread stderrPump;
 
-  /**
-   * @param cfg spawn configuration
-   * @param commandChannel a {@code RoleProducer} channel on the Java→Go ring; used by {@link
-   *     #stop()} to deliver the SHUTDOWN frame. Lifecycle (open/close) is the caller's
-   *     responsibility; {@code GoProcess} only writes one frame to it.
-   */
   public GoProcess(GoProcessConfig cfg, Channel commandChannel) {
     this.cfg = Objects.requireNonNull(cfg, "cfg");
     this.commandChannel = Objects.requireNonNull(commandChannel, "commandChannel");
   }
 
-  /** Extracts the embedded ELF and starts the child process. May be called once per instance. */
   public synchronized void start() throws IOException {
     if (process != null) {
       throw new IllegalStateException("GoProcess already started");
@@ -92,19 +73,14 @@ public final class GoProcess implements AutoCloseable {
     LOG.log(Level.INFO, "GoProcess started: pid={0} binary={1}", process.pid(), extractedBinary);
   }
 
-  /** True iff the underlying OS process is running. */
   public boolean isAlive() {
     return process != null && process.isAlive();
   }
 
-  /** Native OS pid, or {@code -1} if not started. */
   public long pid() {
     return process == null ? -1L : process.pid();
   }
 
-  /**
-   * Exit code of the terminated process. Calling this on a running or never-started process throws.
-   */
   public int exitCode() {
     if (process == null) {
       throw new IllegalStateException("GoProcess never started");
@@ -112,11 +88,6 @@ public final class GoProcess implements AutoCloseable {
     return process.exitValue();
   }
 
-  /**
-   * Sends a SHUTDOWN wire frame through the command channel and waits up to {@link
-   * GoProcessConfig#gracefulShutdownTimeout()} for graceful exit. On timeout, falls back to {@link
-   * Process#destroyForcibly()}. Idempotent.
-   */
   public synchronized void stop() throws IOException, InterruptedException {
     if (process == null) {
       return;
@@ -126,7 +97,6 @@ public final class GoProcess implements AutoCloseable {
       try {
         commandChannel.send(buildShutdownFrame());
       } catch (ShmemException | WireException e) {
-        // The channel may already be torn down or full; fall back to kill below.
         LOG.log(Level.WARNING, "GoProcess.stop: SHUTDOWN send failed, will force-kill", e);
       }
 
@@ -157,16 +127,6 @@ public final class GoProcess implements AutoCloseable {
     }
   }
 
-  /**
-   * Force-kill the underlying process with {@code SIGKILL} (via {@link Process#destroyForcibly()})
-   * and wait for it to exit. Used by the heartbeat watchdog (T33) when the Go side is hung. No-op
-   * on a never-started or already-dead process. Idempotent.
-   *
-   * <p>Unlike {@link #stop()}, this does <em>not</em> send a {@code SHUTDOWN} frame and does
-   * <em>not</em> wait for graceful exit. Stdout/stderr pumps and the extracted ELF are not cleaned
-   * up here; call {@link #stop()} afterwards (it tolerates an already-dead process) to finish
-   * teardown.
-   */
   public synchronized void destroyForcibly() {
     if (process == null || !process.isAlive()) {
       return;
@@ -205,7 +165,6 @@ public final class GoProcess implements AutoCloseable {
         try {
           verifyChecksum(tmp, expected);
         } catch (IOException e) {
-          // Don't leave a corrupted/wrong-arch binary lying around in tmp.
           try {
             Files.deleteIfExists(tmp);
           } catch (IOException suppressed) {
@@ -218,17 +177,11 @@ public final class GoProcess implements AutoCloseable {
     }
   }
 
-  /**
-   * SHA-256 digest of {@code file} as 64 lower-case hex chars. Package-private so the supervisor
-   * test suite (and a future {@code hbasecop-build} verifier) can exercise it without spawning a Go
-   * process.
-   */
   static String computeSha256Hex(Path file) throws IOException {
     MessageDigest md;
     try {
       md = MessageDigest.getInstance("SHA-256");
     } catch (NoSuchAlgorithmException e) {
-      // SHA-256 is mandated on every JRE since 7; surface clearly if it's somehow absent.
       throw new IOException("SHA-256 not available on this JRE", e);
     }
     byte[] buf = new byte[8192];
@@ -253,11 +206,6 @@ public final class GoProcess implements AutoCloseable {
     return new String(out);
   }
 
-  /**
-   * Verify that {@code file}'s SHA-256 matches {@code expectedHex} (case-insensitive on input).
-   * Throws {@link IOException} on mismatch with a message that names both digests so operators can
-   * triage a corrupted-jar vs wrong-binary failure from the supervisor log alone.
-   */
   static void verifyChecksum(Path file, String expectedHex) throws IOException {
     String expected = expectedHex.toLowerCase(Locale.ROOT);
     String actual = computeSha256Hex(file);
@@ -291,7 +239,6 @@ public final class GoProcess implements AutoCloseable {
                   LOG.log(level, "[{0}] {1}", name, line);
                 }
               } catch (IOException e) {
-                // Process likely terminated mid-read; not an error.
               }
             },
             "GoProcess-" + name);

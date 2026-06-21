@@ -15,24 +15,15 @@ import (
 	"github.com/viroge/go-shmem/pkg/ring/producer"
 )
 
-// Role discriminates the direction of a Channel endpoint.
 type Role uint8
 
-// Channel role values. The zero Role is invalid by design so a
-// caller-forgotten Role field is rejected at Open.
 const (
 	RoleProducer Role = iota + 1
 	RoleConsumer
 )
 
-// Frame is one opaque payload exchanged through a Channel. The wrapper
-// carries bytes verbatim; framing and serialization are the caller's
-// concern (see internal/wire).
 type Frame = []byte
 
-// Config selects a single shmem ring and the role this Channel plays.
-// Backend defaults to "mmap" if empty. For "mmap" set Filename; for
-// "posix_shm" set ShmName (must start with '/').
 type Config struct {
 	Backend       string
 	Filename      string
@@ -42,7 +33,6 @@ type Config struct {
 	Role          Role
 }
 
-// Channel is a one-way endpoint over a java-go-shmem ring.
 type Channel struct {
 	role           Role
 	maxPayloadSize int
@@ -52,8 +42,6 @@ type Channel struct {
 	cons *consumer.Consumer
 }
 
-// Sentinel errors. ErrRingFull / ErrNoData mirror the upstream ring
-// constants verbatim so errors.Is keeps working across the boundary.
 var (
 	ErrRingFull      = ring.ErrRingFull
 	ErrNoData        = ring.ErrNoData
@@ -61,9 +49,6 @@ var (
 	ErrWrongRole     = errors.New("shmem: operation not permitted for this role")
 )
 
-// Open creates one endpoint of a shmem ring as specified by cfg. The
-// underlying region is auto-created on first Open and shared with the
-// peer endpoint opened against the same Filename/ShmName.
 func Open(cfg Config) (*Channel, error) {
 	r, err := toRingConfig(cfg)
 	if err != nil {
@@ -101,9 +86,6 @@ func Open(cfg Config) (*Channel, error) {
 	return ch, nil
 }
 
-// Send publishes one frame to the ring. Returns ErrWrongRole on a
-// consumer channel, ErrFrameTooLarge if the frame does not fit one
-// slot, or ErrRingFull if the consumer has not yet caught up.
 func (c *Channel) Send(f Frame) error {
 	if c.role != RoleProducer {
 		return ErrWrongRole
@@ -125,9 +107,6 @@ func (c *Channel) Send(f Frame) error {
 	return nil
 }
 
-// Recv fetches the next available frame. Returns ErrWrongRole on a
-// producer channel or ErrNoData if the ring is empty. The returned
-// slice is a fresh copy and safe to retain past the next Recv.
 func (c *Channel) Recv() (Frame, error) {
 	if c.role != RoleConsumer {
 		return nil, ErrWrongRole
@@ -151,9 +130,6 @@ func (c *Channel) Recv() (Frame, error) {
 	return out, nil
 }
 
-// Close releases the mmap/shm region for this endpoint. The underlying
-// file or shm object is left in place; the supervisor decides when to
-// unlink it.
 func (c *Channel) Close() error {
 	switch {
 	case c.prod != nil:

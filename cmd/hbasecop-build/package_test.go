@@ -93,7 +93,6 @@ func TestResolveBridgeJar(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		// Pin mtimes so the newest pick is deterministic regardless of FS order.
 		if err := os.Chtimes(old, time.Unix(1000, 0), time.Unix(1000, 0)); err != nil {
 			t.Fatal(err)
 		}

@@ -1,28 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-//
-// Vendored from apache/hbase rel/2.5.10 — see proto/hbase/UPSTREAM.md.
-// Upstream copyright preserved below; only the package, java_package,
-// go_package options and import paths are rewritten.
 
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 syntax = "proto2";
-// Cell and KeyValue protos
 package virogg.hbasecop.hbase.v1;
 
 option java_package = "com.virogg.hbasecop.hbase.v1";
@@ -31,9 +9,6 @@ option java_generate_equals_and_hash = true;
 option go_package = "github.com/virogg/go-hbase/internal/wire/hbasepb";
 option optimize_for = SPEED;
 
-/**
- * The type of the key in a Cell
- */
 enum CellType {
     MINIMUM = 0;
     PUT = 4;
@@ -43,13 +18,9 @@ enum CellType {
     DELETE_COLUMN = 12;
     DELETE_FAMILY = 14;
 
-    // MAXIMUM is used when searching; you look from maximum on down.
     MAXIMUM = 255;
 }
 
-/**
- * Protocol buffer version of Cell.
- */
 message Cell {
   optional bytes row = 1;
   optional bytes family = 2;
@@ -60,10 +31,6 @@ message Cell {
   optional bytes tags = 7;
 }
 
-/**
- * Protocol buffer version of KeyValue.
- * It doesn't have those transient parameters
- */
 message KeyValue {
   required bytes row = 1;
   required bytes family = 2;

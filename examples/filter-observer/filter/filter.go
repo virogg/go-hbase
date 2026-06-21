@@ -1,13 +1,6 @@
 // Copyright 2026 The go-hbase Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// Package filter implements the read-path RegionObserver used by the T43
-// integration test. The Observer inspects every Get's row key and every
-// Scan's start row: those carrying the configured blocked prefix are
-// bypassed (HookResult.Bypass=true), causing the Java adapter to invoke
-// ObserverContext.bypass() so HBase skips its own read implementation.
-// PreScannerNext is a counter-only hook so the IT can verify the scanner
-// hook fires end-to-end without mutating scan progress.
 package filter
 
 import (
@@ -20,10 +13,6 @@ import (
 	"github.com/virogg/go-hbase/pkg/hbasecop"
 )
 
-// Observer is a read-path RegionObserver that bypasses Get / Scan
-// operations whose target row carries the configured blocked prefix.
-// All other RegionObserver methods inherit the no-op behaviour of
-// UnimplementedRegionObserver.
 type Observer struct {
 	hbasecop.UnimplementedRegionObserver
 
@@ -44,17 +33,11 @@ type Observer struct {
 	postCompacts         atomic.Uint64
 }
 
-// New constructs an Observer that bypasses reads whose target row begins
-// with blockedPrefix. A nil or empty prefix disables bypass entirely
-// (every read is allowed), which is useful for negative-case integration
-// runs.
 func New(blockedPrefix []byte) *Observer {
 	cp := append([]byte(nil), blockedPrefix...)
 	return &Observer{blocked: cp}
 }
 
-// SetLogger overrides the slog.Logger used by storage-hook handlers. Nil
-// resets to slog.Default(). Safe for concurrent use.
 func (o *Observer) SetLogger(l *slog.Logger) {
 	o.logger.Store(l)
 }
@@ -66,7 +49,6 @@ func (o *Observer) log() *slog.Logger {
 	return slog.Default()
 }
 
-// PreGetOp bypasses the Get when its row matches the blocked prefix.
 func (o *Observer) PreGetOp(
 	_ context.Context,
 	_ hbasecop.ObserverEnv,
@@ -80,8 +62,6 @@ func (o *Observer) PreGetOp(
 	return hbasecop.HookResult{}, nil
 }
 
-// PreScannerOpen bypasses scanner creation when its start row matches the
-// blocked prefix.
 func (o *Observer) PreScannerOpen(
 	_ context.Context,
 	_ hbasecop.ObserverEnv,
@@ -95,9 +75,6 @@ func (o *Observer) PreScannerOpen(
 	return hbasecop.HookResult{}, nil
 }
 
-// PreScannerNext counts invocations only - never bypasses - so the IT
-// can prove the hook fires on every batch fetch without changing the
-// scanner's progression.
 func (o *Observer) PreScannerNext(
 	_ context.Context,
 	_ hbasecop.ObserverEnv,
@@ -107,11 +84,6 @@ func (o *Observer) PreScannerNext(
 	return hbasecop.HookResult{}, nil
 }
 
-// PreBatchMutate returns per-mutation BlockedIndices for every operation
-// in the inbound MiniBatch whose target row matches the blocked prefix.
-// The Java adapter applies SANITY_CHECK_FAILURE per index, so blocked
-// mutations land as individual failures while the rest of the batch
-// proceeds - this is the partial-block path required by T44's AC.
 func (o *Observer) PreBatchMutate(
 	_ context.Context,
 	_ hbasecop.ObserverEnv,
@@ -129,8 +101,6 @@ func (o *Observer) PreBatchMutate(
 	return hbasecop.HookResult{BlockedIndices: blocked}, nil
 }
 
-// PreFlush is a passive recorder: counts the invocation and emits a
-// uniquely-tagged slog line the live IT can grep for.
 func (o *Observer) PreFlush(
 	_ context.Context,
 	_ hbasecop.ObserverEnv,
@@ -141,7 +111,6 @@ func (o *Observer) PreFlush(
 	return hbasecop.HookResult{}, nil
 }
 
-// PostFlush is a passive recorder: counts the invocation and logs.
 func (o *Observer) PostFlush(
 	_ context.Context,
 	_ hbasecop.ObserverEnv,
@@ -152,8 +121,6 @@ func (o *Observer) PostFlush(
 	return nil
 }
 
-// PreCompactSelection records the candidate-store-file list size so the IT
-// can prove the compaction lifecycle traversed the bridge end-to-end.
 func (o *Observer) PreCompactSelection(
 	_ context.Context,
 	_ hbasecop.ObserverEnv,
@@ -168,7 +135,6 @@ func (o *Observer) PreCompactSelection(
 	return hbasecop.HookResult{}, nil
 }
 
-// PreCompact is a passive recorder for the compaction-scan entry hook.
 func (o *Observer) PreCompact(
 	_ context.Context,
 	_ hbasecop.ObserverEnv,
@@ -183,7 +149,6 @@ func (o *Observer) PreCompact(
 	return hbasecop.HookResult{}, nil
 }
 
-// PostCompact is a passive recorder for the compaction-completed hook.
 func (o *Observer) PostCompact(
 	_ context.Context,
 	_ hbasecop.ObserverEnv,
@@ -198,40 +163,28 @@ func (o *Observer) PostCompact(
 	return nil
 }
 
-// PreFlushCount returns the cumulative count of PreFlush invocations.
 func (o *Observer) PreFlushCount() uint64 { return o.preFlushes.Load() }
 
-// PostFlushCount returns the cumulative count of PostFlush invocations.
 func (o *Observer) PostFlushCount() uint64 { return o.postFlushes.Load() }
 
-// PreCompactSelectionCount returns the cumulative count of PreCompactSelection invocations.
 func (o *Observer) PreCompactSelectionCount() uint64 { return o.preCompactSelections.Load() }
 
-// PreCompactCount returns the cumulative count of PreCompact invocations.
 func (o *Observer) PreCompactCount() uint64 { return o.preCompacts.Load() }
 
-// PostCompactCount returns the cumulative count of PostCompact invocations.
 func (o *Observer) PostCompactCount() uint64 { return o.postCompacts.Load() }
 
-// PreGetCount returns the cumulative count of PreGetOp invocations.
 func (o *Observer) PreGetCount() uint64 { return o.preGetOps.Load() }
 
-// PreScannerOpenCount returns the cumulative count of PreScannerOpen invocations.
 func (o *Observer) PreScannerOpenCount() uint64 { return o.preScannerOpens.Load() }
 
-// PreScannerNextCount returns the cumulative count of PreScannerNext invocations.
 func (o *Observer) PreScannerNextCount() uint64 { return o.preScannerNexts.Load() }
 
-// BlockedGetCount returns how many Get calls were bypassed.
 func (o *Observer) BlockedGetCount() uint64 { return o.blockedGets.Load() }
 
-// BlockedScanCount returns how many scanner-open calls were bypassed.
 func (o *Observer) BlockedScanCount() uint64 { return o.blockedScans.Load() }
 
-// PreBatchMutateCount returns the cumulative count of PreBatchMutate invocations.
 func (o *Observer) PreBatchMutateCount() uint64 { return o.preBatchMutates.Load() }
 
-// BlockedBatchOps returns the cumulative count of individual batch mutations marked blocked.
 func (o *Observer) BlockedBatchOps() uint64 { return o.blockedBatchOps.Load() }
 
 func (o *Observer) matchesBlocked(row []byte) bool {

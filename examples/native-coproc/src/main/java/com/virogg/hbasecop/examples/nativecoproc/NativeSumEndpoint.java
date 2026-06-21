@@ -27,27 +27,8 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 
-/**
- * Native (pure-Java) twin of the Go {@code examples/endpoint-observer} aggregating endpoint, for
- * the native-vs-Go comparison harness. It reuses the SAME {@link GoEndpointService} surface the Go
- * arm exposes, so the client call path ({@code com.virogg.hbasecop.client.EndpointClient}) is byte
- * identical across both arms — only this server-side implementation differs: here the {@code
- * sum}/{@code get}/{@code scan} logic runs directly on the RegionServer JVM over {@link
- * RegionCoprocessorEnvironment#getRegion()}, with no shmem bridge and no Go process.
- *
- * <p>Semantics mirror {@code examples/endpoint-observer/main.go} 1:1:
- *
- * <ul>
- *   <li>{@code sum}: scan the region, sum every {@code cf:<payload>} cell parsed as a base-10
- *       int64, return the per-region partial as an ASCII-decimal string (the client reduces).
- *   <li>{@code get}: return the first cell value of the row named by the payload (empty if absent).
- *   <li>{@code scan}: count the cells across the whole region, return the count as ASCII decimal.
- *   <li>default: upper-case the payload.
- * </ul>
- */
 public final class NativeSumEndpoint implements RegionCoprocessor {
 
-  /** The column family the reverse-read methods read from — matches the Go arm's {@code cf}. */
   static final byte[] CF = "cf".getBytes(StandardCharsets.UTF_8);
 
   private RegionCoprocessorEnvironment env;
@@ -63,12 +44,9 @@ public final class NativeSumEndpoint implements RegionCoprocessor {
 
   @Override
   public Iterable<Service> getServices() {
-    // Late-bind the env: HBase can call getServices() before start(), so read the field at
-    // invoke time (not registration time) — same contract the Go bridge's endpointServices uses.
     return Collections.singletonList(new EndpointService(() -> env));
   }
 
-  /** The native {@link GoEndpointService} implementation that runs aggregation on the region. */
   static final class EndpointService extends GoEndpointService {
 
     private final java.util.function.Supplier<RegionCoprocessorEnvironment> envSupplier;
@@ -117,7 +95,6 @@ public final class NativeSumEndpoint implements RegionCoprocessor {
       }
     }
 
-    /** Sums cf:&lt;qualifier&gt; cells in this region as int64; returns the partial ASCII-decimal. */
     private byte[] sum(byte[] qualifier) throws IOException {
       Region region = env().getRegion();
       long total = 0;
@@ -145,7 +122,6 @@ public final class NativeSumEndpoint implements RegionCoprocessor {
       return Long.toString(total).getBytes(StandardCharsets.UTF_8);
     }
 
-    /** Returns the first cell value of the row named by {@code row} (empty bytes if absent). */
     private byte[] get(byte[] row) throws IOException {
       Region region = env().getRegion();
       Result r = region.get(new Get(row));
@@ -156,7 +132,6 @@ public final class NativeSumEndpoint implements RegionCoprocessor {
       return CellUtil.cloneValue(first);
     }
 
-    /** Counts every cell in the region (the Go arm's {@code scan} method). */
     private long scanCount() throws IOException {
       Region region = env().getRegion();
       long count = 0;
@@ -173,8 +148,6 @@ public final class NativeSumEndpoint implements RegionCoprocessor {
     }
   }
 
-  // RegionCoprocessor#getRegionObserver defaults to Optional.empty(): this coprocessor exposes only
-  // the endpoint Service, no observer hooks. Declared for documentation symmetry with the Go arm.
   @Override
   public Optional<org.apache.hadoop.hbase.coprocessor.RegionObserver> getRegionObserver() {
     return Optional.empty();

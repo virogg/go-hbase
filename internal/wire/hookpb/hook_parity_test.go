@@ -20,7 +20,6 @@ import (
 //	go test ./internal/wire/hookpb/ -run TestHookPayloadGoldenParity -update-hookgolden
 var updateHookGolden = flag.Bool("update-hookgolden", false, "regenerate hook payload golden .bin files")
 
-// hookGoldenDir is relative to this package dir (internal/wire/hookpb).
 const hookGoldenDir = "../../../test/golden/hooks/v1"
 
 type hookFixture struct {
@@ -28,14 +27,6 @@ type hookFixture struct {
 	msg  proto.Message
 }
 
-// hookFixtures is the representative set of hook payload messages whose
-// canonical bytes form the cross-language contract. The matching Java
-// test (HookGoldenParityTest) loads the SAME .bin files, parses them with
-// the generated Java classes and re-serializes, asserting byte-equality -
-// which is what proves Go↔Java wire parity for the payload layer (each
-// side previously only round-tripped within its own runtime). The set
-// spans the shared HookContext, a request that nests it, a response with
-// a repeated scalar, and a response with a nested message + string.
 func hookFixtures() []hookFixture {
 	hc := &hookpb.HookContext{RegionName: []byte("region-7"), RequestId: 42}
 	return []hookFixture{
@@ -74,9 +65,6 @@ func TestHookPayloadGoldenParity(t *testing.T) {
 				"golden update, or non-deterministic encoding", fx.name)
 		}
 
-		// Parse the committed bytes back and re-marshal: must be byte-stable,
-		// i.e. the committed bytes are canonical for the Go encoder. The Java
-		// side asserts the same on the same files; together that is parity.
 		clone := fx.msg.ProtoReflect().New().Interface()
 		if err := proto.Unmarshal(want, clone); err != nil {
 			t.Fatalf("%s: unmarshal golden: %v", fx.name, err)

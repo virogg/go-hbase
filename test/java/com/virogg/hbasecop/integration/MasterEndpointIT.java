@@ -20,23 +20,6 @@ import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.junit.jupiter.api.Test;
 
-/**
- * TE43/TE52 integration test: the generic {@code GoEndpointService} exposed by the stock {@code
- * GenericMasterObserver} via {@code MasterCoprocessor.getServices()} (TE43) is invokable through
- * the TE52 {@link com.virogg.hbasecop.client.AdminEndpointClient#callMaster} helper over {@code
- * Admin.coprocessorService()} (master-scoped, no region), and the call round-trips to the Go
- * endpoint and back. This is the live verification for both the master-endpoint infrastructure
- * (TE43) and the single-call admin helper (TE52).
- *
- * <p>The master coprocessor is registered cluster-wide via {@code hbase.coprocessor.master.classes}
- * (the docker entrypoint patches hbase-site.xml when {@code make test-integration-master-endpoint}
- * exports {@code HBASECOP_MASTER_COPROC_CLASS=...GenericMasterObserver} + {@code
- * HBASECOP_MASTER_COPROC_JAR=...endpoint-observer.jar}). A master endpoint carries region_id 0, so
- * region-local reverse reads/writes are unavailable there (A-12); a stateless method ("upper") is
- * the canonical master-endpoint shape.
- *
- * <p>Not part of {@code mvn test}; invoked by {@code make test-integration-master-endpoint}.
- */
 final class MasterEndpointIT {
 
   private static final String ZK_QUORUM = "localhost";
@@ -53,9 +36,6 @@ final class MasterEndpointIT {
 
       waitForClusterReady(admin, Duration.ofSeconds(300));
 
-      // AdminEndpointClient.callMaster (TE52) makes a single call (one master, no fan-out) over
-      // the master's unshaded protobuf channel from Admin.coprocessorService() — the channel the
-      // proto2 GoEndpointService stub binds to — and unwraps the result.
       byte[] result =
           AdminEndpointClient.callMaster(admin, "upper", "master-hello".getBytes(UTF_8));
       assertEquals(

@@ -10,20 +10,6 @@ import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.conf.Configuration;
 
-/**
- * Reads per-hook policy + timeout from the HBase-supplied {@link Configuration}.
- *
- * <p>Keys:
- *
- * <ul>
- *   <li>{@code hbasecop.policy.<hook>} - {@code strict} | {@code best-effort}
- *   <li>{@code hbasecop.timeout.<hook>} - Hadoop-style duration ({@code 500ms}, {@code 2s}, ...)
- *   <li>{@code hbasecop.timeout.default} - fallback when the per-hook timeout is absent
- * </ul>
- *
- * <p>Defaults: {@code pre*} → {@link Policy#STRICT}, {@code post*} → {@link Policy#BEST_EFFORT},
- * everything else → {@link Policy#STRICT} (conservative). Default timeout: 5s.
- */
 public final class PolicyConfig {
 
   public static final String KEY_POLICY_PREFIX = "hbasecop.policy.";
@@ -38,7 +24,6 @@ public final class PolicyConfig {
     this.conf = Objects.requireNonNull(conf, "conf");
   }
 
-  /** Resolves policy + timeout for a hook by its canonical name (e.g. {@code prePut}). */
   public HookPolicy forHook(String hookName) {
     Objects.requireNonNull(hookName, "hookName");
     if (hookName.isEmpty()) {
@@ -47,7 +32,6 @@ public final class PolicyConfig {
     return new HookPolicy(resolvePolicy(hookName), resolveTimeout(hookName));
   }
 
-  /** Resolves policy + timeout via the numeric hook id used on the wire. */
   public HookPolicy forHook(byte hookId) {
     HookId id = HookId.byValue(hookId);
     if (id == null) {
@@ -56,7 +40,6 @@ public final class PolicyConfig {
     return forHook(id.methodName());
   }
 
-  /** Resolves policy + timeout via a {@link HookId}. */
   public HookPolicy forHook(HookId id) {
     Objects.requireNonNull(id, "id");
     return forHook(id.methodName());

@@ -9,10 +9,6 @@ import (
 	"testing"
 )
 
-// TestLogLevelFromEnv pins SPEC §6 / R-STYLE-6: the slog level is taken
-// from HBASECOP_LOG_LEVEL. Regression for the defect where every Run*
-// built slog.NewJSONHandler(os.Stderr, nil) and the env var was never
-// read, so the level was permanently Info.
 func TestLogLevelFromEnv(t *testing.T) {
 	cases := []struct {
 		in   string
@@ -37,10 +33,6 @@ func TestLogLevelFromEnv(t *testing.T) {
 	}
 }
 
-// TestNewLoggerHonorsLevel proves the level actually reaches the handler:
-// with HBASECOP_LOG_LEVEL=debug a debug record is enabled, and at the
-// default (info) it is not. Before the fix the env had no effect and
-// debug was never enabled.
 func TestNewLoggerHonorsLevel(t *testing.T) {
 	ctx := context.Background()
 

@@ -1,11 +1,6 @@
 // Copyright 2026 The go-hbase Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// Package fault implements the configurable fault-injection RegionObserver
-// used by the T36 fault-injection matrix. The Observer dispatches each PrePut
-// to a [Mode]-specific action exposed via [Actions]: production wires the
-// syscall-backed [DefaultActions]; tests inject a stub so dispatch can be
-// exercised without terminating the test process.
 package fault
 
 import (
@@ -17,28 +12,17 @@ import (
 	"github.com/virogg/go-hbase/pkg/hbasecop"
 )
 
-// Mode selects which fault the [Observer] injects on every PrePut.
 type Mode int
 
 const (
-	// ModeNone is the pass-through default; PrePut returns success.
 	ModeNone Mode = iota
-	// ModeKill9 invokes [Actions.Kill9] before returning; production SIGKILLs self.
 	ModeKill9
-	// ModeHang invokes [Actions.Hang]; production blocks indefinitely.
 	ModeHang
-	// ModeExit1 invokes [Actions.Exit1]; production calls os.Exit(1).
 	ModeExit1
-	// ModeProtocolError returns [ErrProtocolFault] from PrePut, surfacing
-	// as a wirepb Error frame to Java.
 	ModeProtocolError
-	// ModeOOM invokes [Actions.AllocateOOM]; production allocates until the
-	// process is reaped by the kernel OOM killer.
 	ModeOOM
 )
 
-// ErrProtocolFault is returned by PrePut under [ModeProtocolError]. Wrapped
-// errors retain this as the sentinel so callers can match via [errors.Is].
 var ErrProtocolFault = errors.New("fault-observer: protocol-error injected")
 
 var modeStrings = map[string]Mode{
@@ -50,9 +34,6 @@ var modeStrings = map[string]Mode{
 	"oom":            ModeOOM,
 }
 
-// ParseMode resolves a mode token (matching the [Mode.String] form) to its
-// enum value. Empty string maps to [ModeNone] so an unset env var works.
-// Unknown tokens are an error.
 func ParseMode(s string) (Mode, error) {
 	if s == "" {
 		return ModeNone, nil
@@ -64,7 +45,6 @@ func ParseMode(s string) (Mode, error) {
 	return m, nil
 }
 
-// String renders the on-the-wire token consumed by [ParseMode].
 func (m Mode) String() string {
 	switch m {
 	case ModeNone:
@@ -84,30 +64,13 @@ func (m Mode) String() string {
 	}
 }
 
-// Actions abstracts the destructive side-effects so tests can stub them out.
-// Real implementations live in [DefaultActions].
 type Actions interface {
-	// Kill9 should SIGKILL the current process. Real implementations do not
-	// return; the return-less signature keeps stubs simple.
 	Kill9()
-	// Exit1 should terminate the current process with status 1.
 	Exit1()
-	// Hang should block indefinitely (or until ctx is done) so the watchdog
-	// observes missed heartbeats. May select on ctx so the framework's
-	// shutdown signal still wins.
 	Hang(ctx context.Context)
-	// AllocateOOM should allocate until the process is reaped by the OOM
-	// killer. Returns only if allocation unexpectedly succeeds.
 	AllocateOOM()
 }
 
-// Observer is a [hbasecop.RegionObserver] that injects the configured fault
-// on every PrePut. PostPut is always a no-op so post-state HBase scans are
-// not perturbed by the test apparatus.
-//
-// Embeds [hbasecop.UnimplementedRegionObserver] to inherit no-op defaults
-// for the rest of the RegionObserver surface (T41); only PrePut/PostPut are
-// overridden.
 type Observer struct {
 	hbasecop.UnimplementedRegionObserver
 
@@ -116,9 +79,6 @@ type Observer struct {
 	invocations atomic.Uint64
 }
 
-// New constructs an Observer that applies mode m via actions. Panics when
-// actions is nil: every mode (including ModeNone) consults the counter, and
-// non-trivial modes consult actions.
 func New(m Mode, actions Actions) *Observer {
 	if actions == nil {
 		panic("fault.New: actions must not be nil")
@@ -126,14 +86,10 @@ func New(m Mode, actions Actions) *Observer {
 	return &Observer{mode: m, actions: actions}
 }
 
-// Mode returns the configured fault mode.
 func (o *Observer) Mode() Mode { return o.mode }
 
-// Invocations returns the cumulative count of PrePut calls observed.
 func (o *Observer) Invocations() uint64 { return o.invocations.Load() }
 
-// PrePut increments the invocation counter and dispatches to the configured
-// fault behaviour. See [Mode] for the per-mode semantics.
 func (o *Observer) PrePut(
 	ctx context.Context,
 	_ hbasecop.ObserverEnv,
@@ -162,7 +118,6 @@ func (o *Observer) PrePut(
 	}
 }
 
-// PostPut is always a no-op so post-state scans observe a clean table.
 func (o *Observer) PostPut(
 	_ context.Context,
 	_ hbasecop.ObserverEnv,

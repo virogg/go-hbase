@@ -34,13 +34,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
-/**
- * T52 Wave B unit test for {@link RegionServerObserverAdapter}: verifies the adapter encodes the
- * RegionServer's {@link ServerName} into the right proto Request, drives the injected {@link
- * HookDispatcher}, and translates {@code bypass=true} / strict-mode error responses into the
- * matching {@code ObserverContext#bypass()} / {@code IOException} reactions; mirrors the master
- * adapter's coverage on the region-server surface.
- */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class RegionServerObserverAdapterTest {
@@ -128,8 +121,6 @@ class RegionServerObserverAdapterTest {
         .dispatchHook(
             anyInt(), eq(HookId.POST_EXECUTE_PROCEDURES.value()), any(), any(Duration.class));
   }
-
-  // --- helpers -------------------------------------------------------------
 
   private static PreStopRegionServerRequest parseStop(byte[] bytes) {
     try {

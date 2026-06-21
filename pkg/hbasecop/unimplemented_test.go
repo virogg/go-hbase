@@ -9,15 +9,6 @@ import (
 	"testing"
 )
 
-// TestUnimplementedObserversAreNoOps invokes every method on each
-// Unimplemented<Surface>Observer embedding and asserts it is a safe no-op:
-// no panic, no error, and (for Pre* hooks returning HookResult) Bypass=false
-// with no substitute cells / blocked indices. These embeddings are the
-// default base for user observers, so "override only what you need" depends
-// on every un-overridden method being an inert pass-through.
-//
-// Driven by reflection so the test stays exhaustive as the hook surface
-// grows: a newly added Unimplemented method is covered automatically.
 func TestUnimplementedObserversAreNoOps(t *testing.T) {
 	surfaces := []struct {
 		name string
@@ -63,12 +54,10 @@ func TestUnimplementedObserversAreNoOps(t *testing.T) {
 
 				out := fn.Call(args)
 
-				// Last return is always error; it must be nil.
 				errVal := out[len(out)-1]
 				if !errVal.IsNil() {
 					t.Errorf("%s.%s returned non-nil error: %v", s.name, method.Name, errVal.Interface())
 				}
-				// Pre* hooks return (HookResult, error): the result must be inert.
 				if len(out) == 2 {
 					hr, ok := out[0].Interface().(HookResult)
 					if !ok {

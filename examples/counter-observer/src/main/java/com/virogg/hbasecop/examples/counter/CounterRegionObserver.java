@@ -17,12 +17,6 @@ import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 
-/**
- * RegionServer-side coprocessor: delegates {@code prePut}/{@code postPut} to the {@link
- * RegionObserver} exposed by a {@link CoprocessorRuntime}. The runtime is acquired via {@link
- * SharedRuntime} keyed on this class - so all regions on a single RegionServer share one Go
- * process / one shmem pair (T63).
- */
 public final class CounterRegionObserver implements RegionCoprocessor {
 
   private static final Logger LOG = System.getLogger(CounterRegionObserver.class.getName());

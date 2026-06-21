@@ -37,12 +37,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
-/**
- * Hook coverage for the non-Region observer adapters: MasterObserverAdapter (table/region/balance
- * lifecycle), RegionServerObserverAdapter, WALObserverAdapter and BulkLoadObserverAdapter. These
- * adapters serialize an empty HookContext (no region scope), so the tests only need real argument
- * objects and a stubbed dispatcher; each invocation must reach {@code dispatcher.dispatchHook}.
- */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class NonRegionAdaptersHooksTest {
@@ -134,8 +128,6 @@ class NonRegionAdaptersHooksTest {
     @SuppressWarnings("unchecked")
     ObserverContext<WALCoprocessorEnvironment> c = mock(ObserverContext.class);
 
-    // logKey/logEdit are null-checked by the adapter; pass null to avoid
-    // serializing opaque WALKey/WALEdit internals.
     a.preWALWrite(c, regionInfo, null, null);
     a.postWALWrite(c, regionInfo, null, null);
     a.preWALRoll(c, new Path("/wal/old"), new Path("/wal/new"));

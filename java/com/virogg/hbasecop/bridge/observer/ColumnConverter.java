@@ -8,11 +8,6 @@ import java.util.Map;
 import java.util.NavigableSet;
 import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
 
-/**
- * Builds {@link ClientProtos.Column} entries from the family→qualifiers map exposed by HBase
- * Get/Scan via {@code getFamilyMap()}. A null qualifier set means "whole family"; the proto then
- * carries the family with an empty repeated qualifier list, matching upstream semantics.
- */
 final class ColumnConverter {
 
   private ColumnConverter() {}

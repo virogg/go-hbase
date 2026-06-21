@@ -17,15 +17,6 @@ import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 
-/**
- * T72 audit example, RegionServer side: delegates every RegionObserver hook to the Go runtime via a
- * {@link CoprocessorRuntime}. The Go observer audits {@code postPut}/{@code postDelete} as JSON log
- * records. The runtime is acquired via {@link SharedRuntime} keyed on this class, so all regions on
- * one RegionServer share one Go process / one shmem pair (T63).
- *
- * <p>Post-hooks run under the best-effort policy by default: an audit failure (Go crash, timeout)
- * logs a WARN and the client's operation proceeds - auditing never blocks writes.
- */
 public final class AuditRegionObserver implements RegionCoprocessor {
 
   private static final Logger LOG = System.getLogger(AuditRegionObserver.class.getName());

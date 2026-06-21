@@ -2,16 +2,7 @@
 # Copyright 2026 The go-hbase Authors
 # SPDX-License-Identifier: Apache-2.0
 
-# Apache 2.0 license-header check / inserter.
-#
-# Modes:
-#   --check (default)  - exit 1 if any tracked source file is missing the
-#                         SPDX header. Used by CI and `make license-check`.
-#   --fix              - prepend the appropriate per-language header to every
-#                         source file that does not yet have it.
-#
-# Header template lives in tools/license-header.txt (single line of text per
-# line, no comment markers). Markers are added per file extension below.
+# Apache 2.0 license-header check / inserter
 
 set -euo pipefail
 
@@ -30,10 +21,8 @@ if [[ ! -f "$TEMPLATE_FILE" ]]; then
   exit 2
 fi
 
-# Marker line we look for to decide presence.
 MARKER="SPDX-License-Identifier: Apache-2.0"
 
-# Files to inspect. find ... -prune to skip generated/vendored trees fast.
 mapfile -t TARGETS < <(
   cd "$ROOT" && find . \
       \( -path ./.git -o -path ./target -o -path ./bin -o -path ./.idea \
@@ -50,7 +39,6 @@ mapfile -t TARGETS < <(
       \) -print | sort
 )
 
-# Build header bodies for each comment style.
 make_block() {
   local prefix="$1" suffix="${2:-}"
   while IFS= read -r line; do
@@ -85,12 +73,10 @@ for rel in "${TARGETS[@]}"; do
   [[ -z "$rel" ]] && continue
   rel="${rel#./}"
   abs="$ROOT/$rel"
-  # Skip files that are intentionally header-less.
   case "$rel" in
     LICENSE|*/.gitkeep) continue ;;
   esac
 
-  # Already has the marker anywhere in the first 20 lines? OK.
   if head -20 "$abs" | grep -Fq "$MARKER"; then
     continue
   fi
@@ -106,7 +92,6 @@ for rel in "${TARGETS[@]}"; do
   tmp="$(mktemp)"
   block_for_style "$style" > "$tmp"
 
-  # For shell scripts and YAML keep the shebang/yaml-doc-start as the first line.
   first_line="$(head -1 "$abs")"
   if [[ "$first_line" == '#!'* ]] || [[ "$first_line" == '---' ]]; then
     {

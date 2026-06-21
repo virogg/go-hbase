@@ -3,24 +3,17 @@
 # We build from a pinned tarball (verified by sha512) rather than relying on
 # third-party images, because no public image ships HBase 2.5.x with a stable
 # tag we trust. Standalone mode runs Master + RegionServer + embedded ZK in
-# a single JVM, which is enough for coproc integration tests.
+# a single JVM
 
 FROM eclipse-temurin:11-jdk-jammy
 
 ARG HBASE_VERSION=2.5.11
 ARG HBASE_SHA512=BAD94B693C2F3013F91FB50BF8678D48C749815A8CA335531E85C0B62BFC18D34DF253A43B50AA66B7ED5C1FF379E8EA0213B4A6F21441F93DD83EB21DEC473C
-# Default to archive.apache.org for reproducible builds; override at build time
-# (`docker build --build-arg HBASE_DIST_BASE_URL=https://dlcdn.apache.org/hbase`)
-# to use a faster CDN mirror when the pinned version is still current.
 ARG HBASE_DIST_BASE_URL=https://archive.apache.org/dist/hbase
 
 ENV HBASE_HOME=/opt/hbase
 ENV PATH=${HBASE_HOME}/bin:${PATH}
 
-# curl: tarball fetch + container healthcheck. procps: jps/ps for HBase shell.
-# socat: relays the embedded ZooKeeper port to a host-reachable address -
-# HBase 2.5.0's MiniZooKeeperCluster binds the ZK client port to 127.0.0.1
-# only (ignoring clientPortAddress), which docker port-forwarding cannot reach.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates procps socat \
  && rm -rf /var/lib/apt/lists/*

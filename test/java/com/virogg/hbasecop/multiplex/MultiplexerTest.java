@@ -34,7 +34,6 @@ import org.junit.jupiter.api.Test;
 
 class MultiplexerTest {
 
-  /** Echo responder that reflects every Request as a TypeResponse with identical payload. */
   private static Thread startEchoResponder(
       ConcurrentLinkedQueue<Message> outbox, Multiplexer mux, AtomicBoolean stop) {
     Thread t =
@@ -62,10 +61,6 @@ class MultiplexerTest {
     return t;
   }
 
-  /**
-   * T24 acceptance test: 1000 parallel call() invocations against a single Multiplexer all observe
-   * their own matching Response.
-   */
   @Test
   void concurrentCallsAllMatched() throws Exception {
     ConcurrentLinkedQueue<Message> outbox = new ConcurrentLinkedQueue<>();
@@ -200,7 +195,6 @@ class MultiplexerTest {
     ExecutionException ee = assertThrows(ExecutionException.class, f::get);
     assertSame(boom, ee.getCause());
 
-    // Slot must be freed: a late Deliver for that reqId returns false.
     assertFalse(mux.deliver(new Message(FrameType.RESPONSE, 1L, 0, (byte) 0, new byte[0])));
   }
 
@@ -209,8 +203,6 @@ class MultiplexerTest {
     ConcurrentLinkedQueue<Message> outbox = new ConcurrentLinkedQueue<>();
     Multiplexer mux = new Multiplexer(outbox::add);
 
-    // A hook REQUEST: the mux stamps the allocated req_id but keeps every other
-    // field, including the frame type.
     mux.call(new Message(FrameType.REQUEST, 999L, 7, (byte) 3, new byte[] {1, 2, 3}));
 
     assertEquals(1, outbox.size());
@@ -225,9 +217,6 @@ class MultiplexerTest {
 
   @Test
   void preservesNonRequestCallerType() {
-    // Tier 2: an endpoint invocation rides the same multiplexer as hooks but must
-    // keep its ENDPOINT_INVOKE type, or the Go side mis-routes it to the hook
-    // dispatcher ("unknown hook"). Regression for the hardcoded-REQUEST bug.
     ConcurrentLinkedQueue<Message> outbox = new ConcurrentLinkedQueue<>();
     Multiplexer mux = new Multiplexer(outbox::add);
 
@@ -265,7 +254,6 @@ class MultiplexerTest {
     assertEquals(FrameType.RESPONSE, got.type());
     assertEquals(sent.reqId(), got.reqId());
 
-    // Second deliver for the same reqId is an orphan.
     assertFalse(
         mux.deliver(new Message(FrameType.RESPONSE, sent.reqId(), 1, (byte) 9, new byte[0])));
   }
@@ -294,7 +282,6 @@ class MultiplexerTest {
   void pauseIsIdempotent() {
     Multiplexer mux = new Multiplexer(msg -> {});
     mux.pauseInflightFailing(new GoSideCrashedException("first"));
-    // Second pause must not throw and is a no-op when already paused.
     mux.pauseInflightFailing(new GoSideCrashedException("second"));
     mux.close();
   }
@@ -351,8 +338,6 @@ class MultiplexerTest {
 
       mux.resume();
 
-      // After resume, the queued call must reach the sender as REQUEST with the
-      // mux-assigned reqId.
       Message sent = null;
       long deadline = System.currentTimeMillis() + 1_000L;
       while (System.currentTimeMillis() < deadline && sent == null) {

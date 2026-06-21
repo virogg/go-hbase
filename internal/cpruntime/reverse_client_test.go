@@ -16,8 +16,6 @@ import (
 	"github.com/virogg/go-hbase/internal/wire/wirepb"
 )
 
-// TE31: ReverseClient.Get marshals an RpcRequest(GET), sends it on the bound
-// writer, and blocks until the matching RpcResponse is delivered by req_id.
 func TestReverseClientGetRoutesResponseByReqID(t *testing.T) {
 	out := make(chan *wire.Message, 4)
 	rc := cpruntime.NewReverseClient(nil)
@@ -50,8 +48,6 @@ func TestReverseClientGetRoutesResponseByReqID(t *testing.T) {
 		t.Fatalf("payload = %q, want %q", resp.GetPayload(), "RESULT-BYTES")
 	}
 
-	// The frame that went out must be a GET RpcRequest carrying the Get proto
-	// and the target region id in the wire header.
 	req := <-gotReq
 	if req.Type != wire.TypeRPCRequest {
 		t.Fatalf("outbound type = %v, want RpcRequest", req.Type)
@@ -71,8 +67,6 @@ func TestReverseClientGetRoutesResponseByReqID(t *testing.T) {
 	}
 }
 
-// TE41: ReverseClient.Mutate marshals an RpcRequest(MUTATE) carrying the
-// vendored MutationProto, sends it on the bound writer, and returns OK.
 func TestReverseClientMutate(t *testing.T) {
 	out := make(chan *wire.Message, 4)
 	rc := cpruntime.NewReverseClient(nil)
@@ -117,7 +111,6 @@ func TestReverseClientMutate(t *testing.T) {
 	}
 }
 
-// An ERROR status surfaces as an error carrying the servicer's detail.
 func TestReverseClientGetErrorStatus(t *testing.T) {
 	out := make(chan *wire.Message, 4)
 	rc := cpruntime.NewReverseClient(nil)
@@ -138,8 +131,6 @@ func TestReverseClientGetErrorStatus(t *testing.T) {
 	}
 }
 
-// With no matching reply the call blocks until ctx is done and returns its error
-// (a response delivered for a different req_id must not wake it).
 func TestReverseClientGetBlocksUntilCtxDone(t *testing.T) {
 	out := make(chan *wire.Message, 4)
 	rc := cpruntime.NewReverseClient(nil)
@@ -158,7 +149,6 @@ func TestReverseClientGetBlocksUntilCtxDone(t *testing.T) {
 	}
 }
 
-// req_ids are monotonic and start at 1 (0 is the reserved no-correlation id).
 func TestReverseClientReqIDStartsAtOneMonotonic(t *testing.T) {
 	out := make(chan *wire.Message, 8)
 	rc := cpruntime.NewReverseClient(nil)
@@ -178,9 +168,6 @@ func TestReverseClientReqIDStartsAtOneMonotonic(t *testing.T) {
 	}
 }
 
-// TE34 hardening: a reverse call is bounded by a per-call deadline, so a
-// dropped/lost reply (the bridge swallowed a bulk-send failure) returns a clean
-// error instead of blocking the endpoint goroutine for the process lifetime.
 func TestReverseClientCallDeadlineBoundsLostReply(t *testing.T) {
 	out := make(chan *wire.Message, 4)
 	rc := cpruntime.NewReverseClient(nil)
@@ -200,7 +187,6 @@ func TestReverseClientCallDeadlineBoundsLostReply(t *testing.T) {
 	}
 }
 
-// Get on an unbound client fails cleanly rather than panicking on a nil writer.
 func TestReverseClientGetUnboundErrors(t *testing.T) {
 	rc := cpruntime.NewReverseClient(nil)
 	if _, err := rc.Get(context.Background(), 1, nil); err == nil {
@@ -208,9 +194,6 @@ func TestReverseClientGetUnboundErrors(t *testing.T) {
 	}
 }
 
-// TE33: the reverse scanner lifecycle — OpenScanner returns the bridge-assigned
-// scanner id; ScanNext pulls a batch reporting has_more; ScanClose deregisters.
-// Each op's RpcRequest carries the right op/call/scanner/region.
 func TestReverseClientScannerLifecycle(t *testing.T) {
 	out := make(chan *wire.Message, 8)
 	rc := cpruntime.NewReverseClient(nil)
@@ -276,7 +259,6 @@ func TestReverseClientScannerLifecycle(t *testing.T) {
 	}
 }
 
-// OpenScanner surfaces a servicer ERROR (e.g. per-call scanner cap) as an error.
 func TestReverseClientOpenScannerError(t *testing.T) {
 	out := make(chan *wire.Message, 4)
 	rc := cpruntime.NewReverseClient(nil)

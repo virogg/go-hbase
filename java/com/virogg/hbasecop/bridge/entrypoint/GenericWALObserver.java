@@ -10,10 +10,6 @@ import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.WALCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.WALObserver;
 
-/**
- * Stock WAL entrypoint: name it in {@code setCoprocessor} to deploy a Go WALObserver with no
- * hand-written Java. See {@link GenericCoprocessor} for config and keying.
- */
 public final class GenericWALObserver implements WALCoprocessor {
 
   private static final String FALLBACK_KEY = GenericWALObserver.class.getName();

@@ -13,10 +13,6 @@ import (
 
 const deployToolClass = "com.virogg.hbasecop.bridge.admin.DeployTool"
 
-// runAdmin registers/removes/lists an hbasecop coprocessor by invoking the Java
-// DeployTool through the `hbase` CLI (which supplies the HBase client classpath)
-// with the bridge jar on HBASE_CLASSPATH. If `hbase` is not on PATH, it prints
-// the ready-to-run command for a host that has HBase installed.
 func runAdmin(args []string) error {
 	fs := flag.NewFlagSet("hbasecop-build admin", flag.ContinueOnError)
 	bridgeJar := fs.String("bridge-jar", "", "bridge jar (default: newest -all jar in ~/.m2)")

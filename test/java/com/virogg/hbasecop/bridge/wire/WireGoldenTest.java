@@ -18,15 +18,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
-/**
- * Java half of the T13 cross-language byte-level verification. Pairs with
- * internal/wire/wire_golden_test.go on the Go side: both load the same fixtures.tsv and the same
- * {@code <name>.bin} files, then assert that encode→bytes and bytes→decode produce identical
- * results.
- *
- * <p>Test working directory at runtime is the Maven project basedir, so the fixtures path is
- * relative to repo root.
- */
 class WireGoldenTest {
 
   private static final Path CORPUS_DIR = Paths.get("test/golden/wire/v1");
@@ -60,14 +51,12 @@ class WireGoldenTest {
   void goldenRoundTrip(Fixture fx) throws IOException {
     byte[] want = Files.readAllBytes(CORPUS_DIR.resolve(fx.name + ".bin"));
 
-    // (1) Encode → bytes
     Encoder enc = fx.chunkSize > 0 ? new Encoder(fx.chunkSize) : new Encoder();
     ByteBuffer encoded = enc.encode(fx.message);
     byte[] got = new byte[encoded.remaining()];
     encoded.get(got);
     assertArrayEquals(want, got, fx.name + ": encode bytes mismatch");
 
-    // (2) bytes → Decode
     Message decoded = new Decoder().decode(ByteBuffer.wrap(want));
     assertEquals(fx.message.type(), decoded.type(), fx.name + ": type");
     assertEquals(fx.message.reqId(), decoded.reqId(), fx.name + ": reqId");
@@ -92,7 +81,6 @@ class WireGoldenTest {
     }
   }
 
-  // Hand-rolled hex parser; java.util.HexFormat is Java 17+, we target 11.
   private static byte[] parseHex(String hex) {
     if (hex.isEmpty()) {
       return new byte[0];
@@ -112,9 +100,6 @@ class WireGoldenTest {
     return out;
   }
 
-  // Sanity assertion that the corpus directory is reachable from the
-  // Maven working directory. Catches accidental cwd drift before any
-  // parameterized test fails with a less obvious file-not-found.
   @org.junit.jupiter.api.Test
   void corpusDirectoryExists() {
     assertFalse(

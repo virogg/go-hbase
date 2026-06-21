@@ -15,8 +15,6 @@ import (
 	"github.com/virogg/go-hbase/internal/wire/hookpb"
 )
 
-// panickingObserver panics inside PrePut, simulating a bug in user observer
-// code.
 type panickingObserver struct {
 	UnimplementedRegionObserver
 }
@@ -25,12 +23,6 @@ func (panickingObserver) PrePut(context.Context, ObserverEnv, *hbasepb.MutationP
 	panic("boom: nil map write in user code")
 }
 
-// TestDispatchRecoversObserverPanic pins SPEC §6: a panic in a user observer
-// method must NOT escape to crash the shared per-RegionServer Go process. The
-// dispatcher recovers it and returns a normal Response carrying
-// HookResponse.error, so the Java side applies the configured failure policy
-// (strict → IOException to client; best-effort → WARN). Without the recover,
-// this test would crash the whole test binary.
 func TestDispatchRecoversObserverPanic(t *testing.T) {
 	d := newDispatcher(panickingObserver{}, nil)
 

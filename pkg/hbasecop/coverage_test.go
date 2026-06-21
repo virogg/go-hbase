@@ -11,11 +11,6 @@ import (
 	"testing"
 )
 
-// TestCoverageMatrixDocCoversAllHooks is the T46 CI gate: it parses
-// docs/coverage-region-observer.md and asserts every hook in the
-// canonical T41 dispatch table appears as a row with status=covered
-// and a non-empty covered_by column. Adding a new hook to hookTable
-// without recording its coverage anchor will fail the suite.
 func TestCoverageMatrixDocCoversAllHooks(t *testing.T) {
 	doc := readCoverageDoc(t)
 	rows := parseCoverageMatrix(t, doc)
@@ -58,9 +53,6 @@ type coverageRow struct {
 	coveredBy string
 }
 
-// readCoverageDoc resolves docs/coverage-region-observer.md by walking
-// up from this test file's location to the repo root, so the test runs
-// the same way under `go test ./...` and from inside the package dir.
 func readCoverageDoc(t *testing.T) string {
 	t.Helper()
 	_, here, _, ok := runtime.Caller(0)
@@ -87,9 +79,6 @@ func readCoverageDoc(t *testing.T) string {
 	return ""
 }
 
-// parseCoverageMatrix extracts rows from the markdown table whose header
-// is `| hook_id | name | proto Request | covered_by | status |`. Any
-// other markdown content is ignored.
 func parseCoverageMatrix(t *testing.T, doc string) map[string]coverageRow {
 	t.Helper()
 	rows := make(map[string]coverageRow)
@@ -112,7 +101,6 @@ func parseCoverageMatrix(t *testing.T, doc string) map[string]coverageRow {
 			}
 			continue
 		}
-		// Separator row (`| --- | --- | ... |`).
 		if len(cells) > 0 && strings.HasPrefix(cells[0], "-") {
 			continue
 		}

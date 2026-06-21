@@ -16,16 +16,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
-/**
- * T61 - {@link RegionIdAllocator} acceptance.
- *
- * <p>The allocator owns the per-process mapping {@code encodedRegionName → uint32 region_id}
- * referenced by the wire-level frame header. Allocation is monotonic per process lifetime and
- * stable across the lifetime of a region in this process - restarts of the Go process or the region
- * itself produce a fresh id. {@code release} drops the mapping but does <em>not</em> reuse the
- * freed id, so logs and metrics correlated by region_id remain unambiguous after region open/close
- * cycles.
- */
 class RegionIdAllocatorTest {
 
   @Test
@@ -64,7 +54,6 @@ class RegionIdAllocatorTest {
     alloc.release("region-a");
     assertEquals(0, alloc.idFor("region-a"));
 
-    // Subsequent allocation (same OR different name) gets a fresh id.
     int aSecond = alloc.allocate("region-a");
     assertNotEquals(aFirst, aSecond, "freed id must not be recycled");
     assertTrue(aSecond > aFirst, "monotonic counter must keep advancing");
@@ -74,7 +63,6 @@ class RegionIdAllocatorTest {
   void releaseOfUnknownRegionIsNoop() {
     RegionIdAllocator alloc = new RegionIdAllocator();
     alloc.release("never-allocated");
-    // No exception; counter not incremented.
     assertEquals(1, alloc.allocate("region-a"));
   }
 
@@ -101,7 +89,6 @@ class RegionIdAllocatorTest {
       for (Future<?> f : futures) {
         f.get(5, TimeUnit.SECONDS);
       }
-      // Every allocated id is unique and in [1, regionCount].
       Set<Integer> seen = new HashSet<>();
       for (Integer id : ids) {
         assertTrue(id >= 1 && id <= regionCount, () -> "id out of range: " + id);

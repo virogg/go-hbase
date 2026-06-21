@@ -16,12 +16,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
-/**
- * TE12: the Go→Java reader demux ({@link CoprocessorRuntime#routeFrame}) routes the Tier 2
- * reverse-RPC request to the stub sink keyed by the wire-header req_id, while the existing
- * RESPONSE→multiplexer path is unchanged. Endpoints are otherwise OFF: a frame type with no E1
- * route (e.g. ENDPOINT_RESULT, wired in TE22) reaches neither sink.
- */
 class CoprocessorRuntimeRouteFrameTest {
 
   private static Multiplexer noopMux() {
@@ -43,7 +37,6 @@ class CoprocessorRuntimeRouteFrameTest {
 
   @Test
   void routesResponseToMultiplexer() throws Exception {
-    // A pending call assigns a req_id; routing a RESPONSE for it must complete the future.
     ConcurrentLinkedQueue<Message> sent = new ConcurrentLinkedQueue<>();
     Multiplexer mux = Multiplexer.builder(sent::add).build();
 
@@ -65,8 +58,6 @@ class CoprocessorRuntimeRouteFrameTest {
 
   @Test
   void routesEndpointResultToMultiplexer() throws Exception {
-    // TE22: an ENDPOINT_RESULT completes the pending endpoint-invoke future, like a hook RESPONSE,
-    // and never reaches the reverse-RPC sink.
     ConcurrentLinkedQueue<Message> sent = new ConcurrentLinkedQueue<>();
     Multiplexer mux = Multiplexer.builder(sent::add).build();
 

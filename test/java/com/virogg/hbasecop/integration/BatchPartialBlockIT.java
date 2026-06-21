@@ -33,16 +33,6 @@ import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.junit.jupiter.api.Test;
 
-/**
- * T44 integration test: drives a {@code Table.batch(List<Put>)} of mixed {@code ok-*} / {@code
- * block-*} rows through the filter-observer coproc-jar on a live HBase 2.5 standalone cluster.
- * Asserts that the blocked rows fail individually (the observer's {@code preBatchMutate} marked
- * them via {@code HookResponse.blocked_indices}, which the Java adapter translated into per-index
- * {@code OperationStatus(SANITY_CHECK_FAILURE)}), while the {@code ok-*} rows succeed and are later
- * visible via {@code Get}.
- *
- * <p>Lifecycle managed by {@code make test-integration-batch}; not run by default {@code mvn test}.
- */
 final class BatchPartialBlockIT {
 
   private static final String ZK_QUORUM = "localhost";
@@ -91,7 +81,6 @@ final class BatchPartialBlockIT {
 
       createTableWithCoproc(admin, tn);
       try (Table table = conn.getTable(tn)) {
-        // Interleave 3 ok + 2 block. Indices: 0=ok, 1=ok, 2=block, 3=ok, 4=block.
         List<Row> batch = new ArrayList<>();
         batch.add(put(ALLOWED_PREFIX + "1"));
         batch.add(put(ALLOWED_PREFIX + "2"));
@@ -100,11 +89,6 @@ final class BatchPartialBlockIT {
         batch.add(put(BLOCKED_PREFIX + "2"));
 
         Object[] results = new Object[batch.size()];
-        // Table.batch populates results[] with per-index Result / Throwable in
-        // both code paths: (a) returning normally on a "soft" partial failure, or
-        // (b) throwing RetriesExhaustedWithDetailsException after retries. Either
-        // way the per-slot data is what we assert on below; the umbrella
-        // exception only carries the rolled-up summary.
         try {
           table.batch(batch, results);
         } catch (IOException withDetails) {
@@ -114,19 +98,12 @@ final class BatchPartialBlockIT {
                   + withDetails.getMessage());
         }
 
-        // Success slots carry a Result; failure slots carry a Throwable whose
-        // message contains the OperationStatus exceptionMsg ("hbasecop: mutation
-        // blocked by observer") we set on the Java adapter side.
         assertResultSuccess(results, 0, "ok-1");
         assertResultSuccess(results, 1, "ok-2");
         assertBlocked(results, 2, "block-1");
         assertResultSuccess(results, 3, "ok-3");
         assertBlocked(results, 4, "block-2");
 
-        // Round-trip read-back: only the ok-* rows landed in storage. Note this exercises
-        // the Get path too - and our filter-observer also bypasses Gets on block-* rows,
-        // so we cannot distinguish "absent in storage" from "bypass returned empty" on
-        // the block-* side. Asserting on the ok-* side is the load-bearing check.
         for (int i = 1; i <= 3; i++) {
           Result r = table.get(new Get((ALLOWED_PREFIX + i).getBytes(StandardCharsets.UTF_8)));
           assertNotNull(r, "Get(ok-" + i + ") should return a non-null Result");

@@ -11,8 +11,6 @@ import (
 	"github.com/virogg/go-hbase/internal/wire/hookpb"
 )
 
-// walHookEntry is the WAL analogue of hookEntry: maps a HookID to its
-// decoder + a closure that invokes the matching WALObserver method.
 type walHookEntry struct {
 	id     HookID
 	name   string
@@ -34,8 +32,6 @@ func postWALHook[Req proto.Message](method func(WALObserver, context.Context, Ob
 	}
 }
 
-// walHookTable is the T53 WAL dispatch table. Order mirrors
-// proto/hooks.proto's HookId WAL section (IDs 220-223).
 var walHookTable = []walHookEntry{
 	{HookIDPreWALWrite, "PreWALWrite", newReq[hookpb.PreWALWriteRequest], preWALHook(WALObserver.PreWALWrite)},
 	{HookIDPostWALWrite, "PostWALWrite", newReq[hookpb.PostWALWriteRequest], postWALHook(WALObserver.PostWALWrite)},
@@ -44,7 +40,6 @@ var walHookTable = []walHookEntry{
 	{HookIDPostWALRoll, "PostWALRoll", newReq[hookpb.PostWALRollRequest], postWALHook(WALObserver.PostWALRoll)},
 }
 
-// walHooksByID indexes the WAL dispatch table for O(1) lookup.
 var walHooksByID = func() map[HookID]walHookEntry {
 	m := make(map[HookID]walHookEntry, len(walHookTable))
 	for _, h := range walHookTable {

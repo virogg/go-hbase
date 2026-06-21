@@ -25,9 +25,6 @@ import (
 	"github.com/virogg/go-hbase/internal/wire/wirepb"
 )
 
-// openLoopHarnessWith opens a loopHarness with caller-chosen ring capacity.
-// Default openLoopHarness pins 16 frames (tight for unit tests); the T62
-// suite drives thousands and would mostly spin on ErrRingFull at that size.
 func openLoopHarnessWith(t *testing.T, capacity int) *loopHarness {
 	t.Helper()
 	dir := t.TempDir()
@@ -54,8 +51,6 @@ func openLoopHarnessWith(t *testing.T, capacity int) *loopHarness {
 	}
 }
 
-// tallyObserver counts PrePut invocations per region_id via an atomic
-// counter array. A non-zero slot proves the request reached user code.
 type tallyObserver struct {
 	UnimplementedRegionObserver
 
@@ -75,15 +70,6 @@ func (o *tallyObserver) PrePut(_ context.Context, env ObserverEnv, _ *hbasepb.Mu
 	return HookResult{}, nil
 }
 
-// TestRegionConcurrencyStress is the T62 Wave-A acceptance: 100 regions
-// x 100 parallel PrePut requests (10_000 hooks total) resolve without
-// race, without deadlock, and every region_id sees exactly its per-region
-// count. Runs under -race in CI to surface dispatch-path races.
-//
-// The cpruntime loop spawns one goroutine per inbound frame, so contention
-// scales with parallel inflight. A regression that serializes dispatch
-// (e.g. a shared mutex in the hook table, or an under-buffered single-writer
-// outbound queue) would deadlock or starve at this size.
 func TestRegionConcurrencyStress(t *testing.T) {
 	if testing.Short() {
 		t.Skip("stress test: skipped under -short")
@@ -121,10 +107,6 @@ func TestRegionConcurrencyStress(t *testing.T) {
 
 	deadline := time.Now().Add(20 * time.Second)
 
-	// Pre-encode all frames so encoding overhead does not throttle the
-	// sender and skew the test. ReqID is dense (1..total) for collision-free
-	// correlation. Region order is interleaved so most region_ids are in
-	// flight at any moment; a regression that serializes by region would fail.
 	type frameSpec struct {
 		regionID uint32
 		reqID    uint64
@@ -142,9 +124,6 @@ func TestRegionConcurrencyStress(t *testing.T) {
 		}
 	}
 
-	// Single sender: the shmem ring is SPSC, so production has exactly one
-	// writer per channel; the test mirrors that. Receiver runs on the main
-	// goroutine in parallel, draining outbound as the runtime fills it.
 	sendDone := make(chan error, 1)
 	go func() {
 		for _, fr := range frames {
@@ -167,8 +146,6 @@ func TestRegionConcurrencyStress(t *testing.T) {
 		sendDone <- nil
 	}()
 
-	// Receiver tallies (region_id, req_id) pairs and stops once we
-	// have all `total` responses.
 	gotPerRegion := make([]int, nRegions+1)
 	seenReqID := make([]bool, total+1)
 	gotCount := 0
@@ -225,10 +202,6 @@ func TestRegionConcurrencyStress(t *testing.T) {
 	loopWG.Wait()
 }
 
-// holdRegionObserver blocks PrePut for one designated "slow" region until
-// release is closed; every other region returns immediately. Surfaces
-// head-of-line regressions: if one slow observer call stalls dispatch for
-// the whole runtime, the fast regions' responses never arrive.
 type holdRegionObserver struct {
 	UnimplementedRegionObserver
 
@@ -260,14 +233,6 @@ func (o *holdRegionObserver) PrePut(ctx context.Context, env ObserverEnv, _ *hba
 	return HookResult{}, nil
 }
 
-// TestNoHeadOfLineBlockingAcrossRegions is the T62 Wave-B acceptance: a
-// slow observer on region 1 must not block PrePut delivery for the other
-// nFast regions. Sends the slow request first, waits for the observer to
-// confirm it is inside the handler, then sends nFast fast requests on
-// distinct region_ids. Serial dispatch (e.g. a global mutex around handler
-// invocations, or a single-threaded dispatcher) would never deliver the
-// fast responses while the slow handler is parked. Only genuine per-request
-// parallelism drains the fast tail.
 func TestNoHeadOfLineBlockingAcrossRegions(t *testing.T) {
 	const (
 		slowRegion   = uint32(1)
@@ -317,9 +282,6 @@ func TestNoHeadOfLineBlockingAcrossRegions(t *testing.T) {
 		}
 	}
 
-	// 1) Fire the slow request and wait until the observer confirms it has
-	// reached the block point. Without this sync the fast requests could
-	// race ahead of slow dispatch and the test would prove nothing.
 	slowReqID := uint64(1)
 	send(slowRegion, slowReqID)
 	select {
@@ -328,14 +290,10 @@ func TestNoHeadOfLineBlockingAcrossRegions(t *testing.T) {
 		t.Fatal("slow observer did not enter PrePut within 2s")
 	}
 
-	// 2) Fire nFast fast requests on distinct region_ids while the slow
-	// handler is parked. ReqID = region_id (distinct from slowReqID).
 	for r := uint32(2); r <= uint32(1+nFast); r++ {
 		send(r, uint64(r))
 	}
 
-	// 3) Drain exactly nFast responses. A missing fast response while the
-	// slow handler is still parked means head-of-line blocking: fail.
 	gotFast := 0
 	fastDeadline := time.Now().Add(2 * time.Second)
 	for gotFast < nFast {
@@ -365,7 +323,6 @@ func TestNoHeadOfLineBlockingAcrossRegions(t *testing.T) {
 		gotFast++
 	}
 
-	// 4) Release the slow handler and confirm its response now lands.
 	close(obs.release)
 	select {
 	case data := <-recvOne(t, h, 2*time.Second):
@@ -388,9 +345,6 @@ func TestNoHeadOfLineBlockingAcrossRegions(t *testing.T) {
 	loopWG.Wait()
 }
 
-// recvOne returns a channel yielding the next frame from h.mockIn, leaving
-// it empty if none arrives within timeout. Thin shim around the busy-poll
-// pattern used elsewhere here so Wave-B can select on a clean channel.
 func recvOne(t *testing.T, h *loopHarness, timeout time.Duration) <-chan []byte {
 	t.Helper()
 	out := make(chan []byte, 1)
@@ -423,9 +377,6 @@ func encodeStressPrePut(t *testing.T, regionID uint32, reqID uint64) []byte {
 	return frame
 }
 
-// buildStressPrePutFrame is shared between the Test and Benchmark drivers:
-// both mint a valid PrePut wire frame for a given (region_id, req_id), and
-// the fatal-helper variants for *testing.T / *testing.B wrap this.
 func buildStressPrePutFrame(regionID uint32, reqID uint64) ([]byte, error) {
 	hctx := &hookpb.HookContext{
 		TableName: &hbasepb.TableName{

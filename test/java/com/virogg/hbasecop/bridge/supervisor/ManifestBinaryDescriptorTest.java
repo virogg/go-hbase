@@ -25,7 +25,6 @@ import org.junit.jupiter.api.io.TempDir;
 
 final class ManifestBinaryDescriptorTest {
 
-  // 64-hex SHA-256 - content here is opaque to the descriptor (it only checks shape/length).
   private static final String SHA256_OK =
       "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
 
@@ -122,8 +121,6 @@ final class ManifestBinaryDescriptorTest {
 
   @Test
   void optionalIdAndClassAllowed(@TempDir Path dir) throws IOException {
-    // CLI omitted observer-class/coproc-id (e.g. legacy jar bundled by another tool).
-    // Binary descriptor still loads as long as Name+SHA256 are both present.
     Path jar = dir.resolve("min.jar");
     Map<String, String> mf = new LinkedHashMap<>();
     mf.put("HbaseCop-Go-Bin-Name", "bin/linux-amd64/x");
@@ -137,8 +134,6 @@ final class ManifestBinaryDescriptorTest {
     assertEquals("bin/linux-amd64/x", d.binaryResourcePath());
   }
 
-  // --- helpers ---
-
   private static void writeJar(Path path, Map<String, String> hbaseCopAttrs) throws IOException {
     Manifest m = new Manifest();
     Attributes a = m.getMainAttributes();
@@ -148,7 +143,6 @@ final class ManifestBinaryDescriptorTest {
     }
     try (OutputStream os = Files.newOutputStream(path);
         JarOutputStream jos = new JarOutputStream(os, m)) {
-      // empty payload - manifest only is enough
       jos.putNextEntry(new JarEntry("dummy.txt"));
       jos.write("noop".getBytes(StandardCharsets.UTF_8));
       jos.closeEntry();

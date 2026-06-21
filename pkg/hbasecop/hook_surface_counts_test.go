@@ -5,15 +5,6 @@ package hbasecop
 
 import "testing"
 
-// TestHookSurfaceCounts pins the per-surface hook counts that the docs,
-// CHANGELOG and SPEC scope statements quote. The Master surface is a
-// deliberate curated subset of HBase 2.5's ~165 master hooks (not full
-// coverage); freezing the counts here means any change to a surface's
-// breadth is a conscious edit that updates this test and the docs
-// together, instead of silently drifting from the published numbers.
-//
-// Region 68 + Master 20 + RegionServer 9 + WAL 4 + BulkLoad 2 = 103
-// Observer hooks total (the "103 hooks" figure in CHANGELOG/README).
 func TestHookSurfaceCounts(t *testing.T) {
 	cases := []struct {
 		surface string

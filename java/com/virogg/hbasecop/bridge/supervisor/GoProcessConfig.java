@@ -9,10 +9,6 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * Immutable spawn-time configuration for a {@link GoProcess}. Use {@link #builder()} to construct;
- * cross-field validation happens in {@code GoProcess.start()}.
- */
 public final class GoProcessConfig {
 
   private final String binaryResourcePath;
@@ -68,24 +64,10 @@ public final class GoProcessConfig {
     return gracefulShutdownTimeout;
   }
 
-  /**
-   * Extra environment variables injected into the spawned process on top of the parent's
-   * environment. Used by example coprocessors (e.g. fault-observer in T36) to forward
-   * coprocessor-specific tokens (like {@code HBASECOP_FAULT_MODE}) without having to bake them into
-   * the RegionServer container.
-   *
-   * @return an unmodifiable view; never {@code null}
-   */
   public Map<String, String> extraEnv() {
     return extraEnv;
   }
 
-  /**
-   * Lower-case 64-hex SHA-256 of the embedded ELF, when known (typically read from {@code
-   * HbaseCop-Go-Bin-SHA256} in the coproc-jar manifest by {@link ManifestBinaryDescriptor}).
-   * Non-null → {@link GoProcess#start()} fails fast on digest mismatch before forking the child;
-   * null → checksum step is skipped (legacy/uninstrumented jars).
-   */
   public String expectedBinarySha256() {
     return expectedBinarySha256;
   }
@@ -131,10 +113,6 @@ public final class GoProcessConfig {
       return this;
     }
 
-    /**
-     * Period in milliseconds for outbound heartbeats. {@code 0} → cpruntime default (500ms);
-     * negative → disabled.
-     */
     public Builder heartbeatPeriodMs(long ms) {
       this.heartbeatPeriodMs = ms;
       return this;
@@ -145,20 +123,11 @@ public final class GoProcessConfig {
       return this;
     }
 
-    /**
-     * Replace the extra-env map. {@code null} clears it. The map is defensively copied at {@link
-     * #build()}, so post-build mutations of the caller's map do not leak through.
-     */
     public Builder extraEnv(Map<String, String> env) {
       this.extraEnv = env == null ? new LinkedHashMap<>() : new LinkedHashMap<>(env);
       return this;
     }
 
-    /**
-     * Expected ELF SHA-256 (64-hex, case-insensitive): when set, {@link GoProcess#start()} computes
-     * the digest of the extracted binary and aborts on mismatch. {@code null} → skip. Typically
-     * populated from the coproc-jar manifest by {@link ManifestBinaryDescriptor}.
-     */
     public Builder expectedBinarySha256(String hex) {
       this.expectedBinarySha256 = hex;
       return this;

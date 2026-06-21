@@ -38,35 +38,6 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.junit.jupiter.api.Test;
 
-/**
- * T84 soak driver: paced mixed Put/Get load against a live HBase 2.5 standalone cluster (the T26
- * docker-compose target) with the counter-observer coproc-jar attached. Proves the data-loss
- * invariant: every client-acked Put rowkey must appear in a full table scan at end of run. Table
- * registers the coprocessor with {@code hbasecop.policy.prePut = best-effort} so kill-9 chaos
- * windows (injected externally by {@code test/integration/scripts/soak.sh}) degrade the hook
- * instead of rejecting client writes.
- *
- * <p>Knobs (system properties):
- *
- * <ul>
- *   <li>{@code soak.duration.s}: load duration in seconds (default 60 smoke run; soak target passes
- *       3600).
- *   <li>{@code soak.rate}: target combined ops/sec across all writers (default 1000).
- *   <li>{@code soak.writers}: number of writer threads (default 4).
- *   <li>{@code soak.read.fraction}: fraction of ops that are Gets of previously-acked rows (default
- *       0.2).
- * </ul>
- *
- * <p>Put failures are tolerated (best-effort policy plus supervisor restart windows surface
- * transient RPC errors) and only reported; the test fails solely on {@code lost > 0}, an acked row
- * missing from the final scan. The summary includes one machine-readable line, {@code SOAK_RESULT
- * ...}, parsed by the soak orchestrator script.
- *
- * <p>Like {@code PrePutCounterIT}, not part of {@code mvn test} (the {@code *IT} suffix keeps
- * Surefire's default include patterns from picking it up); invoked explicitly via {@code soak.sh} /
- * {@code make soak}, which manages the cluster lifecycle and stages {@code
- * test/integration/coproc-jars/counter-observer.jar} into the bind-mount the container reads from.
- */
 final class SoakIT {
 
   private static final String ZK_QUORUM = "localhost";
@@ -137,9 +108,6 @@ final class SoakIT {
 
         printSummary(scanned.rows, lost);
 
-        // Throughput floor: lost==0 is vacuous if writers acked almost nothing
-        // (e.g. every put failed). 20% of nominal write volume tolerates restart
-        // windows and pacing drift while still proving sustained load.
         long writeShare = (long) (RATE * DURATION_S * (1.0 - READ_FRACTION));
         long minAcked = writeShare / 5;
         assertTrue(
@@ -167,10 +135,6 @@ final class SoakIT {
     }
   }
 
-  /**
-   * Spawns the writer threads, lets them run for the configured duration and joins them. Returns
-   * the per-thread ledgers of client-acked rowkeys.
-   */
   private List<List<String>> runLoad(Connection conn, TableName tn) throws Exception {
     List<List<String>> ledgers = new ArrayList<>(WRITERS);
     List<Thread> threads = new ArrayList<>(WRITERS);
@@ -187,8 +151,6 @@ final class SoakIT {
     }
     threads.forEach(Thread::start);
 
-    // Per-op latency is bounded by hbase.client.operation.timeout, so a writer can overshoot the
-    // deadline by at most one op; the join slack covers that plus restart windows.
     long joinDeadlineMs = System.currentTimeMillis() + DURATION_S * 1_000L + JOIN_SLACK.toMillis();
     for (Thread t : threads) {
       long remaining = joinDeadlineMs - System.currentTimeMillis();
@@ -198,11 +160,6 @@ final class SoakIT {
     return ledgers;
   }
 
-  /**
-   * One writer: paced at {@code RATE / WRITERS} ops/sec. Put {@code soak-<thread>-<seq>} or, with
-   * probability {@code READ_FRACTION}, Get a random previously-acked row. Acked Put keys go into
-   * {@code ledger} (single-writer list, read by the main thread only after join).
-   */
   private void writerLoop(
       Connection conn, TableName tn, int threadIdx, long endNanos, List<String> ledger) {
     long intervalNanos = Math.max(1, (long) (1_000_000_000.0 * WRITERS / RATE));
@@ -219,7 +176,6 @@ final class SoakIT {
             if (r != null && !r.isEmpty()) {
               getsOk.increment();
             } else {
-              // Acked row not (yet) visible: reported, not fatal; the final scan is the gate.
               getsFailed.increment();
             }
           } catch (Throwable t) {
@@ -236,7 +192,7 @@ final class SoakIT {
           } catch (Throwable t) {
             putsFailed.increment();
           }
-          seq++; // Advance even on failure so rowkeys stay unique per thread.
+          seq++;
         }
 
         next += intervalNanos;
@@ -249,12 +205,10 @@ final class SoakIT {
             return;
           }
         } else {
-          // Fell behind (slow op / restart window): reset the schedule, don't burst to catch up.
           next = System.nanoTime();
         }
       }
     } catch (IOException e) {
-      // getTable/close failure: per-op outcomes were already counted; nothing else to record.
     }
   }
 
@@ -289,8 +243,6 @@ final class SoakIT {
     cfg.set("hbase.zookeeper.quorum", ZK_QUORUM);
     cfg.set("hbase.zookeeper.property.clientPort", ZK_PORT);
     cfg.set("zookeeper.recovery.retry", "2");
-    // Generous retries so ops ride out kill-9 restart windows instead of failing fast; the
-    // operation timeout still bounds each op so a hung bridge can't stall a writer forever.
     cfg.set("hbase.client.retries.number", "10");
     cfg.set("hbase.client.pause", "1000");
     cfg.set("hbase.rpc.timeout", "30000");
@@ -331,7 +283,6 @@ final class SoakIT {
     TableDescriptorBuilder b =
         TableDescriptorBuilder.newBuilder(tn)
             .setColumnFamily(ColumnFamilyDescriptorBuilder.of(CF))
-            // Best-effort prePut: kill-9 windows degrade the hook instead of rejecting writes.
             .setValue(POLICY_KEY, POLICY_BEST_EFFORT);
     b.setCoprocessor(
         CoprocessorDescriptorBuilder.newBuilder(COPROC_CLASSNAME)
@@ -351,7 +302,6 @@ final class SoakIT {
     admin.deleteTable(tn);
   }
 
-  /** Full scan; retried a few times so a restart window right at the end can't fail the gate. */
   private static ScanState scanAll(Connection conn, TableName tn) throws Exception {
     IOException last = null;
     for (int attempt = 1; attempt <= SCAN_ATTEMPTS; attempt++) {
@@ -375,7 +325,6 @@ final class SoakIT {
     throw last;
   }
 
-  /** Final-scan output: row count plus the key set the data-loss gate checks against. */
   private static final class ScanState {
     long rows;
     final Set<String> keys = new HashSet<>();

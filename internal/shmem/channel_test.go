@@ -46,10 +46,6 @@ func openPair(t *testing.T) (*shmem.Channel, *shmem.Channel) {
 	return prod, cons
 }
 
-// TestChannelRoundtrip1000 is the T15 acceptance test: 1000 frames of
-// varying payload sizes exchanged in a single goroutine, each Send
-// immediately followed by a Recv. Forces ring wrap-around (capacity=8)
-// and exercises the empty-payload edge case.
 func TestChannelRoundtrip1000(t *testing.T) {
 	t.Parallel()
 	prod, cons := openPair(t)

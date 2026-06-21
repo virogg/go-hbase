@@ -30,32 +30,6 @@ import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.junit.jupiter.api.Test;
 
-/**
- * T82 WAL-throughput measurement driver: times a sequential batched-Put workload against a live
- * HBase 2.5 standalone cluster (the T26 docker-compose target) and prints one machine-readable
- * result line. A measurement, not an assertion test: the only assertion is the coproc-presence
- * sanity check below. The regression gate comparing a baseline run against one with the no-op
- * {@code WalBenchWALCoprocessor} registered lives in {@code make bench-wal}, which drives two
- * compose cycles and invokes this driver once per cycle.
- *
- * <p>Not part of {@code mvn test} (name doesn't match Surefire's defaults); invoked explicitly via
- * {@code mvn test -Dtest=WalThroughputBenchIT -DfailIfNoTests=false}.
- *
- * <p>Knobs (system properties):
- *
- * <ul>
- *   <li>{@code bench.wal.ops}: total Puts to time (default 20000).
- *   <li>{@code bench.wal.batch}: Puts per {@code table.put(List)} call (default 100).
- *   <li>{@code bench.wal.expect.coproc}: when {@code "true"}, asserts a {@code hbasecop-runtime}
- *       process is alive in the container (entrypoint registered the WAL coprocessor); when {@code
- *       "false"} (default), asserts none is, guarding against a stale cluster leaking the coproc
- *       into the baseline measurement.
- * </ul>
- *
- * <p>The bench table carries no per-table coprocessor: WAL coprocessors are cluster-wide via {@code
- * hbase.coprocessor.wal.classes}, wired by the T82 entrypoint block when {@code
- * HBASECOP_WAL_COPROC_CLASS} is set on the container.
- */
 final class WalThroughputBenchIT {
 
   private static final String CONTAINER_NAME = "go-hbase-dev";
@@ -95,10 +69,8 @@ final class WalThroughputBenchIT {
       }
       createTable(admin, tn);
       try (Table table = conn.getTable(tn)) {
-        Random rnd = new Random(0x57414C42L); // fixed seed: same value stream every run
+        Random rnd = new Random(0x57414C42L);
 
-        // Warmup: prime client metadata caches and force WAL creation before the
-        // presence check and the timed window.
         for (int b = 0; b < WARMUP_BATCHES; b++) {
           table.put(makeBatch("warm-" + b + "-", 0, batchSize, rnd));
         }
@@ -137,7 +109,6 @@ final class WalThroughputBenchIT {
     }
   }
 
-  /** Builds one batch of {@code n} Puts with distinct rows and random {@code VALUE_SIZE} values. */
   private static List<Put> makeBatch(String rowPrefix, int offset, int n, Random rnd) {
     List<Put> puts = new ArrayList<>(n);
     for (int i = 0; i < n; i++) {
@@ -168,7 +139,6 @@ final class WalThroughputBenchIT {
   }
 
   private static void createTable(Admin admin, TableName tn) throws IOException {
-    // No per-table coprocessor on purpose; see the class doc.
     TableDescriptor desc =
         TableDescriptorBuilder.newBuilder(tn)
             .setColumnFamily(ColumnFamilyDescriptorBuilder.of(CF))
@@ -186,10 +156,6 @@ final class WalThroughputBenchIT {
     admin.deleteTable(tn);
   }
 
-  /**
-   * Sanity-checks that the measured configuration matches the requested one: a coproc run must have
-   * a live {@code hbasecop-runtime} inside the container, a baseline run must not.
-   */
   private static void assertCoprocPresence(boolean expectCoproc)
       throws IOException, InterruptedException {
     List<String> pids = pgrepRuntimePids();
@@ -212,7 +178,6 @@ final class WalThroughputBenchIT {
     }
   }
 
-  /** Returns the pids of every live {@code hbasecop-runtime} process inside the container. */
   private static List<String> pgrepRuntimePids() throws IOException, InterruptedException {
     ProcessBuilder pb =
         new ProcessBuilder(

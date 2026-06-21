@@ -13,14 +13,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
 
-/**
- * Regression for the P1 liveness defect: {@code sendOnChannel} used an UNBOUNDED busy-spin over a
- * non-blocking {@code Channel.send} under the shared sendLock, so a full/hung/dead Go side pinned
- * the RegionServer RPC-handler thread at 100% CPU forever. {@link
- * CoprocessorRuntime#sendWithDeadline} must (a) return once a slot frees, (b) give up at the
- * deadline with a clear ShmemException rather than spin forever, and (c) honor interruption. A fake
- * nanoClock keeps the test instant.
- */
 class SendWithDeadlineTest {
 
   @Test
@@ -31,7 +23,7 @@ class SendWithDeadlineTest {
         () -> {
           calls[0]++;
           if (calls[0] < 3) {
-            throw new RingFullException(); // ring full for the first two tries
+            throw new RingFullException();
           }
         },
         1_000L,
@@ -41,8 +33,6 @@ class SendWithDeadlineTest {
 
   @Test
   void throwsAtDeadlineInsteadOfSpinningForever() {
-    // Clock jumps 1ms per reading; with a 5ms deadline the loop gives up in a handful of
-    // iterations instead of spinning unboundedly against an always-full ring.
     AtomicLong clock = new AtomicLong();
     ShmemException ex =
         assertThrows(
@@ -50,7 +40,7 @@ class SendWithDeadlineTest {
             () ->
                 CoprocessorRuntime.sendWithDeadline(
                     () -> {
-                      throw new RingFullException(); // never drains
+                      throw new RingFullException();
                     },
                     5L,
                     () -> clock.addAndGet(TimeUnit.MILLISECONDS.toNanos(1))));
@@ -59,7 +49,7 @@ class SendWithDeadlineTest {
 
   @Test
   void honorsInterruption() {
-    Thread.currentThread().interrupt(); // pre-set the flag
+    Thread.currentThread().interrupt();
     assertThrows(
         InterruptedException.class,
         () ->
@@ -69,7 +59,6 @@ class SendWithDeadlineTest {
                 },
                 10_000L,
                 System::nanoTime));
-    // assertThrows consumed the exception; the flag was cleared by Thread.interrupted().
     assertTrue(!Thread.currentThread().isInterrupted());
   }
 }

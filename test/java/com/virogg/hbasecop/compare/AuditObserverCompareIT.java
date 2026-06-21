@@ -27,21 +27,6 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Table;
 import org.junit.jupiter.api.Test;
 
-/**
- * Native-vs-Go comparison for an AUDITING post-hook OBSERVER (write path, CPU-heavier). Both arms
- * emit one audit record per Put carrying the SHA-256 row digest:
- *
- * <ul>
- *   <li>native arm: {@code NativeAuditObserver.postPut} hashes + logs in the RegionServer JVM
- *       (marker {@code native-audit: audit});
- *   <li>Go arm: {@code AuditRegionObserver} forwards postPut over the bridge to the Go {@code
- *       audit-observer} process (marker {@code audit-observer: audit}).
- * </ul>
- *
- * <p>Equivalence: for the same rows, both arms must emit the SAME {@code row_digest} (and it must
- * match an independent Java oracle). Performance: per-arm write throughput with auditing on,
- * interleaved A/B, reported (not gated).
- */
 final class AuditObserverCompareIT {
 
   private static final byte[] Q = "q".getBytes(StandardCharsets.UTF_8);
@@ -52,7 +37,6 @@ final class AuditObserverCompareIT {
 
   private static final Pattern NATIVE_DIGEST =
       Pattern.compile("native-audit: audit.*?row_digest=([0-9a-f]{16})");
-  // Go side logs via slog; tolerate either JSON ("row_digest":"..") or logfmt (row_digest=..).
   private static final Pattern GO_DIGEST =
       Pattern.compile("audit-observer: audit.*?row_digest[\"=:\\s]+\"?([0-9a-f]{16})");
 
@@ -79,7 +63,6 @@ final class AuditObserverCompareIT {
       try (Table nativeTable = conn.getTable(nativeTn);
           Table goTable = conn.getTable(goTn)) {
 
-        // --- Equivalence (hard pass/fail) ---------------------------------
         Set<String> expected = new LinkedHashSet<>();
         for (int i = 0; i < EQUIV_ROWS; i++) {
           byte[] row = ("audit-eq-" + i).getBytes(StandardCharsets.UTF_8);
@@ -98,7 +81,6 @@ final class AuditObserverCompareIT {
         assertTrue(
             goDigests.containsAll(expected),
             "Go audit must emit every expected row digest; missing=" + minus(expected, goDigests));
-        // The two arms agree on the digest for every audited row (the core equivalence).
         Set<String> bothForRows = new HashSet<>(expected);
         bothForRows.retainAll(nativeDigests);
         bothForRows.retainAll(goDigests);
@@ -106,7 +88,6 @@ final class AuditObserverCompareIT {
             bothForRows.containsAll(expected),
             "native and Go must agree on the digest of every audited row");
 
-        // --- Performance (report-only): audited write throughput ----------
         List<Long> nativeSamples = new ArrayList<>();
         List<Long> goSamples = new ArrayList<>();
         for (int r = 0; r < PERF_WARMUP + PERF_ROUNDS; r++) {
@@ -137,9 +118,6 @@ final class AuditObserverCompareIT {
     }
   }
 
-  /**
-   * Polls {@code docker logs} until every expected digest has appeared (or the deadline lapses).
-   */
   private static Set<String> awaitDigests(Pattern pattern, Set<String> expected, Duration deadline)
       throws Exception {
     long cutoff = System.nanoTime() + deadline.toNanos();
@@ -178,7 +156,6 @@ final class AuditObserverCompareIT {
     return puts;
   }
 
-  /** Independent oracle: first 8 bytes of SHA-256(row), hex (matches both arms' RowDigest). */
   private static String rowDigest(byte[] row) throws Exception {
     byte[] sum = MessageDigest.getInstance("SHA-256").digest(row);
     StringBuilder sb = new StringBuilder(16);

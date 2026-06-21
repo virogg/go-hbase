@@ -13,8 +13,6 @@ import (
 	"github.com/virogg/go-hbase/internal/wire"
 )
 
-// TestRoundTripSingleChunk covers payloads that fit in one frame including
-// the empty-payload edge case and the exact-MaxFrameSize boundary.
 func TestRoundTripSingleChunk(t *testing.T) {
 	cases := []struct {
 		name string
@@ -71,8 +69,6 @@ func TestRoundTripSingleChunk(t *testing.T) {
 	}
 }
 
-// TestRoundTripMultiChunk drives the chunking path with payloads spanning
-// 2 and 3 chunks at the default 64KB MaxFrameSize.
 func TestRoundTripMultiChunk(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -102,8 +98,6 @@ func TestRoundTripMultiChunk(t *testing.T) {
 	}
 }
 
-// TestEncoderWithChunkSize lets the test driver use a tiny chunk window to
-// exercise reassembly state without 64KB-per-test allocations.
 func TestEncoderWithChunkSize(t *testing.T) {
 	msg := wire.Message{
 		Type: wire.TypeRequest, ReqID: 5, HookID: 1,
@@ -122,12 +116,7 @@ func TestEncoderWithChunkSize(t *testing.T) {
 	assertMessageEqual(t, got, &msg)
 }
 
-// TestDecodeOutOfOrderChunks exercises the reassembly buffer when chunks
-// arrive in a non-monotonic chunk_idx sequence (idx=1 before idx=0). The
-// decoder buffers until the final chunk arrives and concatenates in
-// chunk_idx order regardless of arrival order.
 func TestDecodeOutOfOrderChunks(t *testing.T) {
-	// Build 3 chunks for req_id=11 in arrival order [2, 0, 1].
 	type chunk struct {
 		idx     uint32
 		payload []byte
@@ -170,7 +159,6 @@ func TestDecodeRejectsOversizedLen(t *testing.T) {
 }
 
 func TestDecodeRejectsTruncatedHeader(t *testing.T) {
-	// Length field claims 23 bytes follow but we supply only 5.
 	var buf bytes.Buffer
 	var lenBuf [4]byte
 	binary.BigEndian.PutUint32(lenBuf[:], 23)
@@ -206,10 +194,6 @@ func TestDecodeRejectsUnknownType(t *testing.T) {
 	}
 }
 
-// TestDecodeRejectsTypeOnePastCeiling pins the exact wire-type ceiling: byte 11
-// is the value a future v3 frame type would occupy, so a contributor adding a
-// type without raising Type.Valid() must trip this (and its Java twin) rather
-// than silently decode. TypeRPCResponse=10 is the current top.
 func TestDecodeRejectsTypeOnePastCeiling(t *testing.T) {
 	var buf bytes.Buffer
 	writeRawChunk(t, &buf, rawChunk{
@@ -333,8 +317,6 @@ func TestEncodeMultipleMessagesStream(t *testing.T) {
 	}
 }
 
-// --- helpers ---------------------------------------------------------------
-
 func makePayload(n int) []byte {
 	p := make([]byte, n)
 	for i := range p {
@@ -362,9 +344,6 @@ func assertMessageEqual(t *testing.T, got, want *wire.Message) {
 	}
 }
 
-// rawChunk lets tests hand-craft individual chunks (out-of-order, duplicate,
-// invalid type byte). Either Type or TypeByte is honored; TypeByte wins so
-// tests can inject illegal type values.
 type rawChunk struct {
 	Type       wire.Type
 	TypeByte   uint8

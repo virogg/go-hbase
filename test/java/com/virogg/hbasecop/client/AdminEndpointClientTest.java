@@ -24,13 +24,6 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcChannel;
 import org.junit.jupiter.api.Test;
 
-/**
- * TE52: {@link AdminEndpointClient#callMaster} invokes the generic {@code GoEndpointService} over
- * the master {@link CoprocessorRpcChannel} from {@link Admin#coprocessorService()} and unwraps the
- * result. These tests drive the generated stub through a mock channel — covering request mapping,
- * the success payload, and the error/controller-failure/missing-response paths — without a live
- * master.
- */
 final class AdminEndpointClientTest {
 
   private static Admin adminWithChannel(CoprocessorRpcChannel channel) {
@@ -39,11 +32,6 @@ final class AdminEndpointClientTest {
     return admin;
   }
 
-  /**
-   * A mock channel whose async {@code callMethod} feeds {@code response} back to the stub's
-   * callback and records the request it saw (the generated stub generalizes the callback to {@code
-   * RpcCallback<Message>}, so the response is delivered as a {@link Message}).
-   */
   private static CoprocessorRpcChannel channelReturning(
       GoEndpointResponse response, AtomicReference<Message> seenRequest) {
     CoprocessorRpcChannel channel = mock(CoprocessorRpcChannel.class);
@@ -126,9 +114,6 @@ final class AdminEndpointClientTest {
 
   @Test
   void controllerFailureWinsOverADeliveredResponse() {
-    // EndpointCalls.invoke checks controller.failed() before reading the response, so a controller
-    // failure takes precedence even when the callback also delivered a success payload. Pins that
-    // ordering, which both the master and region helpers share.
     CoprocessorRpcChannel channel = mock(CoprocessorRpcChannel.class);
     doAnswer(
             invocation -> {
@@ -153,7 +138,6 @@ final class AdminEndpointClientTest {
 
   @Test
   void missingResponseSurfacesAsIoException() {
-    // An unstubbed channel never invokes the callback, leaving the response null.
     CoprocessorRpcChannel channel = mock(CoprocessorRpcChannel.class);
 
     IOException err =

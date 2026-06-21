@@ -7,34 +7,13 @@ import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * Reads chunk frames from a {@link ByteBuffer} and reassembles multi-chunk messages keyed by
- * req_id. Mirrors {@code internal/wire/decoder.go}.
- *
- * <p>Not safe for concurrent use. Memory for partial reassemblies persists until either the
- * matching final chunk arrives or the Decoder is dropped, capped at {@link
- * WireFormat#MAX_PENDING_REASSEMBLIES} concurrent req_ids; supervisor-level inflight cleanup is
- * T35.
- */
 public final class Decoder {
 
   private final Map<Long, Reassembly> pending = new HashMap<>();
   private final int maxFrame = WireFormat.MAX_FRAME_SIZE;
 
-  /**
-   * Payload total retained across all entries in {@link #pending}, bounded by {@link
-   * WireFormat#MAX_PENDING_BYTES} (the entry-count cap alone would still permit hundreds of GiB of
-   * near-complete reassemblies).
-   */
   private int pendingBytes;
 
-  /**
-   * Returns the next fully reassembled message from {@code src}, or {@code null} if {@code src} is
-   * empty at a frame boundary (clean EOF).
-   *
-   * <p>Reads chunks one at a time; for multi-chunk messages, keeps consuming from {@code src} until
-   * reassembly completes.
-   */
   public Message decode(ByteBuffer src) throws WireException {
     while (true) {
       if (!src.hasRemaining()) {
@@ -44,7 +23,6 @@ public final class Decoder {
       if (msg != null) {
         return msg;
       }
-      // Chunk accepted but reassembly not yet complete; keep reading.
     }
   }
 
@@ -79,9 +57,6 @@ public final class Decoder {
     if (chunkTotal <= 0 || chunkIdx < 0 || chunkIdx >= chunkTotal) {
       throw new InvalidChunkException("idx=" + chunkIdx + " total=" + chunkTotal);
     }
-    // Bound chunk_total BEFORE any allocation keyed off it: chunkTotal is
-    // peer-controlled (raw u32), so an unbounded value would make the
-    // new byte[total][] in Reassembly request gigabytes and OOM us.
     if (chunkTotal > WireFormat.MAX_CHUNKS) {
       throw new TooManyChunksException(chunkTotal + " > " + WireFormat.MAX_CHUNKS);
     }
@@ -99,8 +74,6 @@ public final class Decoder {
 
     Reassembly re = pending.get(reqId);
     if (re == null) {
-      // Cap concurrent in-progress reassemblies so abandoned req_ids
-      // (final chunk never arrives) cannot grow the map without bound.
       if (pending.size() >= WireFormat.MAX_PENDING_REASSEMBLIES) {
         throw new TooManyPendingException("pending reassemblies: " + pending.size());
       }

@@ -9,8 +9,6 @@ import (
 	"testing"
 )
 
-// TestRegionServerHookTableIsCanonical mirrors TestMasterHookTableIsCanonical
-// for the region-server surface introduced in T52.
 func TestRegionServerHookTableIsCanonical(t *testing.T) {
 	if len(regionServerHookTable) == 0 {
 		t.Fatal("regionServerHookTable empty: T52 dispatch table not populated")
@@ -35,9 +33,6 @@ func TestRegionServerHookTableIsCanonical(t *testing.T) {
 	}
 }
 
-// TestRegionServerHookIDsAreInReservedRange pins the ID partitioning
-// (region 1-99, master 100-199, region-server 200-255) so a future hook
-// addition can't accidentally claim a value taken by another surface.
 func TestRegionServerHookIDsAreInReservedRange(t *testing.T) {
 	taken := make(map[HookID]string)
 	for _, h := range hookTable {
@@ -59,9 +54,6 @@ func TestRegionServerHookIDsAreInReservedRange(t *testing.T) {
 	}
 }
 
-// TestRegionServerObserverInterfaceCoversAllHooks mirrors the master
-// reflection check: every entry in regionServerHookTable corresponds to
-// a RegionServerObserver method and vice versa.
 func TestRegionServerObserverInterfaceCoversAllHooks(t *testing.T) {
 	rt := reflect.TypeOf((*RegionServerObserver)(nil)).Elem()
 	methods := make(map[string]bool, rt.NumMethod())
@@ -82,9 +74,6 @@ func TestRegionServerObserverInterfaceCoversAllHooks(t *testing.T) {
 	}
 }
 
-// TestUnimplementedRegionServerObserverSatisfiesInterface promotes the
-// compile-time satisfaction check to runtime and pins the noop return
-// contract (HookResult{}, nil) on Pre-* methods.
 func TestUnimplementedRegionServerObserverSatisfiesInterface(t *testing.T) {
 	var obs RegionServerObserver = UnimplementedRegionServerObserver{}
 	res, err := obs.PreStopRegionServer(context.Background(), ObserverEnv{}, nil)

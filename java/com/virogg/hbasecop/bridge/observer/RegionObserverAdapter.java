@@ -132,33 +132,10 @@ import org.apache.hbase.thirdparty.com.google.protobuf.Descriptors;
 import org.apache.hbase.thirdparty.com.google.protobuf.InvalidProtocolBufferException;
 import org.apache.hbase.thirdparty.com.google.protobuf.Message;
 
-/**
- * RegionServer-side bridge that intercepts every {@link RegionObserver} method and relays the call
- * as a protobuf hook invocation to the long-running Go runtime via a {@link HookDispatcher}.
- *
- * <p>Each hook resolves its {@link HookPolicy} (policy + timeout) from the supplied {@link
- * PolicyConfig}. Under {@link Policy#STRICT}, Go-side errors (error response, timeout, transport
- * IOException, malformed payload) propagate to the HBase client as {@code IOException} so the
- * mutation aborts. Under {@link Policy#BEST_EFFORT} the same failures are logged at {@code WARN}
- * and the hook is treated as a no-op so the operation continues. Caller interruption is always
- * surfaced as {@code IOException} regardless of policy and re-sets the interrupt flag.
- *
- * <p>{@code bypass=true} in the Go-side response triggers {@link ObserverContext#bypass()} so HBase
- * skips its own implementation; only honoured when the hook returned a clean response.
- *
- * <p>T41 surface: overrides every {@link RegionObserver} method declared in HBase 2.5. Value-
- * returning methods default to passthrough (return the input unchanged) until the user's Go
- * observer wires up a real handler. T42 grows the per-hook proto Request bodies and return-value
- * plumbing.
- */
 public final class RegionObserverAdapter implements RegionObserver {
 
   private static final Logger LOG = System.getLogger(RegionObserverAdapter.class.getName());
 
-  /**
-   * Hook IDs. Mirror {@code pkg/hbasecop/hooks.go} on the Go side. Kept as public byte constants
-   * for backward compatibility with existing Phase-2 tests; new code should use {@link HookId}.
-   */
   public static final byte HOOK_PRE_PUT = HookId.PRE_PUT.value();
 
   public static final byte HOOK_POST_PUT = HookId.POST_PUT.value();
@@ -172,10 +149,6 @@ public final class RegionObserverAdapter implements RegionObserver {
     this(dispatcher, policyConfig, new com.virogg.hbasecop.multiplex.RegionIdAllocator());
   }
 
-  /**
-   * T61 ctor: inject a shared {@link com.virogg.hbasecop.multiplex.RegionIdAllocator} so multiple
-   * adapter instances on one RegionServer share the same region_id space (T63 lifecycle refcount).
-   */
   public RegionObserverAdapter(
       HookDispatcher dispatcher,
       PolicyConfig policyConfig,
@@ -183,11 +156,6 @@ public final class RegionObserverAdapter implements RegionObserver {
     this(dispatcher, policyConfig, regionIdAllocator, null);
   }
 
-  /**
-   * TE31 ctor: additionally inject a shared {@link com.virogg.hbasecop.bridge.rpc.RegionRegistry}
-   * so each region's live {@link Region} is registered under its wire region_id at open and dropped
-   * at close, letting the reverse-RPC servicing pool resolve a Go-initiated GET's target region.
-   */
   public RegionObserverAdapter(
       HookDispatcher dispatcher,
       PolicyConfig policyConfig,
@@ -199,11 +167,6 @@ public final class RegionObserverAdapter implements RegionObserver {
     this.regionRegistry = regionRegistry; // optional: null when reverse RPC is not wired
   }
 
-  /**
-   * Allocate the wire region_id for {@code env}'s region and, when a {@link
-   * com.virogg.hbasecop.bridge.rpc.RegionRegistry} is wired, register the live region under it so
-   * the reverse-RPC servicing pool can resolve it.
-   */
   private void registerRegion(RegionCoprocessorEnvironment env) {
     int id = regionIdAllocator.allocate(env.getRegion().getRegionInfo().getEncodedName());
     if (regionRegistry != null) {
@@ -211,7 +174,6 @@ public final class RegionObserverAdapter implements RegionObserver {
     }
   }
 
-  /** Counterpart of {@link #registerRegion}: drop the region from the registry, then the id. */
   private void releaseRegion(RegionCoprocessorEnvironment env) {
     String name = env.getRegion().getRegionInfo().getEncodedName();
     if (regionRegistry != null) {
@@ -220,20 +182,6 @@ public final class RegionObserverAdapter implements RegionObserver {
     regionIdAllocator.release(name);
   }
 
-  // --- Region lifecycle: region_id allocation (T61) ---------------------
-  //
-  // RegionObserver fires preOpen/postClose per region open/close: the right
-  // granularity for the per-region wire routing key. Mint the id in preOpen
-  // (so every subsequent hook on this region carries a non-zero region_id),
-  // release in postClose (reopen gets a fresh monotonic id, never recycled).
-  // Coprocessor.start(env) on the supertype fires once per RegionServer load,
-  // so it can't scope per-region.
-
-  /**
-   * Public hook for the supervisor/tests to register a region without going through {@link
-   * #preOpen(ObserverContext)} (e.g. T61 unit tests skip the preOpen dispatch round-trip and just
-   * want the allocator wired). Idempotent.
-   */
   public void start(RegionCoprocessorEnvironment env) {
     Objects.requireNonNull(env, "env");
     registerRegion(env);
@@ -245,13 +193,8 @@ public final class RegionObserverAdapter implements RegionObserver {
     releaseRegion(env);
   }
 
-  // --- Lifecycle ---------------------------------------------------------
-
   @Override
   public void preOpen(ObserverContext<RegionCoprocessorEnvironment> c) throws IOException {
-    // T61: allocate the wire region_id before dispatching so the preOpen
-    // frame and every subsequent hook on this region share the same id.
-    // TE31: also register the live region so reverse-RPC GETs can resolve it.
     registerRegion(c.getEnvironment());
     dispatchStub(c, HookId.PRE_OPEN, PreOpenRequest.newBuilder());
   }
@@ -286,14 +229,9 @@ public final class RegionObserverAdapter implements RegionObserver {
     } catch (IOException e) {
       LOG.log(Level.WARNING, "hbasecop: postClose threw IOException, swallowed (best-effort)", e);
     } finally {
-      // T61: release the region_id mapping last, so postClose's own frame
-      // is dispatched under the same id as the rest of the region's lifecycle.
-      // TE31: drop the live region from the registry in the same step.
       releaseRegion(c.getEnvironment());
     }
   }
-
-  // --- Flush -------------------------------------------------------------
 
   @Override
   public void preFlush(
@@ -318,8 +256,6 @@ public final class RegionObserverAdapter implements RegionObserver {
       throws IOException {
     dispatchStub(c, HookId.POST_FLUSH, PostFlushRequest.newBuilder());
   }
-
-  // --- MemStore compaction ----------------------------------------------
 
   @Override
   public void preMemStoreCompaction(ObserverContext<RegionCoprocessorEnvironment> c, Store store)
@@ -353,8 +289,6 @@ public final class RegionObserverAdapter implements RegionObserver {
       throws IOException {
     dispatchStub(c, HookId.POST_MEM_STORE_COMPACTION, PostMemStoreCompactionRequest.newBuilder());
   }
-
-  // --- Compaction (T42 Wave 4: bodies populated) -----------------------
 
   @Override
   public void preCompactSelection(
@@ -476,8 +410,6 @@ public final class RegionObserverAdapter implements RegionObserver {
     if (f.getPath() != null) {
       b.setPath(f.getPath().toString());
     }
-    // StoreFile (2.5 interface) doesn't expose file-byte size; size_bytes stays 0.
-    // T46 can switch to HFileInfo lookup when needed.
     return b.build();
   }
 
@@ -508,8 +440,6 @@ public final class RegionObserverAdapter implements RegionObserver {
         .setSelectionTime(request.getSelectionTime())
         .build();
   }
-
-  // --- Read path (T42 Wave 1: bodies populated) -------------------------
 
   @Override
   public void preGetOp(ObserverContext<RegionCoprocessorEnvironment> c, Get get, List<Cell> result)
@@ -573,8 +503,6 @@ public final class RegionObserverAdapter implements RegionObserver {
     return exists;
   }
 
-  // --- Write path: Put (Phase-2 frozen contract) ------------------------
-
   @Override
   public void prePut(
       ObserverContext<RegionCoprocessorEnvironment> c, Put put, WALEdit edit, Durability durability)
@@ -598,8 +526,6 @@ public final class RegionObserverAdapter implements RegionObserver {
     HookResponse resp = dispatch(regionIdFor(c), HOOK_POST_PUT, reqBytes);
     applyHookResponse(c, resp);
   }
-
-  // --- Write path: Delete + version timestamp ---------------------------
 
   @Override
   public void preDelete(
@@ -664,8 +590,6 @@ public final class RegionObserverAdapter implements RegionObserver {
             b.build().toByteArray());
     applyHookResponse(c, resp);
   }
-
-  // --- Batch mutate + region operation envelope (T42 Wave 3) -----------
 
   @Override
   public void preBatchMutate(
@@ -740,8 +664,6 @@ public final class RegionObserverAdapter implements RegionObserver {
         dispatch(regionIdFor(c), HookId.POST_CLOSE_REGION_OPERATION.value(), reqBytes);
     applyHookResponse(c, resp);
   }
-
-  // --- Check-and-Put (T42 Wave 3) --------------------------------------
 
   @Override
   public boolean preCheckAndPut(
@@ -830,8 +752,6 @@ public final class RegionObserverAdapter implements RegionObserver {
     return result;
   }
 
-  // --- Check-and-Delete (T42 Wave 3) -----------------------------------
-
   @Override
   public boolean preCheckAndDelete(
       ObserverContext<RegionCoprocessorEnvironment> c,
@@ -918,8 +838,6 @@ public final class RegionObserverAdapter implements RegionObserver {
     applyHookResponse(c, resp);
     return result;
   }
-
-  // --- Check-and-Mutate (T42 Wave 3) -----------------------------------
 
   @Override
   public CheckAndMutateResult preCheckAndMutate(
@@ -1045,8 +963,6 @@ public final class RegionObserverAdapter implements RegionObserver {
     }
   }
 
-  // --- Append (T42 Wave 2: bodies populated) ----------------------------
-
   @Override
   public Result preAppend(ObserverContext<RegionCoprocessorEnvironment> c, Append append)
       throws IOException {
@@ -1091,8 +1007,6 @@ public final class RegionObserverAdapter implements RegionObserver {
         dispatch(regionIdFor(c), HookId.PRE_APPEND_AFTER_ROW_LOCK.value(), reqBytes);
     return valueReturningResult(resp);
   }
-
-  // --- Increment (T42 Wave 2: bodies populated) -------------------------
 
   @Override
   public Result preIncrement(ObserverContext<RegionCoprocessorEnvironment> c, Increment increment)
@@ -1140,8 +1054,6 @@ public final class RegionObserverAdapter implements RegionObserver {
         dispatch(regionIdFor(c), HookId.PRE_INCREMENT_AFTER_ROW_LOCK.value(), reqBytes);
     return valueReturningResult(resp);
   }
-
-  // --- Scanner (T42 Wave 1: bodies populated) ---------------------------
 
   @Override
   public void preScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, Scan scan)
@@ -1267,8 +1179,6 @@ public final class RegionObserverAdapter implements RegionObserver {
     applyHookResponse(c, resp);
   }
 
-  // --- WAL replay/restore (T42 Wave 4: bodies populated) ---------------
-
   @Override
   public void preReplayWALs(
       ObserverContext<? extends RegionCoprocessorEnvironment> c,
@@ -1352,8 +1262,6 @@ public final class RegionObserverAdapter implements RegionObserver {
         dispatch(regionIdFor(c), HookId.POST_WAL_RESTORE.value(), b.build().toByteArray());
     applyHookResponse(c, resp);
   }
-
-  // --- Bulk load + store-file commit (T42 Wave 4: bodies populated) -----
 
   @Override
   public void preBulkLoadHFile(
@@ -1457,8 +1365,6 @@ public final class RegionObserverAdapter implements RegionObserver {
     applyHookResponse(c, resp);
   }
 
-  // --- Store-file reader (T42 Wave 4: bodies populated) ----------------
-
   @Override
   public StoreFileReader preStoreFileReaderOpen(
       ObserverContext<RegionCoprocessorEnvironment> c,
@@ -1556,8 +1462,6 @@ public final class RegionObserverAdapter implements RegionObserver {
     return b.build();
   }
 
-  // --- Before-WAL hooks (T42 Wave 2: bodies populated) ------------------
-
   @Override
   public Cell postMutationBeforeWAL(
       ObserverContext<RegionCoprocessorEnvironment> c,
@@ -1640,8 +1544,6 @@ public final class RegionObserverAdapter implements RegionObserver {
     return b.build();
   }
 
-  // --- Delete tracker, WAL append (T42 Wave 4: bodies populated) -------
-
   @Override
   public DeleteTracker postInstantiateDeleteTracker(
       ObserverContext<RegionCoprocessorEnvironment> c, DeleteTracker tracker) throws IOException {
@@ -1675,15 +1577,6 @@ public final class RegionObserverAdapter implements RegionObserver {
     applyHookResponse(c, resp);
   }
 
-  // === Internals =========================================================
-
-  /**
-   * Stub dispatch helper for hooks whose Request body is just {@link HookContext}. Every T41 stub
-   * Request message in {@code proto/hooks.proto} embeds {@link HookContext} at field 1, set here
-   * via the field descriptor on the generic {@link Message.Builder}. T42 widens each Request with
-   * hook-specific payload fields; the specialised-builder call sites (currently {@link #prePut} /
-   * {@link #postPut}) show the pattern.
-   */
   private void dispatchStub(
       ObserverContext<? extends RegionCoprocessorEnvironment> c,
       HookId hookId,
@@ -1696,12 +1589,6 @@ public final class RegionObserverAdapter implements RegionObserver {
     applyHookResponse(c, resp);
   }
 
-  /**
-   * Non-throwing variant for post-hooks declared in HBase as {@code void postX(...)} without {@code
-   * throws IOException}. A strict-mode failure is logged at WARN and swallowed so the adapter's
-   * signature stays compatible with the interface; observers needing hard failure on these hooks
-   * should use a Pre-* variant.
-   */
   private void dispatchBestEffort(
       ObserverContext<? extends RegionCoprocessorEnvironment> c,
       HookId hookId,
@@ -1717,11 +1604,6 @@ public final class RegionObserverAdapter implements RegionObserver {
     }
   }
 
-  /**
-   * Drive one hook call. Returns the Go-side {@link HookResponse} on success, or {@code null} if
-   * the call failed and the hook's policy is best-effort (caller must treat as no-op). Strict
-   * failures throw {@link IOException}.
-   */
   private HookResponse dispatch(int regionId, byte hookId, byte[] reqBytes) throws IOException {
     HookPolicy pol = policyConfig.forHook(hookId);
     final byte[] respBytes;
@@ -1769,22 +1651,8 @@ public final class RegionObserverAdapter implements RegionObserver {
     }
   }
 
-  /**
-   * Sentinel row used to neuter a scan an observer asked to bypass. HBase 2.5's {@code
-   * preScannerOpen} {@link ObserverContext} is <em>not</em> bypassable, so "bypass this scan" is
-   * realized instead by constraining the {@link Scan} to the empty half-open interval {@code
-   * [SENTINEL, SENTINEL)}: the opened scanner yields no rows, the observable equivalent of a
-   * bypassed scan.
-   */
   private static final byte[] SCAN_BYPASS_SENTINEL = {0};
 
-  /**
-   * Invoke {@link ObserverContext#bypass()} defensively. HBase 2.5 only makes the ObserverContext
-   * bypassable for a subset of hooks; calling {@code bypass()} on a non-bypassable hook throws
-   * {@link UnsupportedOperationException}, which (uncaught from a coprocessor) aborts the entire
-   * RegionServer. An over-eager observer must never be able to do that, so a rejected bypass is
-   * downgraded to a WARN and the host operation proceeds unbypassed.
-   */
   private static void requestBypass(ObserverContext<? extends RegionCoprocessorEnvironment> c) {
     try {
       c.bypass();
@@ -1796,17 +1664,6 @@ public final class RegionObserverAdapter implements RegionObserver {
     }
   }
 
-  /**
-   * Build the substitute {@link Result} for a value-returning pre-hook: {@code preAppend} / {@code
-   * preIncrement} and their after-row-lock variants. In HBase 2.5 the bypass mechanism for these
-   * hooks is "return a non-null {@link Result} to substitute for the operation", <em>not</em>
-   * {@link ObserverContext#bypass()}.
-   *
-   * <p>Returns {@code null} when the observer did not bypass (HBase then runs the operation
-   * normally). On bypass, returns a Result assembled from the cells the observer supplied in {@code
-   * HookResponse.result} (an empty list yields an empty Result), which HBase returns to the client
-   * in place of the operation.
-   */
   private static Result valueReturningResult(HookResponse resp) {
     if (resp == null || !resp.getBypass()) {
       return null;
@@ -1818,12 +1675,6 @@ public final class RegionObserverAdapter implements RegionObserver {
     return Result.create(cells);
   }
 
-  /**
-   * Apply a {@code preScannerOpen} HookResponse. Unlike {@link #applyHookResponse}, a bypass here
-   * cannot go through {@link ObserverContext#bypass()}: HBase 2.5 does not make {@code
-   * preScannerOpen} bypassable. Instead the {@link Scan} itself is constrained to an empty row
-   * range so the scanner about to be opened yields no rows.
-   */
   private static void applyScannerOpenHookResponse(Scan scan, HookResponse resp) {
     if (resp == null || !resp.getBypass()) {
       return;
@@ -1831,13 +1682,6 @@ public final class RegionObserverAdapter implements RegionObserver {
     scan.withStartRow(SCAN_BYPASS_SENTINEL, true).withStopRow(SCAN_BYPASS_SENTINEL, false);
   }
 
-  /**
-   * Batch-shaped variant of {@link #applyHookResponse}: besides honoring {@code bypass}, walks
-   * {@code resp.getBlockedIndicesList()} and stamps {@code OperationStatus(SANITY_CHECK_FAILURE)}
-   * on every in-range index of the supplied {@link MiniBatchOperationInProgress}. Out-of-range
-   * indices are silently ignored: observer-supplied indices are a hint, not an authority, so a
-   * buggy observer can never crash the RegionServer's batch path.
-   */
   private static void applyBatchHookResponse(
       ObserverContext<? extends RegionCoprocessorEnvironment> c,
       MiniBatchOperationInProgress<Mutation> miniBatch,
@@ -1865,11 +1709,6 @@ public final class RegionObserverAdapter implements RegionObserver {
     }
   }
 
-  /**
-   * Resolve the wire-level region_id for {@code c}. Returns {@code 0} if {@link
-   * #start(org.apache.hadoop.hbase.CoprocessorEnvironment)} has not yet registered the region,
-   * preserving the Phase-2 wire shape so an unwired adapter still works against the Go runtime.
-   */
   private int regionIdFor(ObserverContext<? extends RegionCoprocessorEnvironment> c) {
     return regionIdAllocator.idFor(c.getEnvironment().getRegion().getRegionInfo().getEncodedName());
   }

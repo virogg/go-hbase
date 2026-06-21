@@ -32,20 +32,8 @@ import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.junit.jupiter.api.Test;
 
-/**
- * TE51: {@link EndpointClient} fans the generic {@code GoEndpointService.Call(method, payload)} out
- * over every region of a table and reduces the per-region results into one value. These unit tests
- * drive the captured {@link Batch.Call} against mock {@link GoEndpointService} stubs, so they cover
- * both the per-region invocation shape (unshaded controller + callback, request mapping, error
- * surfacing) and the fan-out reduce, without a live cluster.
- */
 final class EndpointClientTest {
 
-  /**
-   * Stubs {@code table.coprocessorService} to invoke the helper's per-region {@link Batch.Call}
-   * against one mock service per supplied response, keyed by a synthetic region name. Returns the
-   * resulting per-region map exactly as HBase would.
-   */
   private static Table tableYielding(GoEndpointService... regionServices) throws Throwable {
     Table table = mock(Table.class);
     when(table.coprocessorService(eq(GoEndpointService.class), any(), any(), any()))
@@ -62,14 +50,12 @@ final class EndpointClientTest {
     return table;
   }
 
-  /** A mock service whose Call returns {@code payload} (success), recording the request it saw. */
   private static GoEndpointService serviceReturning(
       String payload, AtomicReference<GoEndpointRequest> seen) {
     return mockService(
         seen, GoEndpointResponse.newBuilder().setPayload(ByteString.copyFromUtf8(payload)).build());
   }
 
-  /** A mock service whose Call returns an error response. */
   private static GoEndpointService serviceFailing(String error) {
     return mockService(
         new AtomicReference<>(), GoEndpointResponse.newBuilder().setError(error).build());
@@ -104,7 +90,6 @@ final class EndpointClientTest {
             (acc, regionResult) -> acc + Long.parseLong(new String(regionResult, UTF_8)));
 
     assertEquals(7L, total, "reduce must fold the partial sums from every region");
-    // Each region saw the same method and payload verbatim.
     assertEquals("sum", seen.get().getMethod());
     assertEquals("n", seen.get().getPayload().toStringUtf8());
   }
@@ -150,7 +135,6 @@ final class EndpointClientTest {
 
   @Test
   void nullResponseSurfacesAsIoException() throws Throwable {
-    // A service that never invokes the callback leaves the response null.
     GoEndpointService silent = mock(GoEndpointService.class);
     Table table = tableYielding(silent);
 
@@ -181,8 +165,6 @@ final class EndpointClientTest {
     assertTrue(err.getMessage().contains("region not online"), err.getMessage());
   }
 
-  // E5-3: the range-scoped overload must forward startKey/endKey to coprocessorService verbatim
-  // (a swapped or dropped bound would silently select the wrong regions).
   @Test
   void callRegionsForwardsRangeBoundsVerbatim() throws Throwable {
     byte[] start = Bytes.toBytes("aaa");

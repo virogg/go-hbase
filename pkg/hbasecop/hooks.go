@@ -3,18 +3,8 @@
 
 package hbasecop
 
-// HookID is the on-wire discriminator that selects a RegionObserver
-// method on the Go side. Constants below mirror the HookId enum in
-// proto/hooks.proto - the proto values are the source of truth, and
-// TestHookIDMatchesProtoEnum (this package, T41) pins parity.
-//
-// The wire frame layout uses a single byte for hook_id (see
-// internal/wire/frame.go), so HookID is uint8 - values must fit in 255.
-// The 68 RegionObserver hooks today are well below that cap.
 type HookID uint8
 
-// HookID values. HookIDUnknown (=0) is the proto's
-// HOOK_ID_UNSPECIFIED slot and is never assigned to a real hook.
 const (
 	HookIDUnknown HookID = 0
 
@@ -104,7 +94,7 @@ const (
 	HookIDPostInstantiateDeleteTracker HookID = 67
 	HookIDPreWALAppend                 HookID = 68
 
-	// --- MasterObserver hooks (T51). IDs 100-199 reserved for master surface. ---
+	// MasterObserver
 	HookIDPreCreateTable    HookID = 100
 	HookIDPostCreateTable   HookID = 101
 	HookIDPreDeleteTable    HookID = 102
@@ -126,8 +116,7 @@ const (
 	HookIDPreBalance        HookID = 118
 	HookIDPostBalance       HookID = 119
 
-	// --- RegionServerObserver hooks (T52). IDs 200-255 reserved for the
-	// region-server surface. ---
+	// RegionServerObserver
 	HookIDPreStopRegionServer       HookID = 200
 	HookIDPreRollWALWriterRequest   HookID = 201
 	HookIDPostRollWALWriterRequest  HookID = 202
@@ -138,14 +127,13 @@ const (
 	HookIDPreExecuteProcedures      HookID = 207
 	HookIDPostExecuteProcedures     HookID = 208
 
-	// --- WALObserver hooks (T53). IDs 220-255 reserved for the WAL surface. ---
+	// WALObserver
 	HookIDPreWALWrite  HookID = 220
 	HookIDPostWALWrite HookID = 221
 	HookIDPreWALRoll   HookID = 222
 	HookIDPostWALRoll  HookID = 223
 
-	// --- BulkLoadObserver hooks (T54). Region-scoped coproc invoked at
-	// bulk-load prepare/cleanup boundaries. ---
+	// BulkLoadObserver
 	HookIDPrePrepareBulkLoad HookID = 224
 	HookIDPreCleanupBulkLoad HookID = 225
 )

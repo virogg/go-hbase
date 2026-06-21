@@ -21,6 +21,16 @@ linters:
     - staticcheck
     - unused
 
+  settings:
+    revive:
+      rules:
+        # Doc comments on exported symbols and packages are intentionally not
+        # required; the rest of revive's default rules stay on.
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
+
   exclusions:
     paths:
       - tools/

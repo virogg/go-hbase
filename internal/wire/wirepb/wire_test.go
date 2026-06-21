@@ -11,9 +11,6 @@ import (
 	"github.com/virogg/go-hbase/internal/wire/wirepb"
 )
 
-// TestFrameRoundTrip covers every payload variant of the Frame oneof plus
-// representative header configurations (single-chunk, multi-chunk, non-zero
-// region_id). This is the T11 acceptance gate: encode→decode==input.
 func TestFrameRoundTrip(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -112,9 +109,6 @@ func TestFrameRoundTrip(t *testing.T) {
 	}
 }
 
-// TestEmptyFrameRoundTrip ensures the absence of a payload (oneof unset) is
-// preserved. The Go runtime treats this as an invalid frame at a higher
-// layer, but the codec must not silently fabricate a payload.
 func TestEmptyFrameRoundTrip(t *testing.T) {
 	empty := &wirepb.Frame{Header: &wirepb.FrameHeader{ChunkTotal: 1}}
 	wire, err := proto.Marshal(empty)

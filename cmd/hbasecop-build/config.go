@@ -16,10 +16,6 @@ import (
 	"github.com/virogg/go-hbase/pkg/hbasecop"
 )
 
-// configKey documents one hbasecop.* setting for `config --list` and drives
-// `config --check`. kind is one of: duration, posint, bool, policy,
-// prefix-duration, prefix-policy. The validation rules mirror the Java
-// ConfigPreflight.
 type configKey struct {
 	name     string
 	kind     string
@@ -41,10 +37,6 @@ var configKeys = []configKey{
 	{"hbasecop.ring.capacity", "posint", "16", "positive integer"},
 	{"hbasecop.ring.max-object-size", "posint", "1048576", "positive integer (bytes)"},
 	{"hbasecop.shutdown.graceful-timeout", "duration", "2s", "duration with unit"},
-	// Tier 2 endpoint coprocessor tunables. Canonical source of truth is the Java
-	// ConfigPreflight (DURATION_KEYS/POSITIVE_INT_KEYS/BOOLEAN_KEYS) + GenericCoprocessor KEY_*
-	// defaults; keep these three lists in sync — a key added there but missing here degrades to an
-	// unvalidated "unknown key" notice in `config --check` (runtime preflight still fails fast).
 	{"hbasecop.endpoint.timeout", "duration", "30s", "duration with unit"},
 	{"hbasecop.endpoint.servicing-pool-size", "posint", "8", "positive integer"},
 	{"hbasecop.endpoint.servicing-queue-depth", "posint", "64", "positive integer"},
@@ -61,11 +53,6 @@ var configKeys = []configKey{
 
 var durationRe = regexp.MustCompile(`^\d+\s*(ns|us|ms|s|m|h|d)$`)
 
-// knownHooks is the set of valid hook suffixes a per-hook policy/timeout key may
-// carry, sourced from the SDK so it never drifts. Config keys use the HBase Java
-// method name (lower-camel, e.g. prePut), while hbasecop.HookNames returns the
-// Go-exported names (PrePut); lowering the first letter bridges the two, the
-// same convention HookId.methodName uses. Mirrors Java ConfigPreflight.
 var knownHooks = func() map[string]bool {
 	names := hbasecop.HookNames()
 	m := make(map[string]bool, len(names))
@@ -75,7 +62,6 @@ var knownHooks = func() map[string]bool {
 	return m
 }()
 
-// lowerFirst returns s with its first byte lower-cased (hook names are ASCII).
 func lowerFirst(s string) string {
 	if s == "" {
 		return s
@@ -115,9 +101,6 @@ type hadoopSite struct {
 	} `xml:"property"`
 }
 
-// checkSiteFile validates hbasecop.* values in an hbase-site.xml against the
-// same rules as the Java startup preflight. Malformed values are errors;
-// unknown hbasecop.* keys are reported as notices.
 func checkSiteFile(path string) error {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -156,8 +139,6 @@ func checkSiteFile(path string) error {
 	return nil
 }
 
-// validateKey returns "" if name/value is well-formed, else a message. Unknown
-// keys are not malformed (handled separately as notices).
 func validateKey(name, value string) string {
 	switch {
 	case strings.HasPrefix(name, "hbasecop.policy."):
@@ -204,10 +185,6 @@ func knownKey(name string) bool {
 	return false
 }
 
-// unknownHookSuffix returns the hook suffix of a per-hook policy/timeout key
-// when that suffix is not a known hook (so a typo like hbasecop.timeout.PrePutt
-// is flagged), else "". hbasecop.timeout.default is the one non-hook suffix and
-// is treated as known. Mirrors the Java ConfigPreflight.checkHookSuffix WARN.
 func unknownHookSuffix(name string) string {
 	for _, prefix := range []string{"hbasecop.policy.", "hbasecop.timeout."} {
 		if !strings.HasPrefix(name, prefix) {

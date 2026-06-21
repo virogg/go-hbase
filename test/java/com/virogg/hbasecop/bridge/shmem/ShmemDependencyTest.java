@@ -10,11 +10,6 @@ import com.jgshmem.ring.WaitingRingProducer;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-/**
- * T14 hello-world: proves the locally-installed {@code com.jgshmem:java-go-shmem} artifact is on
- * the bridge's classpath. We only reference the class objects - instantiating a producer requires
- * an mmap region and is exercised in T16 (the real wrapper).
- */
 class ShmemDependencyTest {
 
   @Test

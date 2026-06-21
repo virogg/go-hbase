@@ -32,18 +32,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/**
- * T19 acceptance: 10 000 PING/PONG roundtrips through a real spawned Go runtime over real shmem
- * rings, with payloads spanning the wire chunking boundary.
- *
- * <p>Payload sizes cycle through {@code {0, 1 KiB, 64 KiB, 1 MiB}}: 0 and 1 KiB exercise the
- * single-chunk path, 64 KiB straddles {@code MAX_PAYLOAD_BYTES = 65509} forcing a 2-chunk encode,
- * and 1 MiB forces ~17 chunks. The serial send/recv loop times each roundtrip and emits a
- * p50/p99/p999/max distribution to {@code stderr}.
- *
- * <p>Each shmem ring slot carries one full wire-encoded message - including all of its chunks
- * back-to-back - so {@code maxObjectSize} is sized to fit the 1 MiB-payload encoding.
- */
 class PingPongE2ETest {
 
   private static final int CAPACITY = 8;
@@ -60,7 +48,6 @@ class PingPongE2ETest {
     runE2E(tmp);
   }
 
-  /** Entry point for {@code make demo-ping}: identical loop with a self-created tmpdir. */
   public static void main(String[] args) throws Exception {
     Path tmp = Files.createTempDirectory("hbasecop-ping-e2e-");
     try {
@@ -94,7 +81,7 @@ class PingPongE2ETest {
               .goToJavaFile(outFile)
               .capacity(CAPACITY)
               .maxObjectSize(MAX_OBJECT_SIZE)
-              .heartbeatPeriodMs(-1) // disable heartbeats so they don't contend with latencies
+              .heartbeatPeriodMs(-1)
               .gracefulShutdownTimeout(STOP_BUDGET)
               .build();
 

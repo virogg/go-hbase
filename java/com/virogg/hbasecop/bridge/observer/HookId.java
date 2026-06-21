@@ -3,23 +3,6 @@
 
 package com.virogg.hbasecop.bridge.observer;
 
-/**
- * Canonical mapping between the wire-level hook byte, the HBase {@link
- * org.apache.hadoop.hbase.coprocessor.RegionObserver} method name and the Go-side HookID constant.
- *
- * <p>Single source of truth on the Java adapter side. Each entry pairs:
- *
- * <ul>
- *   <li>A wire byte ({@link #value()}): same as the Go {@code HookID} constant and the {@code
- *       com.virogg.hbasecop.bridge.wire.pb.HookId} proto-generated value.
- *   <li>A method name ({@link #methodName()}): matches the corresponding HBase API method (e.g.
- *       {@code "prePut"}), so {@link com.virogg.hbasecop.bridge.config.PolicyConfig} can resolve
- *       policy keys (e.g. {@code hbasecop.policy.prePut}) directly from a HookId.
- * </ul>
- *
- * <p>{@link com.virogg.hbasecop.bridge.observer.RegionObserverAdapterFullCoverageTest} pins the
- * three-way parity (this enum ↔ HBase API ↔ proto enum).
- */
 public enum HookId {
   // Lifecycle.
   PRE_OPEN((byte) 1, "preOpen"),
@@ -128,7 +111,6 @@ public enum HookId {
   POST_INSTANTIATE_DELETE_TRACKER((byte) 67, "postInstantiateDeleteTracker"),
   PRE_WAL_APPEND((byte) 68, "preWALAppend"),
 
-  // --- MasterObserver (T51). IDs 100-199 reserved for the master surface. ---
   PRE_CREATE_TABLE((byte) 100, "preCreateTable"),
   POST_CREATE_TABLE((byte) 101, "postCreateTable"),
   PRE_DELETE_TABLE((byte) 102, "preDeleteTable"),
@@ -150,7 +132,6 @@ public enum HookId {
   PRE_BALANCE((byte) 118, "preBalance"),
   POST_BALANCE((byte) 119, "postBalance"),
 
-  // --- RegionServerObserver (T52). IDs 200-255 reserved for the region-server surface. ---
   PRE_STOP_REGION_SERVER((byte) 200, "preStopRegionServer"),
   PRE_ROLL_WAL_WRITER_REQUEST((byte) 201, "preRollWALWriterRequest"),
   POST_ROLL_WAL_WRITER_REQUEST((byte) 202, "postRollWALWriterRequest"),
@@ -161,13 +142,11 @@ public enum HookId {
   PRE_EXECUTE_PROCEDURES((byte) 207, "preExecuteProcedures"),
   POST_EXECUTE_PROCEDURES((byte) 208, "postExecuteProcedures"),
 
-  // --- WALObserver (T53). IDs 220-255 reserved for the WAL surface. ---
   PRE_WAL_WRITE((byte) 220, "preWALWrite"),
   POST_WAL_WRITE((byte) 221, "postWALWrite"),
   PRE_WAL_ROLL((byte) 222, "preWALRoll"),
   POST_WAL_ROLL((byte) 223, "postWALRoll"),
 
-  // --- BulkLoadObserver (T54). Region-scoped coproc invoked at bulk-load boundaries. ---
   PRE_PREPARE_BULK_LOAD((byte) 224, "prePrepareBulkLoad"),
   PRE_CLEANUP_BULK_LOAD((byte) 225, "preCleanupBulkLoad");
 
@@ -179,17 +158,14 @@ public enum HookId {
     this.methodName = methodName;
   }
 
-  /** The on-wire byte placed in {@code FrameHeader.hook_id}. */
   public byte value() {
     return value;
   }
 
-  /** The HBase RegionObserver method this HookId routes to (e.g. {@code "prePut"}). */
   public String methodName() {
     return methodName;
   }
 
-  /** Resolve a HookId by its wire byte, or null if no entry matches. */
   public static HookId byValue(byte value) {
     for (HookId id : values()) {
       if (id.value == value) {
@@ -199,7 +175,6 @@ public enum HookId {
     return null;
   }
 
-  /** Resolve a HookId by its HBase method name (e.g. {@code "prePut"}), or null if absent. */
   public static HookId byMethodName(String name) {
     for (HookId id : values()) {
       if (id.methodName.equals(name)) {

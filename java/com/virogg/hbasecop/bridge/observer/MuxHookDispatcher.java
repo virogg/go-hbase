@@ -19,24 +19,8 @@ import java.util.concurrent.TimeoutException;
 import org.apache.hbase.thirdparty.com.google.protobuf.ByteString;
 import org.apache.hbase.thirdparty.com.google.protobuf.InvalidProtocolBufferException;
 
-/**
- * {@link HookDispatcher} backed by a {@link Multiplexer}: every hook invocation becomes one {@code
- * REQUEST} frame on the Java→Go channel, and the matching {@code RESPONSE} (correlated by the mux
- * on req_id) returns the payload bytes the adapter then parses as a {@code HookResponse}.
- *
- * <p>This is the production wiring used by {@link com.virogg.hbasecop.bridge.CoprocessorRuntime};
- * unit tests of {@link com.virogg.hbasecop.bridge.observer.RegionObserverAdapter} use a manual mock
- * instead.
- */
 public final class MuxHookDispatcher implements HookDispatcher {
 
-  /**
-   * Budget for spin-polling the response future before parking in {@code fut.get(timeout)}. Round
-   * trips through the no-op Go observer complete in ~100µs (T81 bench), so a parked caller pays two
-   * context switches per hook - measurably more than the remaining wait. Spinning just past the
-   * typical completion keeps the fast path park-free; slow or failing hooks fall through to the
-   * blocking wait after at most this budget, so timeout semantics are unchanged.
-   */
   private static final long RESPONSE_SPIN_NANOS = 150_000;
 
   private final Multiplexer mux;
@@ -51,12 +35,8 @@ public final class MuxHookDispatcher implements HookDispatcher {
     Objects.requireNonNull(hookCtxBytes, "hookCtxBytes");
     Objects.requireNonNull(timeout, "timeout");
 
-    // Wrap the per-hook context bytes in the wirepb.Request envelope the Go
-    // dispatcher unmarshals from Message.payload (see pkg/hbasecop/dispatch.go).
     byte[] requestPayload =
         Request.newBuilder().setHookCtx(ByteString.copyFrom(hookCtxBytes)).build().toByteArray();
-    // regionId is the T61 multi-region routing key, allocated by the adapter
-    // via RegionIdAllocator on RegionObserver.start(env). 0 = no region scope.
     Message req = new Message(FrameType.REQUEST, 0L, regionId, hookId, requestPayload);
     Multiplexer.Call call = mux.callTracked(req);
     CompletableFuture<Message> fut = call.future;
@@ -70,10 +50,6 @@ public final class MuxHookDispatcher implements HookDispatcher {
     try {
       resp = fut.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
     } catch (TimeoutException e) {
-      // Drop the waiter so its future + pending-map entry are reclaimed.
-      // CompletableFuture.get(timeout) does NOT remove the registration; without
-      // this, every timed-out hook leaks one entry in Multiplexer.pending for the
-      // life of the channel. A late RESPONSE for this id is then ignored.
       fut.cancel(false);
       mux.cancel(call.reqId);
       throw e;
@@ -88,9 +64,6 @@ public final class MuxHookDispatcher implements HookDispatcher {
       throw new IOException("hbasecop: hook " + hookId + " dispatch failed", cause);
     }
 
-    // The Go side may answer with either a RESPONSE (wirepb.Response carrying
-    // the HookResponse bytes) or an ERROR (wirepb.Error). Map the latter to
-    // an IOException so the adapter surfaces it as a strict-mode failure.
     if (resp.type() == FrameType.ERROR) {
       try {
         com.virogg.hbasecop.bridge.wire.pb.Error err =
@@ -107,8 +80,6 @@ public final class MuxHookDispatcher implements HookDispatcher {
       }
     }
 
-    // The Go side wraps the HookResponse bytes in wirepb.Response.hook_resp;
-    // unwrap before handing back to the adapter, which parses HookResponse.
     final Response wireResp;
     try {
       wireResp = Response.parseFrom(resp.payload());
